@@ -124,9 +124,9 @@ export function ModelSelector({
           }}
           className="h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800"
         >
-          {models.map((m) => (
+          {models.map((m, i) => (
             <option key={m.endpoint_id} value={m.endpoint_id}>
-              {m.display_name}
+              {i + 1}. {m.display_name}
             </option>
           ))}
         </select>

@@ -16,14 +16,22 @@ def test_jinja_render():
 
 
 def test_fal_models_seed_catalog():
-    assert len(FAL_MODELS) == 19
+    assert len(FAL_MODELS) == 20
     ids = {m["endpoint_id"] for m in FAL_MODELS}
+    assert "fal-ai/gemini-3-pro-image-preview/edit" in ids
     assert "fal-ai/flux-pro/kontext" in ids
     assert "fal-ai/gpt-image-1.5/edit" in ids
     assert "fal-ai/ideogram/v3/remix" in ids
     assert "fal-ai/fashn/tryon/v1.6" in ids
     assert "fal-ai/kling/v1-5/kolors-virtual-try-on" in ids
-    assert all("gemini" not in endpoint.lower() for endpoint in ids)
+
+
+def test_image_edit_models_ranked_gemini_first():
+    image_edit = [m for m in FAL_MODELS if m["category"] == "image_to_image"]
+    assert len(image_edit) == 14
+    ranked = sorted(image_edit, key=lambda m: m["sort_order"])
+    assert ranked[0]["endpoint_id"] == "fal-ai/gemini-3-pro-image-preview/edit"
+    assert ranked[1]["endpoint_id"] == "fal-ai/bytedance/seedream/v4.5/edit"
 
 
 def test_all_models_have_output_paths():
@@ -95,7 +103,7 @@ def test_filter_models_image_edit_only():
     models = filter_models_for_request(FakeDb(), has_input=True, image_count=1, image_edit_only=True)
     vton_ids = {m.endpoint_id for m in models if m.capabilities.get("virtual_try_on")}
     assert len(vton_ids) == 0
-    assert len(models) == 13
+    assert len(models) == 14
 
     vton_models = filter_models_for_request(
         FakeDb(), has_input=True, image_count=2, workflow="CUSTOMER_TRY_ON", image_edit_only=True
@@ -149,4 +157,4 @@ def test_filter_without_input_still_lists_catalog_models():
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
     models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
-    assert len(models) == 13
+    assert len(models) == 14
