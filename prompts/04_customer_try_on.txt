@@ -1,0 +1,207 @@
+==============================================================================
+FEATURE: CUSTOMER TRY-ON
+==============================================================================
+
+Model-agnostic prompt set for GPT Image, GPT Edit, Nano Banana (Pro/2/Edit),
+FLUX, FLUX Kontext, SDXL, Imagen, Seedream, and similar image generation/editing models.
+
+------------------------------------------------------------------------------
+MASTER PROMPT
+------------------------------------------------------------------------------
+
+ROLE: Act as a digital jewelry try-on specialist. Integrate the jewelry onto the customer's photograph so it looks physically real and worn, never composited or CGI.
+
+CAMERA & RENDERING: Match the customer photo's focal length, exposure, color temperature, and perspective exactly.
+
+BACKGROUND / SURFACE: Preserve the customer's background exactly as uploaded.
+
+LIGHTING & MATERIAL PHYSICS: Match the dominant light direction from the visible skin highlights. The jewelry casts a soft, physically accurate shadow on the skin.
+
+QUALITY STANDARD: Quality bar — commercial minimum: image is e-commerce ready with no retouching required. Luxury target: Cartier / Tiffany campaign grade, editorial sharpness, believable material physics. Zero tolerance: melted or warped prongs, incorrect gemstone optics for the stone type, floating jewelry with no contact shadow, or any design alteration.
+
+PRESERVATION LOCK (includes composition lock -- read carefully): Preserve the customer's anatomy and the jewelry's design exactly. Anatomically correct scale is required. Do not alter the customer's identity. COMPOSITION LOCK: this image requires the jewelry piece to be shown worn on the appropriate body part as described in the subject layer below. Do not render it as an unworn standalone product shot with no body present. This pipeline exists to generate imagery of fine jewelry exclusively. Under no circumstance does a background change, lighting mood, style match, or creative brief justify altering the jewelry piece's geometry, prong count, facet pattern, metal finish, gemstone color, gemstone optics, hallmark, clasp mechanism, or scale. If a requested background or style would require compositing artifacts that touch the jewelry silhouette, prioritize jewelry fidelity over background realism. SOURCE ARTIFACTS: if the uploaded source image contains studio watermarks, weight labels, price tags, supplier stamps, or any overlay text (for example a weight or SKU string burned into the corner), treat these as non-jewelry artifacts. Do not reproduce, redraw, or reposition them in the output -- exclude all such overlay text and stamps entirely.
+
+AVOID: skin color changed, floating jewelry, wrong scale, background replaced, watermark. low quality, blurry, distorted jewelry, melted or warped metal, floating jewelry, missing contact shadow, gemstone color shift, metal tarnish or discoloration, hallmark distortion, chain link errors, CGI look, plastic sheen, watermark, text overlay, visible lamp or light fixture rendered as an object, glowing halo or light disc as a compositional element, dramatic single-spotlight editorial mood unless explicitly requested, reproduced source-image watermark or weight/price label text.
+
+USAGE: Combine this Master Prompt with the matching Child Prompt for the specific jewelry type being processed. The Child Prompt adds piece-specific placement, framing, and physical behavior on top of everything specified above.
+
+
+------------------------------------------------------------------------------
+CHILD PROMPTS (jewelry-type specific)
+------------------------------------------------------------------------------
+
+--- RING ---
+
+SUBJECT: Ring. A luxury ring positioned to showcase the center stone, the profile of the band, and any side-stone detailing.
+
+ANATOMY / WEAR: Worn on a finger with natural knuckle bend; the band sits flush against the skin with realistic finger taper.
+
+PHYSICS: Rigid metal band under gravity shows no drape; weight is implied only through a firm, grounded contact shadow, not deformation.
+
+FRAMING & PLACEMENT: Rotate the ring roughly 15 degrees toward camera so the center stone's table facet is visible; macro focus on the table facet and prong tips; scale the piece to occupy 30-45% of frame width.
+
+COMPOSITION REMINDER: this shot requires the ring shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this ring exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- NECKLACE ---
+
+SUBJECT: Necklace. A luxury necklace draped with a fluid curve, chain links catching light evenly along the visible length, pendant (if present) centered and forward-facing.
+
+ANATOMY / WEAR: Worn around the neck and upper chest, following the natural curve of the collarbone; clasp sits at the nape, out of primary frame.
+
+PHYSICS: Chain follows a natural catenary droop from both sides; the lowest point (or pendant) hangs true to gravity, never rigid or floating flat.
+
+FRAMING & PLACEMENT: Form a symmetric U-drape as the default composition; macro focus on the clasp or the pendant's central stone; leave visible chain on both sides for scale reference.
+
+COMPOSITION REMINDER: this shot requires the necklace shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this necklace exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BANGLES ---
+
+SUBJECT: Bangles. Rigid luxury bangles, stacked or single, composed to highlight the continuous metalwork and any engraved or set surface detail.
+
+ANATOMY / WEAR: Worn around the wrist as a closed or hinged rigid loop; sits with a small natural gap from the skin, not compressed against it.
+
+PHYSICS: No drape — rigid circular form holds its shape; stacked bangles show slight independent tilt against one another, not a fused single object.
+
+FRAMING & PLACEMENT: Angle each bangle to reveal its full circumference edge and any hinge or clasp mechanism; macro focus on the point of maximum engraving or stone density.
+
+COMPOSITION REMINDER: this shot requires the bangles shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this bangles exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BRACELET ---
+
+SUBJECT: Bracelet. A luxury flexible bracelet (chain, tennis, or link style) resting with natural drape and consistent light catch across every link.
+
+ANATOMY / WEAR: Worn around the wrist, following the wrist's curve; sits loosely enough to show a natural gap and slight sag, not stretched taut.
+
+PHYSICS: Flexible links follow gravity with a soft downward sag at the lowest point of its curve as it rests on its support; each link catches light independently.
+
+FRAMING & PLACEMENT: Compose with the clasp visible but not centered; macro focus on the largest stone or the most detailed link segment; show the full circumference where possible.
+
+COMPOSITION REMINDER: this shot requires the bracelet shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this bracelet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (STUDS) ---
+
+SUBJECT: Earrings (Studs). A pair of luxury stud earrings in balanced left-right alignment, each capturing internal gemstone light identically.
+
+ANATOMY / WEAR: Worn through the earlobe with the post perpendicular to the lobe surface; backing sits flush against the back of the ear.
+
+PHYSICS: Rigid, no drape; the piece holds its exact form regardless of orientation.
+
+FRAMING & PLACEMENT: Frame both earrings symmetrically at matched scale and angle; macro focus on the front-facing gemstone table of each stud; keep spacing between the pair proportional and consistent.
+
+COMPOSITION REMINDER: this shot requires the earrings (studs) shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this earrings (studs) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (DROPS) ---
+
+SUBJECT: Earrings (Drops). Luxury drop earrings arranged to showcase the articulated setting and the natural suspension of the lower element.
+
+ANATOMY / WEAR: Worn through the earlobe with the drop element hanging freely below; the articulation point allows slight independent movement from the stud.
+
+PHYSICS: The drop element hangs true to gravity, perpendicular to the floor, with any articulated links showing a soft natural swing angle rather than a rigid straight line.
+
+FRAMING & PLACEMENT: Compose with the full drop length visible top to bottom; macro focus on the articulation joint and the lowest gemstone or charm; both earrings shown at matched hang angle.
+
+COMPOSITION REMINDER: this shot requires the earrings (drops) shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this earrings (drops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (HOOPS) ---
+
+SUBJECT: Earrings (Hoops). Luxury hoop earrings showcasing outer paving or texture and the inner metallic curvature of the ring.
+
+ANATOMY / WEAR: Worn through the earlobe with the hoop's plane roughly parallel to the side of the face; the hinge or clasp mechanism sits at the top near the post.
+
+PHYSICS: Rigid circular or near-circular form; larger hoops may show a very slight gravitational tilt forward, smaller hoops remain fully rigid.
+
+FRAMING & PLACEMENT: Angle to reveal both the outer paved surface and a portion of the inner band; macro focus on the hinge mechanism and the densest paved section.
+
+COMPOSITION REMINDER: this shot requires the earrings (hoops) shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this earrings (hoops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- PENDANT ---
+
+SUBJECT: Pendant. A luxury pendant emphasizing metalwork craftsmanship and the central stone or motif, shown with its bail and a short length of chain.
+
+ANATOMY / WEAR: Worn suspended from a chain at the sternum area; sits face-forward under gravity with the bail at the top center.
+
+PHYSICS: Hangs plumb and level from the bail under gravity; the attached chain segments drape naturally away from the bail on both sides.
+
+FRAMING & PLACEMENT: Center the pendant face-forward with the bail visible at the top of frame; macro focus on the central stone or engraved motif.
+
+COMPOSITION REMINDER: this shot requires the pendant shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this pendant exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- WATCH ---
+
+SUBJECT: Watch. A luxury timepiece with clear dial texture, hand and index detail, and a strap or bracelet shown in an elegant curve.
+
+PHYSICS: Strap or bracelet follows a soft curve consistent with its support (a watch pillow or display stand); case remains rigid.
+
+FRAMING & PLACEMENT: Dial set at the 10:10 hand position for classic product presentation; macro focus on the dial's center and index markers; case edge and crown kept in sharp focus.
+
+COMPOSITION REMINDER: this shot requires the watch shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this watch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BROOCH ---
+
+SUBJECT: Brooch. A luxury brooch composed to catch studio light evenly across its full geometric arrangement of stones and metalwork.
+
+PHYSICS: Rigid flat or sculptural form; no drape; pin mechanism shown on the reverse only if explicitly requested.
+
+FRAMING & PLACEMENT: Present face-forward and level to camera; macro focus on the largest or most central stone; frame to include the full outer silhouette with margin.
+
+COMPOSITION REMINDER: this shot requires the brooch shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this brooch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- ANKLET ---
+
+SUBJECT: Anklet. A delicate luxury anklet draped naturally, highlighting fine chain links and any small charm or clasp detail.
+
+ANATOMY / WEAR: Worn around the ankle, following the curve just above the anklebone; sits loosely with a small natural gap from the skin.
+
+PHYSICS: Fine chain follows a soft catenary droop similar to a necklace but at a smaller scale; any charm hangs plumb under gravity.
+
+FRAMING & PLACEMENT: Compose with the ankle curve visible and the clasp positioned off-center; macro focus on the finest chain detail or charm.
+
+COMPOSITION REMINDER: this shot requires the anklet shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this anklet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- CUFFLINKS ---
+
+SUBJECT: Cufflinks. Premium cufflinks showcasing the front face design and the polished toggle or chain-link back mechanism.
+
+PHYSICS: Rigid front face; the back toggle or chain-link mechanism hangs or folds naturally, never rigid against the fabric.
+
+FRAMING & PLACEMENT: Present the pair symmetrically at matched angle; macro focus on the front face detail of one piece with the second slightly softer in depth of field.
+
+COMPOSITION REMINDER: this shot requires the cufflinks shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this cufflinks exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- MULTIPLE ITEMS ---
+
+SUBJECT: Multiple Items. A curated luxury jewelry set arranged harmoniously as a cohesive catalog composition, each piece individually legible.
+
+ANATOMY / WEAR: Standalone product display; items are arranged in relation to each other, not worn on a body unless the brief explicitly requests an on-model composite.
+
+PHYSICS: Each item obeys its own individual physics (rigid pieces stay rigid, chains drape, drops hang plumb) — items must not visually merge or overlap in a way that hides any single piece's silhouette.
+
+FRAMING & PLACEMENT: Arrange with a clear visual hierarchy (one hero piece, supporting pieces smaller or set back); every item must have its own unbroken contact shadow; maintain consistent macro focus depth across the group so no item reads as out of focus relative to the others.
+
+COMPOSITION REMINDER: this shot requires the multiple items shown worn, per the anatomy/wear instruction above -- do not render it as an unworn product-only shot.
+
+Reminder: preserve every original detail of this multiple items exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.

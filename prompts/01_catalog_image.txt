@@ -1,0 +1,196 @@
+==============================================================================
+FEATURE: CATALOG IMAGE
+==============================================================================
+
+Model-agnostic prompt set for GPT Image, GPT Edit, Nano Banana (Pro/2/Edit),
+FLUX, FLUX Kontext, SDXL, Imagen, Seedream, and similar image generation/editing models.
+
+------------------------------------------------------------------------------
+MASTER PROMPT
+------------------------------------------------------------------------------
+
+ROLE: Act as a master commercial product photographer and high-end jewelry retoucher shooting for a luxury e-commerce catalog.
+
+CAMERA & RENDERING: High-end macro product photography, 100mm macro lens, f/11 aperture for edge-to-edge sharpness, focus-stacked, editorial print resolution.
+
+BACKGROUND / SURFACE (choose one per generation -- do not default to the same surface every time):
+  - White Seamless: Pure photographic white seamless with a gentle gradient infinity sweep.
+  - Black Acrylic: Polished black acrylic with subtle mirrored reflection fading to black.
+  - Marble: Italian Carrara marble surface with fine gray-silver veining.
+  - Cream Velvet: Premium soft cream-colored velvet with visible micro-fiber texture.
+  - Dark Velvet: Deep midnight navy velvet with micro-fiber texture.
+  - Golden Hour: Warm outdoor golden hour bokeh at 3500-4000K color temperature.
+  - Luxury Interior: Upscale interior daylight scene with marble or oak surface and soft background blur.
+  - Transparent: Clean white ground prepared for PNG export, natural contact shadow preserved.
+  Select a surface appropriate to the piece's tone and the client's brand; rotate across these options rather than reusing one background for every image.
+
+LIGHTING & MATERIAL PHYSICS: Soft diffused studio lighting from a large overhead softbox, authentic ambient occlusion, a precise dark contact shadow anchoring the jewelry to the surface, metal reflecting the softbox naturally without blowing out.
+
+QUALITY STANDARD: Quality bar — commercial minimum: image is e-commerce ready with no retouching required. Luxury target: Cartier / Tiffany campaign grade, editorial sharpness, believable material physics. Zero tolerance: melted or warped prongs, incorrect gemstone optics for the stone type, floating jewelry with no contact shadow, or any design alteration.
+
+PRESERVATION LOCK (includes composition lock -- read carefully): CRITICAL MANDATE: strictly preserve the exact original geometry, facet cuts, true colors, and scale of the jewelry piece. Do not warp the metal structure, do not shift or melt the prongs, and do not alter the internal refractions of the gemstones. COMPOSITION LOCK: this is a standalone product photograph, matching standard catalog/e-commerce framing. Do NOT include a model, hand, wrist, arm, neck, ear, or any human body part in the frame. Do not add mannequins, lifestyle staging, or narrative scenery. The jewelry piece rests only on a physical surface, stand, or prop, exactly as it would in commercial catalog photography. Do not render any lamp, light fixture, halo, glowing disc, or light orb as a visible object in the frame -- illumination must be implied through soft light falloff and shadow only, never shown as a shape in the composition. This pipeline exists to generate imagery of fine jewelry exclusively. Under no circumstance does a background change, lighting mood, style match, or creative brief justify altering the jewelry piece's geometry, prong count, facet pattern, metal finish, gemstone color, gemstone optics, hallmark, clasp mechanism, or scale. If a requested background or style would require compositing artifacts that touch the jewelry silhouette, prioritize jewelry fidelity over background realism. SOURCE ARTIFACTS: if the uploaded source image contains studio watermarks, weight labels, price tags, supplier stamps, or any overlay text (for example a weight or SKU string burned into the corner), treat these as non-jewelry artifacts. Do not reproduce, redraw, or reposition them in the output -- exclude all such overlay text and stamps entirely.
+
+AVOID: 3d render, digital illustration, artificial AI glow, over-smoothed metal, unnatural lighting, neon colors, cartoon, painterly effect. low quality, blurry, distorted jewelry, melted or warped metal, floating jewelry, missing contact shadow, gemstone color shift, metal tarnish or discoloration, hallmark distortion, chain link errors, CGI look, plastic sheen, watermark, text overlay, visible lamp or light fixture rendered as an object, glowing halo or light disc as a compositional element, dramatic single-spotlight editorial mood unless explicitly requested, reproduced source-image watermark or weight/price label text.
+
+USAGE: Combine this Master Prompt with the matching Child Prompt for the specific jewelry type being processed. The Child Prompt adds piece-specific placement, framing, and physical behavior on top of everything specified above.
+
+
+------------------------------------------------------------------------------
+CHILD PROMPTS (jewelry-type specific)
+------------------------------------------------------------------------------
+
+--- RING ---
+
+SUBJECT: Ring. A luxury ring positioned to showcase the center stone, the profile of the band, and any side-stone detailing.
+
+PHYSICS: Rigid metal band under gravity shows no drape; weight is implied only through a firm, grounded contact shadow, not deformation.
+
+FRAMING & PLACEMENT: Rotate the ring roughly 15 degrees toward camera so the center stone's table facet is visible; macro focus on the table facet and prong tips; scale the piece to occupy 30-45% of frame width.
+
+COMPOSITION REMINDER: this is a standalone product shot of the ring. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this ring exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- NECKLACE ---
+
+SUBJECT: Necklace. A luxury necklace draped with a fluid curve, chain links catching light evenly along the visible length, pendant (if present) centered and forward-facing.
+
+PHYSICS: Chain follows a natural catenary droop from both sides; the lowest point (or pendant) hangs true to gravity, never rigid or floating flat.
+
+FRAMING & PLACEMENT: Form a symmetric U-drape as the default composition; macro focus on the clasp or the pendant's central stone; leave visible chain on both sides for scale reference.
+
+COMPOSITION REMINDER: this is a standalone product shot of the necklace. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this necklace exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BANGLES ---
+
+SUBJECT: Bangles. Rigid luxury bangles, stacked or single, composed to highlight the continuous metalwork and any engraved or set surface detail.
+
+PHYSICS: No drape — rigid circular form holds its shape; stacked bangles show slight independent tilt against one another, not a fused single object.
+
+FRAMING & PLACEMENT: Angle each bangle to reveal its full circumference edge and any hinge or clasp mechanism; macro focus on the point of maximum engraving or stone density.
+
+COMPOSITION REMINDER: this is a standalone product shot of the bangles. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this bangles exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BRACELET ---
+
+SUBJECT: Bracelet. A luxury flexible bracelet (chain, tennis, or link style) resting with natural drape and consistent light catch across every link.
+
+PHYSICS: Flexible links follow gravity with a soft downward sag at the lowest point of its curve as it rests on its support; each link catches light independently.
+
+FRAMING & PLACEMENT: Compose with the clasp visible but not centered; macro focus on the largest stone or the most detailed link segment; show the full circumference where possible.
+
+COMPOSITION REMINDER: this is a standalone product shot of the bracelet. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this bracelet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (STUDS) ---
+
+SUBJECT: Earrings (Studs). A pair of luxury stud earrings in balanced left-right alignment, each capturing internal gemstone light identically.
+
+PHYSICS: Rigid, no drape; the piece holds its exact form regardless of orientation.
+
+FRAMING & PLACEMENT: Frame both earrings symmetrically at matched scale and angle; macro focus on the front-facing gemstone table of each stud; keep spacing between the pair proportional and consistent.
+
+COMPOSITION REMINDER: this is a standalone product shot of the earrings (studs). Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this earrings (studs) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (DROPS) ---
+
+SUBJECT: Earrings (Drops). Luxury drop earrings arranged to showcase the articulated setting and the natural suspension of the lower element.
+
+PHYSICS: The drop element hangs true to gravity, perpendicular to the floor, with any articulated links showing a soft natural swing angle rather than a rigid straight line.
+
+FRAMING & PLACEMENT: Compose with the full drop length visible top to bottom; macro focus on the articulation joint and the lowest gemstone or charm; both earrings shown at matched hang angle.
+
+COMPOSITION REMINDER: this is a standalone product shot of the earrings (drops). Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this earrings (drops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (HOOPS) ---
+
+SUBJECT: Earrings (Hoops). Luxury hoop earrings showcasing outer paving or texture and the inner metallic curvature of the ring.
+
+PHYSICS: Rigid circular or near-circular form; larger hoops may show a very slight gravitational tilt forward, smaller hoops remain fully rigid.
+
+FRAMING & PLACEMENT: Angle to reveal both the outer paved surface and a portion of the inner band; macro focus on the hinge mechanism and the densest paved section.
+
+COMPOSITION REMINDER: this is a standalone product shot of the earrings (hoops). Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this earrings (hoops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- PENDANT ---
+
+SUBJECT: Pendant. A luxury pendant emphasizing metalwork craftsmanship and the central stone or motif, shown with its bail and a short length of chain.
+
+PHYSICS: Hangs plumb and level from the bail under gravity; the attached chain segments drape naturally away from the bail on both sides.
+
+FRAMING & PLACEMENT: Center the pendant face-forward with the bail visible at the top of frame; macro focus on the central stone or engraved motif.
+
+COMPOSITION REMINDER: this is a standalone product shot of the pendant. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this pendant exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- WATCH ---
+
+SUBJECT: Watch. A luxury timepiece with clear dial texture, hand and index detail, and a strap or bracelet shown in an elegant curve.
+
+PHYSICS: Strap or bracelet follows a soft curve consistent with its support (a watch pillow or display stand); case remains rigid.
+
+FRAMING & PLACEMENT: Dial set at the 10:10 hand position for classic product presentation; macro focus on the dial's center and index markers; case edge and crown kept in sharp focus.
+
+COMPOSITION REMINDER: this is a standalone product shot of the watch. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this watch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BROOCH ---
+
+SUBJECT: Brooch. A luxury brooch composed to catch studio light evenly across its full geometric arrangement of stones and metalwork.
+
+PHYSICS: Rigid flat or sculptural form; no drape; pin mechanism shown on the reverse only if explicitly requested.
+
+FRAMING & PLACEMENT: Present face-forward and level to camera; macro focus on the largest or most central stone; frame to include the full outer silhouette with margin.
+
+COMPOSITION REMINDER: this is a standalone product shot of the brooch. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this brooch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- ANKLET ---
+
+SUBJECT: Anklet. A delicate luxury anklet draped naturally, highlighting fine chain links and any small charm or clasp detail.
+
+PHYSICS: Fine chain follows a soft catenary droop similar to a necklace but at a smaller scale; any charm hangs plumb under gravity.
+
+FRAMING & PLACEMENT: Compose with the ankle curve visible and the clasp positioned off-center; macro focus on the finest chain detail or charm.
+
+COMPOSITION REMINDER: this is a standalone product shot of the anklet. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this anklet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- CUFFLINKS ---
+
+SUBJECT: Cufflinks. Premium cufflinks showcasing the front face design and the polished toggle or chain-link back mechanism.
+
+PHYSICS: Rigid front face; the back toggle or chain-link mechanism hangs or folds naturally, never rigid against the fabric.
+
+FRAMING & PLACEMENT: Present the pair symmetrically at matched angle; macro focus on the front face detail of one piece with the second slightly softer in depth of field.
+
+COMPOSITION REMINDER: this is a standalone product shot of the cufflinks. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this cufflinks exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- MULTIPLE ITEMS ---
+
+SUBJECT: Multiple Items. A curated luxury jewelry set arranged harmoniously as a cohesive catalog composition, each piece individually legible.
+
+PHYSICS: Each item obeys its own individual physics (rigid pieces stay rigid, chains drape, drops hang plumb) — items must not visually merge or overlap in a way that hides any single piece's silhouette.
+
+FRAMING & PLACEMENT: Arrange with a clear visual hierarchy (one hero piece, supporting pieces smaller or set back); every item must have its own unbroken contact shadow; maintain consistent macro focus depth across the group so no item reads as out of focus relative to the others.
+
+COMPOSITION REMINDER: this is a standalone product shot of the multiple items. Even though this item is normally worn, do NOT show a hand, wrist, neck, ear, or any other body part in this image. Do not render any lamp, halo, or glowing light disc as a visible object -- lighting is implied through shadow and falloff only.
+
+Reminder: preserve every original detail of this multiple items exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.

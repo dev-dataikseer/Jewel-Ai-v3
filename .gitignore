@@ -1,0 +1,20 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/uploads/
+backend/jewel.db
+backend/.env
+
+# Production secrets (copy from .env.production.example)
+config/.env.production
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS
+.DS_Store
+Thumbs.db

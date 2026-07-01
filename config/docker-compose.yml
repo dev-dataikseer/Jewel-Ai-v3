@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jewel_ai
+      POSTGRES_USER: jewel
+      POSTGRES_PASSWORD: jewel
+    ports:
+      - "5432:5432"
+    volumes:
+      - jewel_v3_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jewel -d jewel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: config/backend.Dockerfile
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgresql://jewel:jewel@postgres:5432/jewel_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      API_PUBLIC_URL: https://hj-jewel-ai.data-ikseer.com
+      FRONTEND_ORIGIN: https://hj-jewel-ai.data-ikseer.com
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: config/backend.Dockerfile
+    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=3
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgresql://jewel:jewel@postgres:5432/jewel_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      API_PUBLIC_URL: https://hj-jewel-ai.data-ikseer.com
+      FRONTEND_ORIGIN: https://hj-jewel-ai.data-ikseer.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: config/frontend.Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  jewel_v3_postgres:
