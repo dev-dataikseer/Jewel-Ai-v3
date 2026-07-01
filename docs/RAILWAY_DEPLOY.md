@@ -2,9 +2,9 @@
 
 Deploy **Jewel AI V3** to [Railway](https://railway.app) and connect custom domain `hj-jewel-ai.data-ikseer.com`.
 
-## 1. GitHub
+Repo: https://github.com/dev-dataikseer/Jewel-Ai-v3
 
-Push this repo (`Jewel_V3` folder is the app root). On Railway, set **Root Directory** to `Jewel_V3`.
+Clone this repository — the **repo root is the app** (no subdirectory). On Railway, leave **Root Directory** empty (default).
 
 ## 2. Railway services
 

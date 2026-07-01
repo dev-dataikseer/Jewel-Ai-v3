@@ -1,12 +1,13 @@
-# Jewel V3
+# Jewel AI V3
 
-Premium AI jewelry image-processing SaaS built from the stronger parts of the existing Old Project and New Project codebases.
+Premium AI jewelry studio — FastAPI + React + fal.ai.
 
-The backend is FastAPI with SQLAlchemy/Alembic, Celery/Redis job dispatch, RBAC, SSE job streaming, provider routing, and a DB-backed Jewel Prompt Engine. The frontend is React/Vite with Studio, History, and Admin workspaces for image generation, prompt operations, users, analytics, and provider settings.
+**GitHub:** https://github.com/dev-dataikseer/Jewel-Ai-v3  
+**Production:** https://hj-jewel-ai.data-ikseer.com
 
 ## Quick Start
 
-Double-click `RUN.bat` in this folder for local Windows development.
+Double-click `RUN.bat` for local Windows development.
 
 - API: http://localhost:8000
 - App: http://localhost:5173
