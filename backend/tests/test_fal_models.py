@@ -121,7 +121,7 @@ def test_filter_models_image_edit_only():
     assert all(m.endpoint_id != "fal-ai/imagen4/preview" for m in filtered)
 
 
-def test_filter_without_input_excludes_image_models():
+def test_filter_without_input_still_lists_catalog_models():
     class FakeModel:
         def __init__(self, spec):
             self.endpoint_id = spec["endpoint_id"]
@@ -148,4 +148,5 @@ def test_filter_without_input_excludes_image_models():
         def query(self, model):
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
-    assert filter_models_for_request(FakeDb(), has_input=False) == []
+    models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
+    assert len(models) == 13

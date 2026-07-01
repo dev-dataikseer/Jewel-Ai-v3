@@ -109,11 +109,10 @@ def filter_models_for_request(
         requires_image = caps.get("requires_image", True)
         min_images = int(config.get("min_images", 1 if requires_image else 0))
 
-        if not has_input and requires_image:
-            continue
+        # Always list models in the UI; image requirements are enforced at job creation.
         if has_input and requires_image and count < min_images:
             continue
-        if caps.get("virtual_try_on") and count < 2:
+        if has_input and caps.get("virtual_try_on") and count < 2:
             continue
 
         result.append(m)

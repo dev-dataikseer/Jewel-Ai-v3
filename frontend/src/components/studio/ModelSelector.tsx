@@ -43,7 +43,7 @@ export function ModelSelector({
   onModelChange,
   onParamsChange,
 }: Props) {
-  const { data: models = [], isLoading } = useQuery({
+  const { data: models = [], isLoading, isError, error } = useQuery({
     queryKey: ["models", "image_edit", workflow, hasInput, imageCount],
     queryFn: async () =>
       (
@@ -56,6 +56,7 @@ export function ModelSelector({
           },
         })
       ).data,
+    retry: 2,
   });
 
   const selected = models.find((m) => m.endpoint_id === selectedEndpointId) ?? models[0] ?? null;
@@ -83,8 +84,24 @@ export function ModelSelector({
     return <p className="text-xs text-slate-400">Loading models…</p>;
   }
 
+  if (isError) {
+    const msg =
+      (error as { friendlyMessage?: string })?.friendlyMessage ||
+      (error as Error)?.message ||
+      "Could not load models";
+    return (
+      <p className="text-xs text-rose-600">
+        {msg}. Check that the API is running and you are logged in.
+      </p>
+    );
+  }
+
   if (models.length === 0) {
-    return <p className="text-xs text-amber-600">No image-edit models available. Check fal.ai settings in Admin.</p>;
+    return (
+      <p className="text-xs text-amber-600">
+        No models in catalog. Open Admin → Providers and confirm FAL_KEY is set, then restart the API.
+      </p>
+    );
   }
 
   const current = models.find((m) => m.endpoint_id === selectedEndpointId) ?? selected;
