@@ -435,7 +435,9 @@ def test_prompt(body: PromptTestRequest, user: RequireAdmin, db: Session = Depen
 
 @router.post("/test/generate")
 async def test_generate(body: PromptTestRequest, user: RequireAdmin, db: Session = Depends(get_db)):
-    composed = compose_prompt(db, ComposeInput(**body.model_dump(exclude={"model_endpoint_id", "model_params"})))
+    if not body.image_url:
+        raise HTTPException(status_code=400, detail="image_url is required for test generation")
+    composed = compose_prompt(db, ComposeInput(**body.model_dump(exclude={"model_endpoint_id", "model_params", "image_url"})))
     prompt = augment_prompt_for_workflow(body.workflow, composed.text)
     endpoint = body.model_endpoint_id
     model_def = get_model_definition(db, endpoint) if endpoint else None
@@ -448,9 +450,12 @@ async def test_generate(body: PromptTestRequest, user: RequireAdmin, db: Session
         workflow=body.workflow,
         model_endpoint_id=endpoint,
         model_params=params,
+        image_urls=[body.image_url],
     )
     validate_generation_request(model_def, request)
     result, chain = await route_generation(db, request)
+    if result.is_webhook_pending or not result.image_bytes:
+        raise HTTPException(status_code=503, detail="Test generation requires synchronous provider response")
     url = storage.save_bytes(result.image_bytes, filename=f"test_{body.workflow}.png")
     return {
         "output_url": url,

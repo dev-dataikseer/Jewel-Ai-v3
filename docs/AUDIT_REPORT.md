@@ -5,7 +5,7 @@
 
 ## Executive summary
 
-This audit addressed a **P0 Studio loading bug**, hardened **all 19 fal.ai catalog models** with schema-driven validation and response normalization, and closed several **security and data-isolation gaps**. Backend test suite: **98 tests passing** (mock-only Fal tests; no `FAL_KEY` required in CI).
+This audit addressed a **P0 Studio loading bug**, hardened the **21-model fal.ai catalog** (14 ranked image-edit + 7 VTON) with schema-driven validation and response normalization, and closed **security, tenancy, and reliability gaps** from the July 2026 end-to-end audit. Backend test suite: **110 tests passing** (mock-only Fal tests; no `FAL_KEY` required in CI).
 
 ---
 
@@ -27,7 +27,7 @@ This audit addressed a **P0 Studio loading bug**, hardened **all 19 fal.ai catal
 | P1-2 | `filter_models_for_request` ignored `has_input` / image count | Filters by `has_input`, `image_count`, VTON workflow rules |
 | P1-3 | FASHN `num_samples` not mapped from Studio `number_of_images` | `param_aliases` in seed config + adapter merge logic |
 | P1-4 | Multi-image Fal responses discarded extras | Adapter fetches all URLs; `output_urls` on job; webhook multi-save |
-| P1-5 | 10 failing tests referenced removed endpoints | Tests rewritten for 19-model catalog |
+| P1-5 | 10 failing tests referenced removed endpoints | Tests rewritten for 21-model catalog |
 | P1-6 | `regenerate_job` lacked ownership check | Uses `_get_user_job()` |
 
 ### P2 — Medium (fixed / documented)
@@ -42,15 +42,45 @@ This audit addressed a **P0 Studio loading bug**, hardened **all 19 fal.ai catal
 | P2-6 | No React error boundary | `ErrorBoundary` wraps app in `main.tsx` |
 | P2-7 | Dead `PromptSandbox` component | Wired into Admin → Prompt Test tab |
 | P2-8 | Studio showed unsupported global controls for all models | Aspect ratio / person gen / image count hidden per model schema |
-| P2-9 | Docs listed 14 models | `WEBAPP_GUIDE.md` updated to 19 |
+| P2-9 | Docs listed 14 models | `WEBAPP_GUIDE.md` updated to 21 models |
+
+### P0 — Tenancy & webhook security (fixed, July 2026 remediation)
+
+| ID | Finding | Remediation |
+|----|---------|-------------|
+| P0-4 | Favorites global (no `user_id`) | `favorites.user_id` + scoped list/add/remove; `favorites_only` join filters by user |
+| P0-5 | Projects public / unscoped | `projects.user_id`; `RequireUser` on `/projects`; scoped queries |
+| P0-6 | Share links without ownership | `POST /share-links` requires `job.user_id == user.id` |
+| P0-7 | Asset ownership not enforced on jobs | `create_job` / bulk filter `Asset.user_id == user.id` |
+| P0-8 | Fal webhook unauthenticated + SSRF | JWT `token` query param; `safe_fetch_image_url()` allowlist; idempotency on `COMPLETED` |
+
+### P1 — Reliability (fixed, July 2026 remediation)
+
+| ID | Finding | Remediation |
+|----|---------|-------------|
+| P1-7 | Provider failover raised on first error | `route_generation` continues chain; raises only when all providers fail |
+| P1-8 | Refresh token in query string | `POST /auth/refresh` accepts JSON body; query param deprecated fallback |
+| P1-9 | Weak production secrets only warned | `assert_production_settings()` fails fast when `NODE_ENV=production` |
+| P1-10 | Prompt sandbox test/generate without image | `image_url` required on `POST /prompts/test/generate`; UI upload in PromptSandbox |
+| P1-11 | Daemon-thread queue in production | Production marks job `FAILED` if no Celery worker; dev keeps thread fallback |
+
+### P2 — Performance & quality (fixed, July 2026 remediation)
+
+| ID | Finding | Remediation |
+|----|---------|-------------|
+| P2-10 | SSE polled each job individually | Single batched query + adaptive sleep backoff |
+| P2-11 | In-memory rate limiter only | Redis sliding-window when available; webhook rate limit |
+| P2-12 | Missing composite DB indexes | `(user_id, status)`, `(batch_id)` + migration `002_tenancy` |
+| P2-13 | Upload MIME-only validation | Magic-byte checks for JPEG/PNG/WebP |
+| P2-14 | Alembic migrations no-op | `001_initial` + `002_tenancy` for `user_id` columns |
 
 ### P3 — Low (documented / partial)
 
 | ID | Finding | Status |
 |----|---------|--------|
-| P3-1 | In-memory rate limiter (not Redis) | Acceptable for single-node; use Redis for multi-instance |
+| P3-1 | In-memory rate limiter (not Redis) | Redis preferred when available; in-memory fallback for dev |
 | P3-2 | CSRF on cookie auth | N/A — JWT in `localStorage` + Bearer header |
-| P3-3 | Upload MIME validation | Existing asset router; consider stricter image-only checks |
+| P3-3 | Upload MIME validation | Magic-byte validation on upload |
 | P3-4 | Seeds imported at runtime from `seeds/` | Documented; catalog is DB-synced via `seed_model_definitions()` |
 
 ---
@@ -59,6 +89,7 @@ This audit addressed a **P0 Studio loading bug**, hardened **all 19 fal.ai catal
 
 - [x] `/health` checks database + Redis
 - [x] `validate_production_settings()` warns on weak JWT, missing `FAL_KEY`, localhost webhook URL
+- [x] Production fails fast on critical misconfiguration (`assert_production_settings`)
 - [x] Structured logging via `logging_config`
 - [x] Circuit breaker on provider failures
 - [x] Stuck job sweeper (`sweep_stuck_jobs`)

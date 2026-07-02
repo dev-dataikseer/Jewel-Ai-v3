@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { type InfiniteData, useQueryClient } from "@tanstack/react-query";
 import { api, getAccessToken } from "@/lib/api";
-import type { Job } from "@/types";
+import type { Job, JobsListResponse } from "@/types";
 
 const TERMINAL = new Set(["COMPLETED", "FAILED"]);
 const POLL_MS = 2000;
@@ -14,13 +14,16 @@ type StreamHandlers = {
 function applyJobUpdate(queryClient: ReturnType<typeof useQueryClient>, job: Job, handlers: StreamHandlers) {
   handlers.onUpdate?.(job);
   queryClient.setQueryData<Job>(["job", job.id], job);
-  queryClient.setQueriesData<{ items: Job[]; next_cursor: string | null }>(
+  queryClient.setQueriesData<InfiniteData<JobsListResponse>>(
     { queryKey: ["jobs"] },
     (old) => {
       if (!old) return old;
       return {
         ...old,
-        items: old.items.map((j) => (j.id === job.id ? { ...j, ...job } : j)),
+        pages: old.pages.map((page) => ({
+          ...page,
+          items: page.items.map((j) => (j.id === job.id ? { ...j, ...job } : j)),
+        })),
       };
     }
   );
@@ -32,6 +35,9 @@ function applyJobUpdate(queryClient: ReturnType<typeof useQueryClient>, job: Job
     next[idx] = { ...next[idx], ...job };
     return next;
   });
+  if (TERMINAL.has(job.status)) {
+    void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+  }
 }
 
 async function fetchStreamToken(jobIds: string[]): Promise<string | null> {

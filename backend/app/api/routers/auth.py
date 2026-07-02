@@ -5,7 +5,7 @@ from app.auth.deps import RequireAdmin, get_current_user
 from app.auth.security import create_access_token, create_refresh_token, decode_token
 from app.database import get_db
 from app.models import User
-from app.schemas.common import LoginRequest, TokenResponse, UserOut
+from app.schemas.common import LoginRequest, RefreshRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -25,8 +25,15 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(refresh_token: str = Query(..., alias="refresh_token"), db: Session = Depends(get_db)):
-    payload = decode_token(refresh_token)
+def refresh(
+    body: RefreshRequest | None = None,
+    refresh_token: str | None = Query(None, alias="refresh_token"),
+    db: Session = Depends(get_db),
+):
+    token = (body.refresh_token if body else None) or refresh_token
+    if not token:
+        raise HTTPException(status_code=400, detail="refresh_token required")
+    payload = decode_token(token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = db.query(User).filter(User.id == payload["sub"]).first()

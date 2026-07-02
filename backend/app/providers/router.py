@@ -49,6 +49,7 @@ def provider_supports_request(provider: Provider, request: GenerationRequest) ->
 async def route_generation(db: Session, request: GenerationRequest) -> tuple[GenerationResult, list[str]]:
     chain: list[str] = []
     providers = get_active_providers(db)
+    last_error: Exception | None = None
 
     has_input = bool(request.image_urls)
     endpoint = (
@@ -95,9 +96,10 @@ async def route_generation(db: Session, request: GenerationRequest) -> tuple[Gen
             db.add(ProviderHealthLog(provider_name=prov.name, status="failed", message=str(e)[:500]))
             db.commit()
             logger.warning("Provider failed", extra={"extra_fields": {"provider": prov.name, "error": str(e)}})
-            raise
+            last_error = e
+            continue
 
-    raise RuntimeError(f"All providers failed. Chain: {chain}")
+    raise RuntimeError(f"All providers failed. Chain: {chain}. Last error: {last_error}")
 
 
 async def check_all_provider_health(db: Session) -> list[dict]:

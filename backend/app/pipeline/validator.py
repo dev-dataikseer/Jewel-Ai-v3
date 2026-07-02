@@ -99,8 +99,23 @@ def validate_job_create(data: dict) -> None:
         data["prompt_text"] = sanitize_user_prompt(data.get("prompt_text"))
 
 
-def validate_upload(content_type: str, size_bytes: int) -> None:
+def validate_upload(content_type: str, size_bytes: int, content: bytes | None = None) -> None:
     if content_type not in ALLOWED_UPLOAD_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
     if size_bytes > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 20 MB)")
+    if content:
+        validate_image_magic_bytes(content, content_type)
+
+
+def validate_image_magic_bytes(content: bytes, content_type: str) -> None:
+    """Verify file header matches declared image type."""
+    if len(content) < 12:
+        raise HTTPException(status_code=400, detail="File too small to be a valid image")
+    if content_type == "image/jpeg" and not content[:3] == b"\xff\xd8\xff":
+        raise HTTPException(status_code=400, detail="File content does not match JPEG")
+    if content_type == "image/png" and not content[:8] == b"\x89PNG\r\n\x1a\n":
+        raise HTTPException(status_code=400, detail="File content does not match PNG")
+    if content_type == "image/webp":
+        if not (content[:4] == b"RIFF" and content[8:12] == b"WEBP"):
+            raise HTTPException(status_code=400, detail="File content does not match WebP")

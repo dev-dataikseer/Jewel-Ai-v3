@@ -21,6 +21,8 @@ export function PromptSandbox({ options }: Props) {
   const [outputUrl, setOutputUrl] = useState("");
   const [modelEndpointId, setModelEndpointId] = useState("");
   const [modelParams, setModelParams] = useState<Record<string, unknown>>({});
+  const [testImage, setTestImage] = useState<File | null>(null);
+  const [testImageUrl, setTestImageUrl] = useState("");
 
   const { data: variants = [] } = useQuery({
     queryKey: ["prompts", "variants", workflow],
@@ -53,12 +55,24 @@ export function PromptSandbox({ options }: Props) {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      if (!testImage && !testImageUrl) {
+        throw new Error("Upload a test product image first");
+      }
+      let imageUrl = testImageUrl;
+      if (testImage) {
+        const form = new FormData();
+        form.append("file", testImage);
+        const uploaded = await api.post<{ original_url: string }>("/assets/upload", form);
+        imageUrl = uploaded.data.original_url;
+        setTestImageUrl(imageUrl);
+      }
       const body: Record<string, unknown> = {
         workflow,
         jewelry_type: jewelryType,
         prompt_text: promptText || null,
         model_endpoint_id: modelEndpointId || undefined,
         model_params: modelParams,
+        image_url: imageUrl,
         ...(variantLabel ? variantPayloadField(workflow, variantLabel) : {}),
       };
       const res = await api.post<{
@@ -155,10 +169,22 @@ export function PromptSandbox({ options }: Props) {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
         <h3 className="text-xs font-bold uppercase text-slate-500">Live generation</h3>
+        <div>
+          <label htmlFor="sandbox-test-image" className="mb-1 block text-xs font-semibold text-slate-600">
+            Test product image (required)
+          </label>
+          <input
+            id="sandbox-test-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="block w-full text-xs text-slate-600"
+            onChange={(e) => setTestImage(e.target.files?.[0] || null)}
+          />
+        </div>
         <ModelSelector
           workflow={workflow}
-          hasInput={false}
-          imageCount={0}
+          hasInput={Boolean(testImage || testImageUrl)}
+          imageCount={testImage || testImageUrl ? 1 : 0}
           selectedEndpointId={modelEndpointId}
           modelParams={modelParams}
           onModelChange={(id) => setModelEndpointId(id)}

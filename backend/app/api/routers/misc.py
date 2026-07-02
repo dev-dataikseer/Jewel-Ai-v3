@@ -93,25 +93,30 @@ async def live_rates():
 
 @router.get("/favorites")
 def list_favorites(user: RequireUser, db: Session = Depends(get_db)):
-    favs = db.query(Favorite).order_by(Favorite.created_at.desc()).all()
+    favs = (
+        db.query(Favorite)
+        .filter(Favorite.user_id == user.id)
+        .order_by(Favorite.created_at.desc())
+        .all()
+    )
     return [f.job_id for f in favs]
 
 
 @router.post("/favorites/{job_id}")
 def add_favorite(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
-    if db.query(Favorite).filter(Favorite.job_id == job_id).first():
-        return {"success": True}
-    job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+    job = db.query(GenerationJob).filter(GenerationJob.id == job_id, GenerationJob.user_id == user.id).first()
     if not job:
-        raise HTTPException(status_code=404)
-    db.add(Favorite(job_id=job_id))
+        raise HTTPException(status_code=404, detail="Job not found")
+    if db.query(Favorite).filter(Favorite.user_id == user.id, Favorite.job_id == job_id).first():
+        return {"success": True}
+    db.add(Favorite(user_id=user.id, job_id=job_id))
     db.commit()
     return {"success": True}
 
 
 @router.delete("/favorites/{job_id}")
 def remove_favorite(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
-    fav = db.query(Favorite).filter(Favorite.job_id == job_id).first()
+    fav = db.query(Favorite).filter(Favorite.user_id == user.id, Favorite.job_id == job_id).first()
     if fav:
         db.delete(fav)
         db.commit()
@@ -119,26 +124,43 @@ def remove_favorite(job_id: str, user: RequireUser, db: Session = Depends(get_db
 
 
 @router.get("/projects")
-def list_projects(db: Session = Depends(get_db)):
+def list_projects(user: RequireUser, db: Session = Depends(get_db)):
     from app.models import Project
 
-    return db.query(Project).order_by(Project.created_at.desc()).all()
+    return (
+        db.query(Project)
+        .filter(Project.user_id == user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/projects/{project_id}")
-def get_project(project_id: str, db: Session = Depends(get_db)):
+def get_project(project_id: str, user: RequireUser, db: Session = Depends(get_db)):
     from app.models import Project
 
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404)
-    jobs = db.query(GenerationJob).filter(GenerationJob.project_id == project_id).all()
+    jobs = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.project_id == project_id, GenerationJob.user_id == user.id)
+        .all()
+    )
     return {"project": project, "jobs": jobs}
 
 
 @router.post("/share-links")
 def create_share_link(body: ShareLinkCreate, user: RequireUser, db: Session = Depends(get_db)):
-    job = db.query(GenerationJob).filter(GenerationJob.id == body.job_id, GenerationJob.status == "COMPLETED").first()
+    job = (
+        db.query(GenerationJob)
+        .filter(
+            GenerationJob.id == body.job_id,
+            GenerationJob.user_id == user.id,
+            GenerationJob.status == "COMPLETED",
+        )
+        .first()
+    )
     if not job:
         raise HTTPException(status_code=404, detail="Completed job not found")
     link = ShareLink(

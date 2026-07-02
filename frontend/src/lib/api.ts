@@ -47,9 +47,7 @@ async function refreshAccessToken(): Promise<string | null> {
   const refresh = getRefreshToken();
   if (!refresh) return null;
   try {
-    const res = await axios.post(`${API_BASE}/auth/refresh`, null, {
-      params: { refresh_token: refresh },
-    });
+    const res = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refresh });
     const { access_token, refresh_token } = res.data;
     setTokens(access_token, refresh_token);
     return access_token;

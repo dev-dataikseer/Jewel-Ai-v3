@@ -101,6 +101,7 @@ export function HistoryPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              aria-label="Filter by status"
               className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="ALL">All statuses</option>
@@ -112,6 +113,7 @@ export function HistoryPage() {
             <select
               value={workflowFilter}
               onChange={(e) => setWorkflowFilter(e.target.value)}
+              aria-label="Filter by workflow"
               className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">All workflows</option>
@@ -228,6 +230,7 @@ function JobCard({ job }: { job: Job }) {
                 download
                 target="_blank"
                 rel="noreferrer"
+                aria-label={`Download image for ${label(job.workflow)}`}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500"
               >
                 <Download className="size-3" />

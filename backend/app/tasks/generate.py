@@ -161,6 +161,9 @@ def sweep_stuck_jobs() -> int:
             .all()
         )
         for job in stuck:
+            meta = job.provider_metadata or {}
+            if meta.get("webhook_pending") and meta.get("usage", {}).get("request_id"):
+                continue
             job.status = "PENDING"
             job.error_message = None
             db.commit()

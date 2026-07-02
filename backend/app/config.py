@@ -97,3 +97,11 @@ def validate_production_settings() -> list[str]:
     if "localhost" in s.api_public_url:
         warnings.append("API_PUBLIC_URL should be a public HTTPS URL for fal webhooks")
     return warnings
+
+
+def assert_production_settings() -> None:
+    """Fail fast on critical misconfiguration in production."""
+    issues = validate_production_settings()
+    critical = [w for w in issues if "JWT_SECRET" in w or "FAL_KEY" in w or "API_PUBLIC_URL" in w]
+    if critical:
+        raise RuntimeError("Production configuration invalid: " + "; ".join(critical))

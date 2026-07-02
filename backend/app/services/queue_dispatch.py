@@ -1,12 +1,18 @@
 """Dispatch image jobs to Celery when a worker is available, else process in-process."""
 import asyncio
 import threading
+import time
 
 from app.config import get_settings
+from app.database import SessionLocal
 from app.logging_config import get_logger
+from app.models import GenerationJob
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+_worker_cache: dict[str, float | bool] = {"checked_at": 0.0, "available": False}
+_WORKER_CACHE_TTL = 30.0
 
 
 def _redis_available() -> bool:
@@ -22,20 +28,40 @@ def _redis_available() -> bool:
 
 def _celery_worker_available() -> bool:
     """Redis alone is not enough — without a Celery worker, .delay() never runs."""
-    if not _redis_available():
-        return False
-    try:
-        from app.tasks.celery_app import celery_app
+    now = time.time()
+    if now - float(_worker_cache["checked_at"]) < _WORKER_CACHE_TTL:
+        return bool(_worker_cache["available"])
 
-        inspect = celery_app.control.inspect(timeout=1.5)
-        ping = inspect.ping()
-        if ping:
-            return True
-        stats = inspect.stats()
-        return bool(stats)
-    except Exception as exc:
-        logger.debug("Celery worker check failed: %s", exc)
-        return False
+    available = False
+    if _redis_available():
+        try:
+            from app.tasks.celery_app import celery_app
+
+            inspect = celery_app.control.inspect(timeout=1.5)
+            ping = inspect.ping()
+            if ping:
+                available = True
+            else:
+                stats = inspect.stats()
+                available = bool(stats)
+        except Exception as exc:
+            logger.debug("Celery worker check failed: %s", exc)
+
+    _worker_cache["checked_at"] = now
+    _worker_cache["available"] = available
+    return available
+
+
+def _fail_job_enqueue(job_id: str, message: str) -> None:
+    db = SessionLocal()
+    try:
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if job and job.status == "PENDING":
+            job.status = "FAILED"
+            job.error_message = message
+            db.commit()
+    finally:
+        db.close()
 
 
 def enqueue_image_job(job_id: str) -> None:
@@ -46,11 +72,17 @@ def enqueue_image_job(job_id: str) -> None:
         logger.info("Job queued via Celery", extra={"extra_fields": {"job_id": job_id}})
         return
 
+    if settings.is_production:
+        msg = "No Celery worker available — job cannot be processed in production"
+        logger.error(msg, extra={"extra_fields": {"job_id": job_id}})
+        _fail_job_enqueue(job_id, msg)
+        return
+
     from app.tasks.generate import _process_job_async
 
     reason = "no Redis" if not _redis_available() else "no Celery worker"
-    logger.info(
-        "Processing job in background thread (%s)",
+    logger.warning(
+        "Processing job in background thread (%s) — not durable across restarts",
         reason,
         extra={"extra_fields": {"job_id": job_id}},
     )

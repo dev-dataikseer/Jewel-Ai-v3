@@ -86,6 +86,25 @@ def decode_job_stream_token(token: str) -> Optional[dict]:
     return payload
 
 
+def create_webhook_token(job_id: str) -> str:
+    """Short-lived token for fal webhook callbacks (embedded in webhook URL)."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    payload = {
+        "sub": job_id,
+        "type": "fal_webhook",
+        "exp": expire,
+        "jti": secrets.token_hex(8),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_webhook_token(token: str, job_id: str) -> bool:
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "fal_webhook":
+        return False
+    return payload.get("sub") == job_id
+
+
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     email = email.strip()
     user = db.query(User).filter(User.email == email).first()

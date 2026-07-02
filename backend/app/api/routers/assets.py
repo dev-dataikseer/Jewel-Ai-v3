@@ -20,7 +20,7 @@ async def upload_asset(
     db: Session = Depends(get_db),
 ):
     content = await file.read()
-    validate_upload(file.content_type or "image/jpeg", len(content))
+    validate_upload(file.content_type or "image/jpeg", len(content), content)
     ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
     filename = f"asset-{uuid.uuid4().hex}{ext}"
     url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
@@ -46,7 +46,7 @@ async def bulk_upload(
     assets = []
     for file in files:
         content = await file.read()
-        validate_upload(file.content_type or "image/jpeg", len(content))
+        validate_upload(file.content_type or "image/jpeg", len(content), content)
         ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
         filename = f"asset-{uuid.uuid4().hex}{ext}"
         url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")

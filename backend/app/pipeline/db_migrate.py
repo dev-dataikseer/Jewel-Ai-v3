@@ -94,12 +94,135 @@ def migrate_job_indexes(engine: Engine) -> None:
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_jobs_user_created ON generation_jobs (user_id, created_at)")
             )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_jobs_user_status ON generation_jobs (user_id, status)")
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_batch_id ON generation_jobs (batch_id)"))
         elif dialect == "postgresql":
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_user_id ON generation_jobs (user_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_status ON generation_jobs (status)"))
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_jobs_user_created ON generation_jobs (user_id, created_at DESC)")
             )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_jobs_user_status ON generation_jobs (user_id, status)")
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_batch_id ON generation_jobs (batch_id)"))
+
+
+def migrate_tenancy_columns(engine: Engine) -> None:
+    """Add user_id to favorites/projects and backfill from generation_jobs."""
+    inspector = inspect(engine)
+    dialect = engine.dialect.name
+
+    if inspector.has_table("projects"):
+        cols = {c["name"] for c in inspector.get_columns("projects")}
+        if "user_id" not in cols:
+            with engine.begin() as conn:
+                _add_column_if_missing(conn, inspector, "projects", "user_id", "VARCHAR(36)")
+                conn.execute(
+                    text(
+                        """
+                        UPDATE projects
+                        SET user_id = (
+                            SELECT gj.user_id FROM generation_jobs gj
+                            WHERE gj.project_id = projects.id AND gj.user_id IS NOT NULL
+                            LIMIT 1
+                        )
+                        WHERE user_id IS NULL
+                        """
+                    )
+                )
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_user_id ON projects (user_id)"))
+
+    if not inspector.has_table("favorites"):
+        return
+
+    fav_cols = {c["name"] for c in inspector.get_columns("favorites")}
+    if "user_id" in fav_cols:
+        return
+
+    with engine.begin() as conn:
+        if dialect == "sqlite":
+            conn.execute(text("ALTER TABLE favorites ADD COLUMN user_id VARCHAR(36)"))
+            conn.execute(
+                text(
+                    """
+                    UPDATE favorites
+                    SET user_id = (
+                        SELECT user_id FROM generation_jobs
+                        WHERE generation_jobs.id = favorites.job_id
+                    )
+                    """
+                )
+            )
+            conn.execute(text("DELETE FROM favorites WHERE user_id IS NULL"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE favorites_new (
+                        id VARCHAR(36) NOT NULL PRIMARY KEY,
+                        user_id VARCHAR(36) NOT NULL,
+                        job_id VARCHAR(36) NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        CONSTRAINT uq_favorite_user_job UNIQUE (user_id, job_id),
+                        FOREIGN KEY(user_id) REFERENCES users (id),
+                        FOREIGN KEY(job_id) REFERENCES generation_jobs (id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO favorites_new (id, user_id, job_id, created_at)
+                    SELECT id, user_id, job_id, created_at FROM favorites
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE favorites"))
+            conn.execute(text("ALTER TABLE favorites_new RENAME TO favorites"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_favorites_user_id ON favorites (user_id)"))
+        elif dialect == "postgresql":
+            conn.execute(text("ALTER TABLE favorites ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)"))
+            conn.execute(
+                text(
+                    """
+                    UPDATE favorites f
+                    SET user_id = gj.user_id
+                    FROM generation_jobs gj
+                    WHERE gj.id = f.job_id AND f.user_id IS NULL
+                    """
+                )
+            )
+            conn.execute(text("DELETE FROM favorites WHERE user_id IS NULL"))
+            conn.execute(text("ALTER TABLE favorites ALTER COLUMN user_id SET NOT NULL"))
+            for uc in inspector.get_unique_constraints("favorites"):
+                name = uc.get("name")
+                cols = uc.get("column_names") or []
+                if cols == ["job_id"] and name:
+                    conn.execute(text(f'ALTER TABLE favorites DROP CONSTRAINT "{name}"'))
+            conn.execute(
+                text(
+                    "ALTER TABLE favorites ADD CONSTRAINT uq_favorite_user_job UNIQUE (user_id, job_id)"
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_favorites_user_id ON favorites (user_id)"))
+        else:
+            _add_column_if_missing(conn, inspector, "favorites", "user_id", "VARCHAR(36)")
+            conn.execute(
+                text(
+                    """
+                    UPDATE favorites
+                    SET user_id = (
+                        SELECT user_id FROM generation_jobs
+                        WHERE generation_jobs.id = favorites.job_id
+                    )
+                    WHERE user_id IS NULL
+                    """
+                )
+            )
+            conn.execute(text("DELETE FROM favorites WHERE user_id IS NULL"))
 
 
 def _prompt_subjects_has_composite_unique(inspector) -> bool:

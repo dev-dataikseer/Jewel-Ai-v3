@@ -297,7 +297,15 @@ class FalAdapter:
         client = _client(self.api_key)
 
         is_local = "localhost" in settings.api_public_url or "127.0.0.1" in settings.api_public_url
-        webhook_url = f"{settings.api_public_url.rstrip('/')}/api/providers/fal/webhook/{request.job_id}" if request.job_id else None
+        webhook_url = None
+        if request.job_id and not is_local:
+            from app.auth.security import create_webhook_token
+
+            webhook_token = create_webhook_token(request.job_id)
+            webhook_url = (
+                f"{settings.api_public_url.rstrip('/')}/api/providers/fal/webhook/{request.job_id}"
+                f"?token={webhook_token}"
+            )
 
         def _run() -> Any:
             if is_local or not webhook_url:

@@ -4,7 +4,9 @@
 
 - **Frontend:** React 19 + Vite + TanStack Query (`New Project/web`)
 - **Backend:** FastAPI + SQLAlchemy (`New Project/api`)
-- **Image generation:** [fal.ai](https://fal.ai) only — **19 image-guided models** (13 image-edit + 6 virtual try-on)
+- **Image generation:** [fal.ai](https://fal.ai) only — **21 image-guided models** (14 ranked image-edit + 7 virtual try-on)
+
+**Default workflow model:** Nano Banana Pro (`fal-ai/nano-banana-pro/edit`) — rank #1 in the Studio dropdown.
 
 ## Quick start
 
@@ -32,25 +34,26 @@ All workflows require **uploading a product image**. Generation is always **text
 
 The **AI Model** dropdown loads from `GET /api/models?image_edit_only=true&has_input=&image_count=`. Models are filtered by workflow, whether images are uploaded, and image count (VTON models require product + portrait).
 
-### Image-edit models (13)
+### Image-edit models (14, ranked)
 
-| Model | Endpoint | Image field |
-|-------|----------|-------------|
-| Nano Banana Pro Edit | `fal-ai/nano-banana-pro/edit` | `image_urls[]` |
-| GPT Image 1.5 Edit | `fal-ai/gpt-image-1.5/edit` | `image_urls[]` |
-| FLUX 2 Pro Edit | `fal-ai/flux-2-pro/edit` | `image_urls[]` |
-| FLUX Kontext | `fal-ai/flux-pro/kontext` | `image_url` |
-| FLUX Kontext Max | `fal-ai/flux-pro/kontext/max` | `image_url` |
-| FLUX 1.1 Redux | `fal-ai/flux-pro/v1.1/redux` | `image_url` |
-| Recraft V3 I2I | `fal-ai/recraft/v3/image-to-image` | `image_url` (prompt max **1000** chars) |
-| Seedream 4.5 Edit | `fal-ai/bytedance/seedream/v4.5/edit` | `image_urls[]` |
-| FLUX 1.1 Pro Ultra Redux | `fal-ai/flux-pro/v1.1-ultra/redux` | `image_url` |
-| Bria FIBO Edit | `bria/fibo-edit/edit` | `image_url` (`instruction` field) |
-| FLUX 2 Klein 9B Edit | `fal-ai/flux-2/klein/9b/edit` | `image_urls[]` |
-| Ideogram V3 Remix | `fal-ai/ideogram/v3/remix` | `image_url` |
-| Grok Imagine Edit | `xai/grok-imagine-image/edit` | `image_urls[]` |
+| Rank | Model | Endpoint |
+|------|-------|----------|
+| 1 | Nano Banana Pro Edit | `fal-ai/nano-banana-pro/edit` |
+| 2 | FLUX 2 Max Edit | `fal-ai/flux-2-max/edit` |
+| 3 | GPT Image 2 Edit | `openai/gpt-image-2/edit` |
+| 4 | FLUX 2 Pro Edit | `fal-ai/flux-2-pro/edit` |
+| 5 | FLUX Kontext | `fal-ai/flux-pro/kontext` |
+| 6 | Nano Banana 2 Edit | `fal-ai/nano-banana-2/edit` |
+| 7 | Seedream 5 Lite Edit | `fal-ai/bytedance/seedream/v5/lite/edit` |
+| 8 | Seedream 4.5 Edit | `fal-ai/bytedance/seedream/v4.5/edit` |
+| 9 | GPT Image 1.5 Edit | `fal-ai/gpt-image-1.5/edit` |
+| 10 | FLUX 2 Dev Edit | `fal-ai/flux-2/dev/edit` |
+| 11 | GLM-Image I2I | `fal-ai/glm-image/image-to-image` |
+| 12 | FireRed Image Edit | `fal-ai/firered-image-edit-v1.1` |
+| 13 | Grok Imagine Edit | `xai/grok-imagine-image/edit` |
+| 14 | FLUX Dev I2I | `fal-ai/flux/dev/image-to-image` |
 
-### Virtual try-on models (6)
+### Virtual try-on models (7)
 
 | Model | Endpoint | Inputs |
 |-------|----------|--------|
@@ -60,6 +63,7 @@ The **AI Model** dropdown loads from `GET /api/models?image_edit_only=true&has_i
 | Kling Kolors VTON v1.5 | `fal-ai/kling/v1-5/kolors-virtual-try-on` | `human_image_url` + `garment_image_url` |
 | Cat-VTON | `fal-ai/cat-vton` | `human_image_url` + `garment_image_url` |
 | Leffa Virtual Try-On | `fal-ai/leffa/virtual-tryon` | `human_image_url` + `garment_image_url` |
+| Decart Lucy2 VTON | `decart/lucy2-vton/realtime` | try-on fields per model config |
 
 **Excluded:** text-only models, upscale-only endpoints, and inpainting models that require a mask (e.g. `ideogram/v3/edit`).
 

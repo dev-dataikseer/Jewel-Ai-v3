@@ -16,6 +16,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class UserOut(BaseModel):
     id: str
     email: str
@@ -114,6 +118,7 @@ class PromptTestRequest(BaseModel):
     style_preset_id: Optional[str] = None
     model_endpoint_id: Optional[str] = None
     model_params: dict[str, Any] = Field(default_factory=dict)
+    image_url: Optional[str] = None
 
 
 class PromptTestResponse(BaseModel):

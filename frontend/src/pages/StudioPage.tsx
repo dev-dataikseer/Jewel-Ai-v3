@@ -145,6 +145,7 @@ export function StudioPage() {
   const [primaryFiles, setPrimaryFiles] = useState<File[]>([]);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const isBulk = workflow === "BULK_GENERATION";
   const needsModelReference = workflow === "JEWELRY_ON_MODEL" || workflow === "CUSTOMER_TRY_ON";
@@ -301,12 +302,18 @@ export function StudioPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      if (primaryFiles.length === 0) throw new Error("Upload at least one product image");
+      const errors: Record<string, string> = {};
+      if (primaryFiles.length === 0) errors.productImage = "Upload at least one product image";
       if (needsReference && !referenceFile) {
-        throw new Error(
-          needsStyleReference ? "Upload a style reference image" : "Upload a model portrait"
-        );
+        errors.referenceImage = needsStyleReference
+          ? "Upload a style reference image"
+          : "Upload a model portrait";
       }
+      if (Object.keys(errors).length > 0) {
+        setValidationErrors(errors);
+        throw new Error(Object.values(errors)[0]);
+      }
+      setValidationErrors({});
 
       const referenceAsset = referenceFile ? await uploadOne(referenceFile) : null;
       const selectedVariant = workflowVariants.find((v) => v.variant_key === workflowVariantKey);
@@ -554,22 +561,37 @@ export function StudioPage() {
                       ) : needsReference ? (
                         <div className="grid grid-cols-2 gap-3 flex-1">
                           <UploadZone
+                            id="studio-product-upload"
                             label="Product"
+                            error={validationErrors.productImage}
                             previews={primaryPreviews.map((p) => p.url)}
-                            onFiles={onPrimaryInput}
+                            onFiles={(files) => {
+                              setValidationErrors((e) => ({ ...e, productImage: "" }));
+                              onPrimaryInput(files);
+                            }}
                           />
                           <UploadZone
+                            id="studio-reference-upload"
                             label={needsStyleReference ? "Reference" : "Portrait"}
+                            error={validationErrors.referenceImage}
                             previews={referencePreview ? [referencePreview] : []}
-                            onFiles={(files) => setReferenceFile(files?.[0] || null)}
+                            onFiles={(files) => {
+                              setValidationErrors((e) => ({ ...e, referenceImage: "" }));
+                              setReferenceFile(files?.[0] || null);
+                            }}
                             single
                           />
                         </div>
                       ) : (
                         <UploadZone
+                          id="studio-product-upload"
                           label={`Product${isBulk ? " (up to 30)" : ""}`}
+                          error={validationErrors.productImage}
                           previews={primaryPreviews.map((p) => p.url)}
-                          onFiles={onPrimaryInput}
+                          onFiles={(files) => {
+                            setValidationErrors((e) => ({ ...e, productImage: "" }));
+                            onPrimaryInput(files);
+                          }}
                           multiple={isBulk}
                         />
                       )}
@@ -585,6 +607,7 @@ export function StudioPage() {
                               type="button"
                               onClick={() => regenerateMutation.mutate(activeJob.id)}
                               disabled={regenerateMutation.isPending}
+                              aria-label="Regenerate image"
                               className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
                             >
                               <RefreshCcw className={`inline size-3 mr-1 ${regenerateMutation.isPending ? "animate-spin" : ""}`} />
@@ -593,6 +616,7 @@ export function StudioPage() {
                             <button
                               type="button"
                               onClick={() => toggleFavorite(activeJob)}
+                              aria-label={favoriteIds.has(activeJob.id) ? "Remove from favorites" : "Add to favorites"}
                               className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
                             >
                               <Heart
@@ -606,6 +630,7 @@ export function StudioPage() {
                                 download
                                 target="_blank"
                                 rel="noreferrer"
+                                aria-label="Download generated image"
                                 className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
                               >
                                 <Download className="inline size-3 mr-1" />
@@ -630,7 +655,7 @@ export function StudioPage() {
                               className="max-h-full max-w-full object-contain rounded"
                             />
                           ) : (
-                            <div className="text-center">
+                            <div className="text-center" aria-live="polite">
                               <RefreshCcw
                                 className={`size-8 text-blue-500 mx-auto ${
                                   activeJob.status === "PROCESSING" || activeJob.status === "PENDING"
@@ -815,28 +840,43 @@ export function StudioPage() {
 type JobsListResponse = { items: Job[]; next_cursor: string | null };
 
 function UploadZone({
+  id,
   label,
   previews,
   onFiles,
   single,
   multiple,
+  error,
 }: {
+  id: string;
   label: string;
   previews: string[];
   onFiles: (files: FileList | null) => void;
   single?: boolean;
   multiple?: boolean;
+  error?: string;
 }) {
+  const inputId = `${id}-input`;
+  const helpId = `${id}-help`;
   return (
     <div className="flex flex-col flex-1">
-      <span className="text-[11px] font-bold uppercase text-slate-500 mb-1.5">{label}</span>
-      <label className="flex-1 min-h-[140px] cursor-pointer rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-4 flex flex-col items-center justify-center hover:border-blue-400 hover:bg-blue-50/20 transition-colors">
-        <UploadCloud className="size-6 text-blue-600 mb-2" />
-        <span className="text-[11px] font-bold text-slate-700">Click to upload</span>
+      <label htmlFor={inputId} className="text-[11px] font-bold uppercase text-slate-500 mb-1.5">
+        {label}
+      </label>
+      <label
+        htmlFor={inputId}
+        className={`flex-1 min-h-[140px] cursor-pointer rounded-xl border-2 border-dashed bg-slate-50/50 p-4 flex flex-col items-center justify-center hover:border-blue-400 hover:bg-blue-50/20 transition-colors ${
+          error ? "border-red-400" : "border-slate-200"
+        }`}
+      >
+        <UploadCloud className="size-6 text-blue-600 mb-2" aria-hidden="true" />
+        <span className="text-xs font-bold text-slate-700">Click to upload</span>
         <input
+          id={inputId}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           className="hidden"
+          aria-describedby={helpId}
           multiple={multiple && !single}
           onChange={(e) => {
             onFiles(e.target.files);
@@ -844,6 +884,10 @@ function UploadZone({
           }}
         />
       </label>
+      <p id={helpId} className="sr-only">
+        Upload {label.toLowerCase()} image as JPEG, PNG, or WebP
+      </p>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       {previews.length > 0 && (
         <div className="mt-2 flex gap-1 flex-wrap">
           {previews.slice(0, 4).map((url) => (

@@ -85,7 +85,13 @@ def create_job(
     if not check_sufficient_credits(db, user.id):
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
-    asset = db.query(Asset).filter(Asset.id == body.asset_id).first() if body.asset_id else None
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == body.asset_id, Asset.user_id == user.id)
+        .first()
+        if body.asset_id
+        else None
+    )
     if body.asset_id and not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
@@ -94,7 +100,11 @@ def create_job(
         image_count = 2
     data = _validate_job_model(db, data, body.workflow, image_count)
 
-    project = Project(name=f"Project {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}", workflow=body.workflow)
+    project = Project(
+        name=f"Project {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
+        workflow=body.workflow,
+        user_id=user.id,
+    )
     db.add(project)
     db.flush()
 
@@ -138,7 +148,7 @@ def create_bulk_jobs(
     validate_job_create(data)
     data = _validate_job_model(db, data, "CATALOG_IMAGE", 1)
 
-    assets = db.query(Asset).filter(Asset.id.in_(body.asset_ids)).all()
+    assets = db.query(Asset).filter(Asset.id.in_(body.asset_ids), Asset.user_id == user.id).all()
     if len(assets) != len(body.asset_ids):
         raise HTTPException(status_code=404, detail="One or more assets not found")
 
@@ -153,7 +163,7 @@ def create_bulk_jobs(
     db.add(batch)
     db.flush()
 
-    project = Project(name=batch.name or "Bulk Project", workflow="BULK_GENERATION")
+    project = Project(name=batch.name or "Bulk Project", workflow="BULK_GENERATION", user_id=user.id)
     db.add(project)
     db.flush()
 
@@ -198,7 +208,7 @@ def list_jobs(
     if workflow:
         q = q.filter(GenerationJob.workflow == workflow)
     if favorites_only:
-        q = q.join(Favorite, Favorite.job_id == GenerationJob.id)
+        q = q.join(Favorite, Favorite.job_id == GenerationJob.id).filter(Favorite.user_id == user.id)
     if cursor:
         q = q.filter(GenerationJob.id < cursor)
     rows = q.limit(limit + 1).all()
@@ -238,16 +248,22 @@ async def stream_jobs(job_ids: str, stream_token: str):
         import asyncio
 
         seen: dict[str, str] = {}
+        sleep_s = 1.0
         for _ in range(300):
             db_local = SessionLocal()
             try:
+                jobs = (
+                    db_local.query(GenerationJob)
+                    .filter(
+                        GenerationJob.id.in_(ids),
+                        GenerationJob.user_id == stream_user_id,
+                    )
+                    .all()
+                )
+                jobs_by_id = {j.id: j for j in jobs}
                 terminal = True
                 for jid in ids:
-                    job = (
-                        db_local.query(GenerationJob)
-                        .filter(GenerationJob.id == jid, GenerationJob.user_id == stream_user_id)
-                        .first()
-                    )
+                    job = jobs_by_id.get(jid)
                     if not job:
                         continue
                     if job.status not in ("COMPLETED", "FAILED"):
@@ -263,7 +279,8 @@ async def stream_jobs(job_ids: str, stream_token: str):
                     break
             finally:
                 db_local.close()
-            await asyncio.sleep(1)
+            await asyncio.sleep(sleep_s)
+            sleep_s = min(sleep_s * 1.5, 5.0)
         yield {"event": "done", "data": "{}"}
 
     return EventSourceResponse(event_generator())

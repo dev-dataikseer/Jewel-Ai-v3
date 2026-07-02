@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routers import assets, auth, jobs, misc, models, prompts, providers, public, users
-from app.config import get_settings, validate_production_settings
+from app.config import get_settings, validate_production_settings, assert_production_settings
 from app.database import Base, SessionLocal, engine
 import app.models  # noqa: F401 — register all tables before create_all
 from app.logging_config import setup_logging
@@ -25,10 +25,11 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    from app.pipeline.db_migrate import migrate_layer_columns, migrate_job_indexes
+    from app.pipeline.db_migrate import migrate_layer_columns, migrate_job_indexes, migrate_tenancy_columns
 
     migrate_layer_columns(engine)
     migrate_job_indexes(engine)
+    migrate_tenancy_columns(engine)
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects
@@ -39,6 +40,8 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     circuit_breaker.init_circuit_breaker()
+    if settings.is_production:
+        assert_production_settings()
     for warning in validate_production_settings():
         import logging
 

@@ -1,22 +1,21 @@
-"""Initial schema
+"""Initial schema placeholder — tables created via SQLAlchemy metadata at startup.
 
-Revision ID: 001
+Revision ID: 001_initial
+Revises:
+Create Date: 2026-07-02
+
 """
-from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from typing import Sequence, Union
 
-revision = "001"
-down_revision = None
-branch_labels = None
-depends_on = None
+revision: str = "001_initial"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Tables created via Base.metadata.create_all on startup for dev;
-    # this migration documents the baseline schema for production Alembic workflows.
-    pass
+  pass
 
 
 def downgrade() -> None:
-    pass
+  pass

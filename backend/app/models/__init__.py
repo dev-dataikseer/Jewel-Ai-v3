@@ -252,6 +252,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
     workflow: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -296,7 +297,13 @@ class Asset(Base):
 
 class GenerationJob(Base):
     __tablename__ = "generation_jobs"
-    __table_args__ = (Index("ix_generation_jobs_status", "status"),)
+    __table_args__ = (
+        Index("ix_generation_jobs_status", "status"),
+        Index("ix_jobs_user_id", "user_id"),
+        Index("ix_jobs_user_created", "user_id", "created_at"),
+        Index("ix_jobs_user_status", "user_id", "status"),
+        Index("ix_jobs_batch_id", "batch_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
@@ -352,10 +359,12 @@ class GenerationJob(Base):
 
 class Favorite(Base):
     __tablename__ = "favorites"
+    __table_args__ = (UniqueConstraint("user_id", "job_id", name="uq_favorite_user_job"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("generation_jobs.id", ondelete="CASCADE"), unique=True, nullable=False
+        String(36), ForeignKey("generation_jobs.id", ondelete="CASCADE"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
