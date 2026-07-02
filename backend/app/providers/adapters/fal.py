@@ -10,8 +10,8 @@ from app.logging_config import get_logger
 from app.models import ModelDefinition
 from app.providers.fal_response import extract_image_urls
 from app.providers.fal_upload import (
-    discover_public_app_base,
     fetch_and_upload_to_fal,
+    upload_bytes_to_fal,
     upload_file_to_fal,
 )
 from app.providers.types import GenerationRequest, GenerationResult, ModelCapabilities, ProviderStatus
@@ -69,9 +69,17 @@ def _is_fal_cdn_url(url: str) -> bool:
 
 
 async def _ensure_fal_url(url: str, api_key: str) -> str:
-    """Resolve job input images to fal CDN URLs (local file, public web fetch, or passthrough)."""
+    """Resolve job input images to fal CDN URLs (object storage, local file, or public fetch)."""
     if _is_fal_cdn_url(url):
         return url
+
+    blob = storage.read_bytes_by_url(url)
+    if blob is not None:
+        ext = Path(url).suffix.lower()
+        content_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}.get(
+            ext, "image/jpeg"
+        )
+        return await asyncio.to_thread(upload_bytes_to_fal, blob, content_type, api_key)
 
     if url.startswith("http://") or url.startswith("https://"):
         local = _resolve_local_path(url)
@@ -83,9 +91,8 @@ async def _ensure_fal_url(url: str, api_key: str) -> str:
     if local:
         return await asyncio.to_thread(_upload_to_fal, local, api_key)
 
-    public_base = discover_public_app_base()
-    if public_base and url.startswith("/uploads/"):
-        public_url = f"{public_base}{url}"
+    public_url = storage.public_url(url)
+    if public_url != url:
         try:
             return await fetch_and_upload_to_fal(public_url, api_key)
         except Exception as exc:

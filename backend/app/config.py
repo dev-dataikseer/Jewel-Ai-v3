@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def apply_platform_urls(self) -> "Settings":
         """Use Railway public domain when localhost placeholders are still set."""
+        # Railway Bucket credentials (map AWS_* → R2_* used by storage layer)
+        if not self.r2_endpoint_url and os.environ.get("AWS_ENDPOINT_URL"):
+            self.r2_endpoint_url = os.environ["AWS_ENDPOINT_URL"]
+        if not self.r2_access_key_id and os.environ.get("AWS_ACCESS_KEY_ID"):
+            self.r2_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
+        if not self.r2_secret_access_key and os.environ.get("AWS_SECRET_ACCESS_KEY"):
+            self.r2_secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+        if not self.r2_bucket_name and os.environ.get("AWS_S3_BUCKET_NAME"):
+            self.r2_bucket_name = os.environ["AWS_S3_BUCKET_NAME"]
+
         domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL", "").replace("https://", "")
         if domain:
             if "localhost" in self.api_public_url or "127.0.0.1" in self.api_public_url:

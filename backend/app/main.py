@@ -8,13 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import assets, auth, jobs, misc, models, prompts, providers, public, users
+from app.api.routers import assets, auth, jobs, misc, models, prompts, providers, public, storage_files, users
 from app.config import get_settings, validate_production_settings, assert_production_settings
 from app.database import Base, SessionLocal, engine
 import app.models  # noqa: F401 — register all tables before create_all
 from app.logging_config import setup_logging
 from app.providers import circuit_breaker
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.storage.local import storage
 from app.tasks.generate import sweep_stuck_jobs
 from seeds.run_seeds import run_all_seeds
 
@@ -60,9 +61,12 @@ app.add_middleware(
 )
 app.add_middleware(RateLimitMiddleware)
 
-uploads_path = Path(settings.uploads_dir)
-uploads_path.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+if storage.uses_object_storage:
+    app.include_router(storage_files.router)
+else:
+    uploads_path = Path(settings.uploads_dir)
+    uploads_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
