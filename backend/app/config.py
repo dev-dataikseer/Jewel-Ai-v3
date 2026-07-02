@@ -20,6 +20,25 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/1"
     celery_worker_concurrency: int = 3
 
+    @model_validator(mode="after")
+    def derive_celery_urls_from_redis(self) -> "Settings":
+        """Derive Celery broker/backend URLs from REDIS_URL when not explicitly set.
+
+        On Railway, REDIS_URL is injected automatically by the Redis service.
+        If celery_broker_url or celery_result_backend still point at localhost
+        but redis_url has been overridden, propagate redis_url so the worker
+        can reach the real Redis instance without requiring separate env vars.
+        """
+        redis_base = self.redis_url.rstrip("/").rsplit("/", 1)[0]  # strip db index
+
+        if "localhost" in self.celery_broker_url and "localhost" not in self.redis_url:
+            self.celery_broker_url = f"{redis_base}/0"
+
+        if "localhost" in self.celery_result_backend and "localhost" not in self.redis_url:
+            self.celery_result_backend = f"{redis_base}/1"
+
+        return self
+
     jwt_secret: str = "dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
