@@ -26,6 +26,7 @@ class ModelOut(BaseModel):
     is_active: bool = True
     sort_order: int = 100
     cost_per_call: Optional[float] = None
+    model_info: Optional[dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 
@@ -55,6 +56,7 @@ def _model_out(m: ModelDefinition) -> ModelOut:
         is_active=m.is_active,
         sort_order=m.sort_order,
         cost_per_call=m.cost_per_call,
+        model_info=(m.config or {}).get("model_info"),
     )
 
 

@@ -1,5 +1,7 @@
 """fal.ai catalog: text + image in → image out (no mask-required inpainting)."""
 
+from seeds.model_catalog_info import MODEL_INFO
+
 IMAGE_SIZE_ENUM = [
     "square_hd",
     "square",
@@ -31,6 +33,72 @@ NANO_BANANA_EDIT_PARAMS = {
             "enum": ["jpeg", "png", "webp"],
             "default": "png",
         },
+        "safety_tolerance": {
+            "type": "string",
+            "title": "Safety tolerance",
+            "enum": ["1", "2", "3", "4", "5", "6"],
+            "default": "4",
+        },
+        "enable_web_search": {"type": "boolean", "title": "Web search", "default": False},
+        "system_prompt": {"type": "string", "title": "System prompt"},
+        "limit_generations": {"type": "boolean", "title": "Limit generations", "default": False},
+        "seed": {"type": "integer", "title": "Seed"},
+    },
+}
+
+NANO_BANANA_2_PARAMS = {
+    "type": "object",
+    "properties": {
+        "resolution": {
+            "type": "string",
+            "title": "Resolution",
+            "enum": ["0.5K", "1K", "2K", "4K"],
+            "default": "1K",
+        },
+        "aspect_ratio": {
+            "type": "string",
+            "title": "Aspect ratio",
+            "enum": [
+                "auto",
+                "21:9",
+                "16:9",
+                "3:2",
+                "4:3",
+                "5:4",
+                "1:1",
+                "4:5",
+                "3:4",
+                "2:3",
+                "9:16",
+                "4:1",
+                "1:4",
+                "8:1",
+                "1:8",
+            ],
+            "default": "auto",
+        },
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
+        "output_format": {
+            "type": "string",
+            "title": "Output format",
+            "enum": ["jpeg", "png", "webp"],
+            "default": "png",
+        },
+        "safety_tolerance": {
+            "type": "string",
+            "title": "Safety tolerance",
+            "enum": ["1", "2", "3", "4", "5", "6"],
+            "default": "4",
+        },
+        "enable_web_search": {"type": "boolean", "title": "Web search", "default": False},
+        "system_prompt": {"type": "string", "title": "System prompt"},
+        "limit_generations": {"type": "boolean", "title": "Limit generations", "default": True},
+        "thinking_level": {
+            "type": "string",
+            "title": "Thinking level",
+            "enum": ["minimal", "high"],
+        },
+        "seed": {"type": "integer", "title": "Seed"},
     },
 }
 
@@ -76,7 +144,44 @@ GPT_IMAGE_2_PARAMS = {
 
 GPT_EDIT_PARAMS = GPT_IMAGE_2_PARAMS
 
-FLUX_EDIT_PARAMS = {
+GPT_IMAGE_1_5_PARAMS = {
+    "type": "object",
+    "properties": {
+        "image_size": {
+            "type": "string",
+            "title": "Image size",
+            "enum": ["auto", "1024x1024", "1536x1024", "1024x1536"],
+            "default": "auto",
+        },
+        "background": {
+            "type": "string",
+            "title": "Background",
+            "enum": ["auto", "transparent", "opaque"],
+            "default": "auto",
+        },
+        "quality": {
+            "type": "string",
+            "title": "Quality",
+            "enum": ["low", "medium", "high"],
+            "default": "high",
+        },
+        "input_fidelity": {
+            "type": "string",
+            "title": "Input fidelity",
+            "enum": ["low", "high"],
+            "default": "high",
+        },
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
+        "output_format": {
+            "type": "string",
+            "title": "Output format",
+            "enum": ["jpeg", "png", "webp"],
+            "default": "png",
+        },
+    },
+}
+
+FLUX_2_PRO_PARAMS = {
     "type": "object",
     "properties": {
         "image_size": {
@@ -102,6 +207,33 @@ FLUX_EDIT_PARAMS = {
         "seed": {"type": "integer", "title": "Seed"},
     },
 }
+
+FLUX_2_DEV_EDIT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "image_size": {
+            "type": "string",
+            "title": "Image size",
+            "enum": ["auto"] + IMAGE_SIZE_ENUM,
+            "default": "auto",
+        },
+        "guidance_scale": {"type": "number", "title": "Guidance scale", "minimum": 0, "maximum": 20, "default": 2.5},
+        "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 4, "maximum": 50, "default": 28},
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
+        "acceleration": {
+            "type": "string",
+            "title": "Acceleration",
+            "enum": ["none", "regular", "high"],
+            "default": "regular",
+        },
+        "enable_prompt_expansion": {"type": "boolean", "title": "Prompt expansion", "default": False},
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+        "output_format": {"type": "string", "title": "Output format", "enum": ["jpeg", "png", "webp"], "default": "png"},
+        "seed": {"type": "integer", "title": "Seed"},
+    },
+}
+
+FLUX_EDIT_PARAMS = FLUX_2_PRO_PARAMS
 
 FLUX_KONTEXT_PARAMS = {
     "type": "object",
@@ -235,7 +367,7 @@ SEEDREAM_EDIT_PARAMS = {
         "image_size": {
             "type": "string",
             "title": "Image size",
-            "enum": ["auto_2K", "auto_4K"],
+            "enum": ["auto_2K", "auto_3K", "auto_4K"],
             "default": "auto_2K",
         },
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 6, "default": 1},
@@ -265,7 +397,7 @@ FASHN_TRYON_PARAMS = {
 
 
 def _enrich_model_spec(spec: dict) -> dict:
-    """Apply default output_paths and param_aliases from input_schema."""
+    """Apply default output_paths, param_aliases, and catalog metadata."""
     config = dict(spec.get("config") or {})
     props = (spec.get("input_schema") or {}).get("properties") or {}
     aliases = dict(config.get("param_aliases") or {})
@@ -276,6 +408,9 @@ def _enrich_model_spec(spec: dict) -> dict:
     config.setdefault("output_paths", ["images", "image"])
     if aliases:
         config["param_aliases"] = aliases
+    info = MODEL_INFO.get(spec["endpoint_id"])
+    if info:
+        config["model_info"] = info
     return {**spec, "config": config}
 
 
@@ -312,11 +447,19 @@ FLUX_2_EDIT_PARAMS = {
 FLUX_DEV_I2I_PARAMS = {
     "type": "object",
     "properties": {
-        "strength": {"type": "number", "title": "Strength", "minimum": 0, "maximum": 1, "default": 0.35},
+        "strength": {"type": "number", "title": "Strength", "minimum": 0.01, "maximum": 1, "default": 0.95},
         "image_size": {"type": "string", "title": "Image size", "enum": IMAGE_SIZE_ENUM, "default": "square_hd"},
         "guidance_scale": {"type": "number", "title": "Guidance scale", "minimum": 1, "maximum": 20, "default": 3.5},
-        "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 1, "maximum": 50, "default": 28},
+        "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 10, "maximum": 50, "default": 40},
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
+        "acceleration": {
+            "type": "string",
+            "title": "Acceleration",
+            "enum": ["none", "regular", "high"],
+            "default": "none",
+        },
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+        "output_format": {"type": "string", "title": "Output format", "enum": ["jpeg", "png"], "default": "jpeg"},
         "seed": {"type": "integer", "title": "Seed"},
     },
 }
@@ -330,14 +473,29 @@ BRIA_FIBO_EDIT_PARAMS = {
     },
 }
 
-GROK_QUALITY_PARAMS = {
+GROK_EDIT_PARAMS = {
     "type": "object",
     "properties": {
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
         "aspect_ratio": {
             "type": "string",
             "title": "Aspect ratio",
-            "enum": ["auto", "1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16"],
+            "enum": [
+                "auto",
+                "2:1",
+                "20:9",
+                "19.5:9",
+                "16:9",
+                "4:3",
+                "3:2",
+                "1:1",
+                "2:3",
+                "3:4",
+                "9:16",
+                "9:19.5",
+                "9:20",
+                "1:2",
+            ],
             "default": "auto",
         },
         "resolution": {
@@ -355,16 +513,37 @@ GROK_QUALITY_PARAMS = {
     },
 }
 
-REVE_EDIT_PARAMS = {
+GLM_IMAGE_PARAMS = {
     "type": "object",
     "properties": {
+        "image_size": {"type": "string", "title": "Image size", "enum": IMAGE_SIZE_ENUM, "default": "square_hd"},
+        "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 10, "maximum": 100, "default": 30},
+        "guidance_scale": {"type": "number", "title": "Guidance scale", "minimum": 1, "maximum": 10, "default": 1.5},
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
-        "output_format": {
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+        "output_format": {"type": "string", "title": "Output format", "enum": ["jpeg", "png"], "default": "jpeg"},
+        "enable_prompt_expansion": {"type": "boolean", "title": "Prompt expansion", "default": False},
+        "seed": {"type": "integer", "title": "Seed"},
+    },
+}
+
+FIRERED_EDIT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "image_size": {"type": "string", "title": "Image size", "enum": ["auto"] + IMAGE_SIZE_ENUM, "default": "auto"},
+        "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 2, "maximum": 50, "default": 30},
+        "guidance_scale": {"type": "number", "title": "Guidance scale", "minimum": 1, "maximum": 10, "default": 4},
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
+        "negative_prompt": {"type": "string", "title": "Negative prompt", "default": ""},
+        "acceleration": {
             "type": "string",
-            "title": "Output format",
-            "enum": ["png", "jpeg", "webp"],
-            "default": "png",
+            "title": "Acceleration",
+            "enum": ["none", "regular", "high"],
+            "default": "regular",
         },
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+        "output_format": {"type": "string", "title": "Output format", "enum": ["jpeg", "png"], "default": "png"},
+        "seed": {"type": "integer", "title": "Seed"},
     },
 }
 
@@ -384,6 +563,7 @@ FLUX_2_MAX_PARAMS = {
             "default": "2",
         },
         "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
         "output_format": {"type": "string", "title": "Output format", "enum": ["jpeg", "png"], "default": "jpeg"},
         "seed": {"type": "integer", "title": "Seed"},
     },
@@ -492,8 +672,8 @@ FLUX_VTO_PARAMS = {
 
 
 WORKFLOW_DEFAULTS: dict[str, str] = {
-    "CATALOG_IMAGE": "openai/gpt-image-2/edit",
-    "BULK_GENERATION": "openai/gpt-image-2/edit",
+    "CATALOG_IMAGE": "fal-ai/nano-banana-pro/edit",
+    "BULK_GENERATION": "fal-ai/nano-banana-pro/edit",
     "JEWELRY_ON_MODEL": "fal-ai/fashn/tryon/v1.6",
     "CUSTOMER_TRY_ON": "fal-ai/image-apps-v2/virtual-try-on",
     "GEMSTONE_COLOR_CHANGE": "fal-ai/flux-2-max/edit",
@@ -503,29 +683,24 @@ WORKFLOW_DEFAULTS: dict[str, str] = {
     "CUSTOM_PROMPT": "openai/gpt-image-2/edit",
 }
 
-_RAW_FAL_MODELS: list[dict] = [
-    {
-        "endpoint_id": "openai/gpt-image-2/edit",
-        "display_name": "GPT Image 2 Edit",
-        "category": "image_to_image",
-        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": GPT_IMAGE_2_PARAMS,
-        "default_params": {"image_size": "auto", "quality": "high", "num_images": 1, "output_format": "png"},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_urls"},
-        "sort_order": 1,
-        "cost_per_call": 0.08,
-    },
+_IMAGE_EDIT_MODELS: list[dict] = [
     {
         "endpoint_id": "fal-ai/nano-banana-pro/edit",
         "display_name": "Nano Banana Pro Edit",
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True, "material_accuracy": True},
         "input_schema": NANO_BANANA_EDIT_PARAMS,
-        "default_params": {"resolution": "2K", "aspect_ratio": "auto", "num_images": 1, "output_format": "png"},
+        "default_params": {
+            "resolution": "2K",
+            "aspect_ratio": "auto",
+            "num_images": 1,
+            "output_format": "png",
+            "safety_tolerance": "4",
+            "enable_web_search": False,
+        },
         "workflow_allowlist": None,
-        "config": {"image_field": "image_urls"},
-        "sort_order": 2,
+        "config": {"image_field": "image_urls", "max_reference_images": 14},
+        "sort_order": 1,
         "cost_per_call": 0.15,
     },
     {
@@ -538,41 +713,43 @@ _RAW_FAL_MODELS: list[dict] = [
             "image_size": "auto",
             "safety_tolerance": "2",
             "enable_safety_checker": True,
+            "num_images": 1,
             "output_format": "jpeg",
         },
         "workflow_allowlist": ["GEMSTONE_COLOR_CHANGE", "BACKGROUND_REPLACEMENT", "LUXURY_ENHANCEMENT"],
         "config": {"image_field": "image_urls", "max_reference_images": 10},
-        "sort_order": 3,
+        "sort_order": 2,
         "cost_per_call": 0.07,
+    },
+    {
+        "endpoint_id": "openai/gpt-image-2/edit",
+        "display_name": "GPT Image 2 Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": GPT_IMAGE_2_PARAMS,
+        "default_params": {"image_size": "auto", "quality": "high", "num_images": 1, "output_format": "png"},
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls"},
+        "sort_order": 3,
+        "cost_per_call": 0.08,
     },
     {
         "endpoint_id": "fal-ai/flux-2-pro/edit",
         "display_name": "FLUX 2 Pro Edit",
         "category": "image_to_image",
-        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": FLUX_2_EDIT_PARAMS,
-        "default_params": {"image_size": "auto", "guidance_scale": 3.5, "num_images": 1, "output_format": "png"},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_urls", "max_reference_images": 10},
-        "sort_order": 4,
-        "cost_per_call": 0.05,
-    },
-    {
-        "endpoint_id": "fal-ai/bytedance/seedream/v5/lite/edit",
-        "display_name": "Seedream 5.0 Lite Edit",
-        "category": "image_to_image",
-        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": SEEDREAM_EDIT_PARAMS,
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True, "hex_matching": True},
+        "input_schema": FLUX_2_PRO_PARAMS,
         "default_params": {
-            "image_size": "auto_2K",
-            "num_images": 1,
-            "max_images": 1,
+            "image_size": "auto",
+            "safety_tolerance": "2",
             "enable_safety_checker": True,
+            "num_images": 1,
+            "output_format": "jpeg",
         },
         "workflow_allowlist": None,
-        "config": {"image_field": "image_urls", "max_reference_images": 10},
-        "sort_order": 5,
-        "cost_per_call": 0.035,
+        "config": {"image_field": "image_urls", "max_reference_images": 9},
+        "sort_order": 4,
+        "cost_per_call": 0.03,
     },
     {
         "endpoint_id": "fal-ai/flux-pro/kontext",
@@ -589,100 +766,172 @@ _RAW_FAL_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_url"},
-        "sort_order": 6,
+        "sort_order": 5,
         "cost_per_call": 0.04,
     },
     {
-        "endpoint_id": "ideogram/v4/image-to-image",
-        "display_name": "Ideogram V4 I2I",
+        "endpoint_id": "fal-ai/nano-banana-2/edit",
+        "display_name": "Nano Banana 2 Edit",
         "category": "image_to_image",
-        "capabilities": IMAGE_EDIT_CAPS,
-        "input_schema": IDEOGRAM_V4_I2I_PARAMS,
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": NANO_BANANA_2_PARAMS,
         "default_params": {
-            "strength": 0.8,
-            "style_type": "AUTO",
-            "rendering_speed": "BALANCED",
-            "image_size": "square_hd",
+            "resolution": "1K",
+            "aspect_ratio": "auto",
+            "num_images": 1,
+            "output_format": "png",
+            "safety_tolerance": "4",
+            "limit_generations": True,
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 14},
+        "sort_order": 6,
+        "cost_per_call": 0.08,
+    },
+    {
+        "endpoint_id": "fal-ai/bytedance/seedream/v5/lite/edit",
+        "display_name": "Seedream 5.0 Lite Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": SEEDREAM_EDIT_PARAMS,
+        "default_params": {
+            "image_size": "auto_2K",
+            "num_images": 1,
+            "max_images": 1,
+            "enable_safety_checker": True,
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 10},
+        "sort_order": 7,
+        "cost_per_call": 0.035,
+    },
+    {
+        "endpoint_id": "fal-ai/bytedance/seedream/v4.5/edit",
+        "display_name": "Seedream 4.5 Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": SEEDREAM_EDIT_PARAMS,
+        "default_params": {
+            "image_size": "auto_2K",
+            "num_images": 1,
+            "max_images": 1,
+            "enable_safety_checker": True,
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 10},
+        "sort_order": 8,
+        "cost_per_call": 0.04,
+    },
+    {
+        "endpoint_id": "fal-ai/gpt-image-1.5/edit",
+        "display_name": "GPT Image 1.5 Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": GPT_IMAGE_1_5_PARAMS,
+        "default_params": {
+            "image_size": "auto",
+            "quality": "high",
+            "input_fidelity": "high",
+            "background": "auto",
             "num_images": 1,
             "output_format": "png",
         },
         "workflow_allowlist": None,
-        "config": {"image_field": "image_url"},
-        "sort_order": 7,
-        "cost_per_call": 0.06,
+        "config": {"image_field": "image_urls"},
+        "sort_order": 9,
+        "cost_per_call": 0.08,
     },
     {
-        "endpoint_id": "xai/grok-imagine-image/quality/edit",
-        "display_name": "Grok Imagine Pro Edit",
+        "endpoint_id": "fal-ai/flux-2/edit",
+        "display_name": "FLUX 2 Dev Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True, "hex_matching": True},
+        "input_schema": FLUX_2_DEV_EDIT_PARAMS,
+        "default_params": {
+            "image_size": "auto",
+            "guidance_scale": 2.5,
+            "num_inference_steps": 28,
+            "acceleration": "regular",
+            "num_images": 1,
+            "output_format": "png",
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 4},
+        "sort_order": 10,
+        "cost_per_call": 0.012,
+    },
+    {
+        "endpoint_id": "fal-ai/glm-image/image-to-image",
+        "display_name": "GLM-Image I2I",
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": GROK_QUALITY_PARAMS,
-        "default_params": {"num_images": 1, "aspect_ratio": "auto", "resolution": "1k", "output_format": "jpeg"},
+        "input_schema": GLM_IMAGE_PARAMS,
+        "default_params": {
+            "image_size": "square_hd",
+            "num_inference_steps": 30,
+            "guidance_scale": 1.5,
+            "num_images": 1,
+            "output_format": "jpeg",
+        },
         "workflow_allowlist": None,
-        "config": {"image_field": "image_urls", "max_reference_images": 3},
-        "sort_order": 8,
+        "config": {"image_field": "image_urls", "max_reference_images": 4},
+        "sort_order": 11,
         "cost_per_call": 0.05,
     },
     {
-        "endpoint_id": "bria/fibo-edit/edit",
-        "display_name": "Bria FIBO Edit",
-        "category": "image_to_image",
-        "capabilities": IMAGE_EDIT_CAPS,
-        "input_schema": BRIA_FIBO_EDIT_PARAMS,
-        "default_params": {"num_images": 1},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_url", "prompt_field": "instruction", "max_prompt_chars": 4000},
-        "sort_order": 9,
-        "cost_per_call": 0.06,
-    },
-    {
-        "endpoint_id": "fal-ai/flux/dev/redux",
-        "display_name": "FLUX Dev Redux",
-        "category": "image_to_image",
-        "capabilities": {**IMAGE_EDIT_CAPS, "person_generation": False},
-        "input_schema": FLUX_REDUX_PARAMS,
-        "default_params": {"image_size": "landscape_4_3", "guidance_scale": 3.5, "num_images": 1},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_url"},
-        "sort_order": 10,
-        "cost_per_call": 0.025,
-    },
-    {
-        "endpoint_id": "fal-ai/reve/fast/edit",
-        "display_name": "Reve Fast Edit",
-        "category": "image_to_image",
-        "capabilities": IMAGE_EDIT_CAPS,
-        "input_schema": REVE_EDIT_PARAMS,
-        "default_params": {"num_images": 1, "output_format": "png"},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_url"},
-        "sort_order": 11,
-        "cost_per_call": 0.04,
-    },
-    {
-        "endpoint_id": "fal-ai/recraft/v3/image-to-image",
-        "display_name": "Recraft V3 I2I",
-        "category": "image_to_image",
-        "capabilities": {**IMAGE_EDIT_CAPS, "person_generation": False},
-        "input_schema": RECRAFT_I2I_PARAMS,
-        "default_params": {"style": "realistic_image", "num_images": 1},
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_url", "max_prompt_chars": 1000},
-        "sort_order": 12,
-        "cost_per_call": 0.06,
-    },
-    {
-        "endpoint_id": "fal-ai/flux-2/klein/9b/base/edit",
-        "display_name": "FLUX 2 Klein 9B Edit",
+        "endpoint_id": "fal-ai/firered-image-edit-v1.1",
+        "display_name": "FireRed Image Edit v1.1",
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": FLUX_2_EDIT_PARAMS,
-        "default_params": {"image_size": "auto", "guidance_scale": 3.5, "num_images": 1, "output_format": "png"},
+        "input_schema": FIRERED_EDIT_PARAMS,
+        "default_params": {
+            "image_size": "auto",
+            "num_inference_steps": 30,
+            "guidance_scale": 4,
+            "acceleration": "regular",
+            "num_images": 1,
+            "output_format": "png",
+        },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls"},
-        "sort_order": 13,
-        "cost_per_call": 0.03,
+        "sort_order": 12,
+        "cost_per_call": 0.0325,
     },
+    {
+        "endpoint_id": "xai/grok-imagine-image/edit",
+        "display_name": "Grok Imagine Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": GROK_EDIT_PARAMS,
+        "default_params": {"num_images": 1, "aspect_ratio": "auto", "resolution": "1k", "output_format": "jpeg"},
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 3},
+        "sort_order": 13,
+        "cost_per_call": 0.022,
+    },
+    {
+        "endpoint_id": "fal-ai/flux/dev/image-to-image",
+        "display_name": "FLUX Dev I2I",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "person_generation": False},
+        "input_schema": FLUX_DEV_I2I_PARAMS,
+        "default_params": {
+            "strength": 0.95,
+            "image_size": "square_hd",
+            "guidance_scale": 3.5,
+            "num_inference_steps": 40,
+            "acceleration": "none",
+            "num_images": 1,
+            "output_format": "jpeg",
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_url"},
+        "sort_order": 14,
+        "cost_per_call": 0.025,
+    },
+]
+
+_VTON_MODELS: list[dict] = [
     {
         "endpoint_id": "decart/lucy2-vton/realtime",
         "display_name": "Lucy 2.1 Realtime VTON",
@@ -826,5 +1075,7 @@ _RAW_FAL_MODELS: list[dict] = [
         "cost_per_call": 0.05,
     },
 ]
+
+_RAW_FAL_MODELS: list[dict] = _IMAGE_EDIT_MODELS + _VTON_MODELS
 
 FAL_MODELS = [_enrich_model_spec(spec) for spec in _RAW_FAL_MODELS]

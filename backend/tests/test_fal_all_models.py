@@ -1,4 +1,4 @@
-"""Per-model smoke tests for fal adapter argument building (all 20 catalog models)."""
+"""Per-model smoke tests for fal adapter argument building (all 21 catalog models)."""
 
 import pytest
 
@@ -22,7 +22,7 @@ def _model_for(endpoint_id: str) -> ModelDefinition:
 
 
 def test_catalog_has_nineteen_models():
-    assert len(FAL_MODELS) == 20
+    assert len(FAL_MODELS) == 21
 
 
 @pytest.mark.parametrize("spec", FAL_MODELS, ids=[m["endpoint_id"] for m in FAL_MODELS])
@@ -92,8 +92,8 @@ def test_gpt_edit_uses_image_urls():
     assert "image_url" not in args
 
 
-def test_ideogram_v4_uses_image_url():
-    model = _model_for("ideogram/v4/image-to-image")
+def test_flux_dev_i2i_uses_image_url():
+    model = _model_for("fal-ai/flux/dev/image-to-image")
     req = GenerationRequest(prompt="luxury jewelry", image_urls=["/ring.jpg"], workflow="CATALOG_IMAGE")
     args = _build_arguments(req, model, model.endpoint_id, ["https://fal.media/ring.jpg"])
     assert args["image_url"] == "https://fal.media/ring.jpg"

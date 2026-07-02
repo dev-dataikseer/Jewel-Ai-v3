@@ -131,9 +131,19 @@ export function ModelSelector({
           ))}
         </select>
         {current && (
-          <p className="mt-1 text-[10px] text-slate-400 font-mono truncate" title={current.endpoint_id}>
-            {current.endpoint_id}
-          </p>
+          <>
+            <p className="mt-1 text-[10px] text-slate-400 font-mono truncate" title={current.endpoint_id}>
+              {current.endpoint_id}
+            </p>
+            {current.model_info?.pricing && (
+              <p className="mt-0.5 text-[10px] text-slate-500">{current.model_info.pricing}</p>
+            )}
+            {current.model_info?.key_strengths && (
+              <p className="mt-0.5 text-[10px] text-slate-500 line-clamp-2" title={current.model_info.key_strengths}>
+                {current.model_info.key_strengths}
+              </p>
+            )}
+          </>
         )}
         {missingImage && (
           <p className="mt-1 text-[10px] text-amber-600">Upload a product image to generate.</p>

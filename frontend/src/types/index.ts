@@ -13,6 +13,18 @@ export type JsonSchema = {
   properties?: Record<string, JsonSchemaProperty>;
 };
 
+export type ModelInfo = {
+  rank?: number;
+  model_category?: string;
+  architecture?: string;
+  key_strengths?: string;
+  tags?: string;
+  pricing?: string;
+  max_resolution?: string;
+  multi_image_support?: string;
+  aspect_ratios?: string;
+};
+
 export type ModelDefinition = {
   endpoint_id: string;
   display_name: string;
@@ -25,6 +37,7 @@ export type ModelDefinition = {
   is_active: boolean;
   sort_order: number;
   cost_per_call?: number | null;
+  model_info?: ModelInfo | null;
 };
 
 export type Job = {

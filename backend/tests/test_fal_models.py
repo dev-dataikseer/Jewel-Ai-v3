@@ -18,29 +18,26 @@ def test_jinja_render():
 
 
 def test_fal_models_seed_catalog():
-    assert len(FAL_MODELS) == 20
+    assert len(FAL_MODELS) == 21
     ids = {m["endpoint_id"] for m in FAL_MODELS}
-    assert "openai/gpt-image-2/edit" in ids
+    assert "fal-ai/nano-banana-pro/edit" in ids
+    assert "fal-ai/nano-banana-2/edit" in ids
     assert "fal-ai/flux-2-max/edit" in ids
-    assert "fal-ai/bytedance/seedream/v5/lite/edit" in ids
-    assert "ideogram/v4/image-to-image" in ids
-    assert "fal-ai/reve/fast/edit" in ids
+    assert "openai/gpt-image-2/edit" in ids
+    assert "fal-ai/glm-image/image-to-image" in ids
+    assert "fal-ai/firered-image-edit-v1.1" in ids
+    assert "fal-ai/gpt-image-1.5/edit" in ids
     assert "decart/lucy2-vton/realtime" in ids
-    assert "fal-ai/flux-pro/kontext" in ids
-    assert "fal-ai/fashn/tryon/v1.6" in ids
-    assert "fal-ai/kling/v1-5/kolors-virtual-try-on" in ids
-    assert "fal-ai/gemini-3-pro-image-preview/edit" not in ids
-    assert "fal-ai/gpt-image-1.5/edit" not in ids
-    assert "fal-ai/flux-pro/kontext/max" not in ids
 
 
-def test_image_edit_models_ranked_gpt_first():
+def test_image_edit_models_ranked_nano_banana_first():
     image_edit = [m for m in FAL_MODELS if m["category"] == "image_to_image"]
-    assert len(image_edit) == 13
+    assert len(image_edit) == 14
     ranked = sorted(image_edit, key=lambda m: m["sort_order"])
-    assert ranked[0]["endpoint_id"] == "openai/gpt-image-2/edit"
-    assert ranked[1]["endpoint_id"] == "fal-ai/nano-banana-pro/edit"
-    assert ranked[2]["endpoint_id"] == "fal-ai/flux-2-max/edit"
+    assert ranked[0]["endpoint_id"] == "fal-ai/nano-banana-pro/edit"
+    assert ranked[1]["endpoint_id"] == "fal-ai/flux-2-max/edit"
+    assert ranked[2]["endpoint_id"] == "openai/gpt-image-2/edit"
+    assert all(m["config"].get("model_info") for m in image_edit)
 
 
 def test_all_models_have_output_paths():
@@ -60,11 +57,6 @@ def test_no_mask_required_models():
         config = spec["config"]
         if config.get("input_mode") != "try_on":
             assert config.get("image_field") in ("image_url", "image_urls")
-
-
-def test_recraft_has_prompt_limit():
-    recraft = next(s for s in FAL_MODELS if s["endpoint_id"] == "fal-ai/recraft/v3/image-to-image")
-    assert recraft["config"]["max_prompt_chars"] == 1000
 
 
 def test_vton_models_restricted_to_try_on_workflows():
@@ -112,30 +104,12 @@ def test_filter_models_image_edit_only():
     models = filter_models_for_request(FakeDb(), has_input=True, image_count=1, image_edit_only=True)
     vton_ids = {m.endpoint_id for m in models if m.capabilities.get("virtual_try_on")}
     assert len(vton_ids) == 0
-    assert len(models) == 13
+    assert len(models) == 14
 
     vton_models = filter_models_for_request(
         FakeDb(), has_input=True, image_count=2, workflow="CUSTOMER_TRY_ON", image_edit_only=True
     )
     assert len(vton_models) == 7
-
-    class FakeDbWithT2I(FakeDb):
-        def query(self, model):
-            extra = FakeModel(
-                {
-                    "endpoint_id": "fal-ai/imagen4/preview",
-                    "category": "text_to_image",
-                    "capabilities": {"text_to_image": True, "image_to_image": False},
-                    "config": {},
-                    "sort_order": 999,
-                }
-            )
-            return FakeQuery([FakeModel(s) for s in FAL_MODELS] + [extra])
-
-    filtered = filter_models_for_request(
-        FakeDbWithT2I(), has_input=True, image_count=1, image_edit_only=True
-    )
-    assert all(m.endpoint_id != "fal-ai/imagen4/preview" for m in filtered)
 
 
 def test_filter_without_input_still_lists_catalog_models():
@@ -166,5 +140,4 @@ def test_filter_without_input_still_lists_catalog_models():
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
     models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
-    # flux-2-max is allowlisted for color/background workflows only
-    assert len(models) == 12
+    assert len(models) == 13

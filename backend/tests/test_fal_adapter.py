@@ -28,8 +28,8 @@ def _model_for(endpoint_id: str) -> ModelDefinition:
         ("openai/gpt-image-2/edit", "image_urls"),
         ("fal-ai/flux-2-pro/edit", "image_urls"),
         ("fal-ai/flux-pro/kontext", "image_url"),
-        ("ideogram/v4/image-to-image", "image_url"),
         ("fal-ai/bytedance/seedream/v5/lite/edit", "image_urls"),
+        ("fal-ai/flux/dev/image-to-image", "image_url"),
     ],
 )
 def test_image_field_per_model(endpoint_id: str, expected_field: str):
@@ -48,14 +48,6 @@ def test_image_field_requires_config():
     with pytest.raises(ValueError, match="No image_field config"):
         _image_input_field(None, "fal-ai/unknown/model")
 
-
-def test_bria_uses_instruction_field():
-    model = _model_for("bria/fibo-edit/edit")
-    long_prompt = "word " * 400
-    req = GenerationRequest(prompt=long_prompt, image_urls=["/uploads/x.jpg"], workflow="CATALOG_IMAGE")
-    args = _build_arguments(req, model, model.endpoint_id, ["https://fal.media/x.jpg"])
-    assert "prompt" not in args
-    assert len(args["instruction"]) <= 4000
 
 
 def test_fashn_try_on_maps_dual_fields():
