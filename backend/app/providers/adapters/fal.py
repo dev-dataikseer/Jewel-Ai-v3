@@ -1,5 +1,4 @@
 import asyncio
-import os
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +9,11 @@ from app.config import get_settings
 from app.logging_config import get_logger
 from app.models import ModelDefinition
 from app.providers.fal_response import extract_image_urls
+from app.providers.fal_upload import (
+    discover_public_app_base,
+    fetch_and_upload_to_fal,
+    upload_file_to_fal,
+)
 from app.providers.types import GenerationRequest, GenerationResult, ModelCapabilities, ProviderStatus
 from app.storage.local import storage
 
@@ -57,41 +61,35 @@ def _resolve_local_path(url: str) -> Path | None:
 
 
 def _upload_to_fal(local_path: Path, api_key: str) -> str:
-    client = _client(api_key)
-    return client.upload_file(str(local_path))
+    return upload_file_to_fal(local_path, api_key)
 
 
-def _public_upload_url(url: str) -> str | None:
-    """Build a public HTTPS URL for a relative /uploads path (worker → web tier)."""
-    if not url.startswith("/uploads/"):
-        return None
-    cfg = get_settings()
-    public_base = cfg.api_public_url.rstrip("/")
-    if not public_base or "localhost" in public_base or "127.0.0.1" in public_base:
-        domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL", "")
-        if domain:
-            public_base = f"https://{domain.removeprefix('https://').removeprefix('http://')}"
-    if not public_base or "localhost" in public_base or "127.0.0.1" in public_base:
-        return None
-    return f"{public_base}{url}"
+def _is_fal_cdn_url(url: str) -> bool:
+    return url.startswith("https://") and ("fal.media" in url or "fal-cdn" in url or "fal.ai" in url)
 
 
 async def _ensure_fal_url(url: str, api_key: str) -> str:
-    """Upload local files to fal CDN; pass through external https URLs."""
-    if url.startswith("http://") or url.startswith("https://"):
-        if settings.api_public_url and url.startswith(settings.api_public_url.rstrip("/")):
-            local = _resolve_local_path(url)
-            if local:
-                return await asyncio.to_thread(_upload_to_fal, local, api_key)
+    """Resolve job input images to fal CDN URLs (local file, public web fetch, or passthrough)."""
+    if _is_fal_cdn_url(url):
         return url
+
+    if url.startswith("http://") or url.startswith("https://"):
+        local = _resolve_local_path(url)
+        if local:
+            return await asyncio.to_thread(_upload_to_fal, local, api_key)
+        return await fetch_and_upload_to_fal(url, api_key)
 
     local = _resolve_local_path(url)
     if local:
         return await asyncio.to_thread(_upload_to_fal, local, api_key)
 
-    public_url = _public_upload_url(url)
-    if public_url:
-        return public_url
+    public_base = discover_public_app_base()
+    if public_base and url.startswith("/uploads/"):
+        public_url = f"{public_base}{url}"
+        try:
+            return await fetch_and_upload_to_fal(public_url, api_key)
+        except Exception as exc:
+            raise ValueError(f"Cannot resolve input image: {url} (fetch failed for {public_url})") from exc
 
     raise ValueError(f"Cannot resolve input image: {url}")
 

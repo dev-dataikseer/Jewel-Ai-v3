@@ -3,7 +3,8 @@
 import pytest
 
 from app.models import ModelDefinition
-from app.providers.adapters.fal import _build_arguments, _image_input_field, _public_upload_url
+from app.providers.adapters.fal import _build_arguments, _image_input_field
+from app.providers.fal_upload import discover_public_app_base
 from app.providers.types import GenerationRequest
 from seeds.fal_models_data import FAL_MODELS
 
@@ -49,22 +50,22 @@ def test_image_field_requires_config():
         _image_input_field(None, "fal-ai/unknown/model")
 
 
-def test_public_upload_url_uses_api_public_url(monkeypatch):
+def test_discover_public_app_base_from_railway_service_url(monkeypatch):
+    monkeypatch.delenv("API_PUBLIC_URL", raising=False)
+    monkeypatch.setenv("RAILWAY_SERVICE_JEWEL_AI_V3_URL", "jewel-ai.up.railway.app")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    assert discover_public_app_base() == "https://jewel-ai.up.railway.app"
+    get_settings.cache_clear()
+
+
+def test_discover_public_app_base_uses_api_public_url(monkeypatch):
     monkeypatch.setenv("API_PUBLIC_URL", "https://jewel-ai.up.railway.app")
     from app.config import get_settings
 
     get_settings.cache_clear()
-    assert _public_upload_url("/uploads/asset-abc.jpg") == "https://jewel-ai.up.railway.app/uploads/asset-abc.jpg"
-    get_settings.cache_clear()
-
-
-def test_public_upload_url_falls_back_to_railway_domain(monkeypatch):
-    monkeypatch.delenv("API_PUBLIC_URL", raising=False)
-    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "jewel-ai.up.railway.app")
-    from app.config import get_settings
-
-    get_settings.cache_clear()
-    assert _public_upload_url("/uploads/asset-abc.jpg") == "https://jewel-ai.up.railway.app/uploads/asset-abc.jpg"
+    assert discover_public_app_base() == "https://jewel-ai.up.railway.app"
     get_settings.cache_clear()
 
 

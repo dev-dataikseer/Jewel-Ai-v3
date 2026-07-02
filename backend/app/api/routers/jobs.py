@@ -21,6 +21,12 @@ from app.services.queue_dispatch import enqueue_image_job
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
+def _asset_input_url(asset: Asset | None) -> str | None:
+    if not asset:
+        return None
+    return asset.processed_url or asset.original_url
+
+
 def _job_to_out(job: GenerationJob) -> JobOut:
     return JobOut.model_validate(job)
 
@@ -126,7 +132,7 @@ def create_job(
         style_preset_id=body.style_preset_id,
         reference_url=body.reference_url,
         model_url=body.model_url,
-        input_url=asset.original_url if asset else None,
+        input_url=_asset_input_url(asset),
         provider_metadata=_provider_meta(data),
     )
     db.add(job)
@@ -179,7 +185,7 @@ def create_bulk_jobs(
             status="PENDING",
             jewelry_type=body.jewelry_type,
             style_preset_id=body.style_preset_id,
-            input_url=asset.original_url,
+            input_url=_asset_input_url(asset),
             provider_metadata=meta,
         )
         db.add(job)
