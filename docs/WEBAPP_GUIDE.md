@@ -8,6 +8,21 @@
 
 **Default workflow model:** Nano Banana Pro (`fal-ai/nano-banana-pro/edit`) — rank #1 in the Studio dropdown.
 
+## Production (Railway)
+
+- **App:** https://jewel-ai.up.railway.app/login
+- **Health:** https://jewel-ai.up.railway.app/health
+
+Set these in Railway service variables:
+
+| Variable | Value |
+|----------|-------|
+| `API_PUBLIC_URL` | `https://jewel-ai.up.railway.app` |
+| `FRONTEND_ORIGIN` | `https://jewel-ai.up.railway.app` |
+| `NODE_ENV` | `production` |
+
+`RAILWAY_PUBLIC_DOMAIN` is auto-detected when unset; explicit values above are recommended for fal webhooks and CORS.
+
 ## Quick start
 
 1. Set `FAL_KEY` in `New Project/api/.env` (get key from [fal.ai dashboard](https://fal.ai/dashboard/keys))

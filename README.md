@@ -3,7 +3,7 @@
 Premium AI jewelry studio — FastAPI + React + fal.ai.
 
 **GitHub:** https://github.com/dev-dataikseer/Jewel-Ai-v3  
-**Production:** https://hj-jewel-ai.data-ikseer.com
+**Production:** https://jewel-ai.up.railway.app
 
 ## Quick Start
 
