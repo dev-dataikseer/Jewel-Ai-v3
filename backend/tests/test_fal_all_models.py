@@ -81,7 +81,7 @@ def test_fashn_aliases_num_samples():
 
 
 def test_gpt_edit_uses_image_urls():
-    model = _model_for("fal-ai/gpt-image-1.5/edit")
+    model = _model_for("openai/gpt-image-2/edit")
     req = GenerationRequest(
         prompt="test",
         image_urls=["/uploads/test.jpg"],
@@ -92,8 +92,8 @@ def test_gpt_edit_uses_image_urls():
     assert "image_url" not in args
 
 
-def test_ideogram_remix_uses_image_url():
-    model = _model_for("fal-ai/ideogram/v3/remix")
+def test_ideogram_v4_uses_image_url():
+    model = _model_for("ideogram/v4/image-to-image")
     req = GenerationRequest(prompt="luxury jewelry", image_urls=["/ring.jpg"], workflow="CATALOG_IMAGE")
     args = _build_arguments(req, model, model.endpoint_id, ["https://fal.media/ring.jpg"])
     assert args["image_url"] == "https://fal.media/ring.jpg"

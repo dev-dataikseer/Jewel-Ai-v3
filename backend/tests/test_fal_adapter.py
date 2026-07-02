@@ -25,11 +25,11 @@ def _model_for(endpoint_id: str) -> ModelDefinition:
     "endpoint_id,expected_field",
     [
         ("fal-ai/nano-banana-pro/edit", "image_urls"),
-        ("fal-ai/gpt-image-1.5/edit", "image_urls"),
+        ("openai/gpt-image-2/edit", "image_urls"),
         ("fal-ai/flux-2-pro/edit", "image_urls"),
         ("fal-ai/flux-pro/kontext", "image_url"),
-        ("fal-ai/ideogram/v3/remix", "image_url"),
-        ("fal-ai/bytedance/seedream/v4.5/edit", "image_urls"),
+        ("ideogram/v4/image-to-image", "image_url"),
+        ("fal-ai/bytedance/seedream/v5/lite/edit", "image_urls"),
     ],
 )
 def test_image_field_per_model(endpoint_id: str, expected_field: str):

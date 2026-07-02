@@ -30,6 +30,7 @@ SYSTEM_FIELDS = {
     "clothing_image_url",
     "human_image_url",
     "garment_image_url",
+    "reference_image_url",
 }
 
 
