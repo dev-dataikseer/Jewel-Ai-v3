@@ -18,10 +18,13 @@ def test_jinja_render():
 
 
 def test_fal_models_seed_catalog():
-    assert len(FAL_MODELS) == 21
+    assert len(FAL_MODELS) == 24
     ids = {m["endpoint_id"] for m in FAL_MODELS}
+    assert "fal-ai/gemini-3-pro-image-preview/edit" in ids
     assert "fal-ai/nano-banana-pro/edit" in ids
+    assert "fal-ai/nano-banana/edit" in ids
     assert "fal-ai/nano-banana-2/edit" in ids
+    assert "fal-ai/gemini-3.1-flash-image-preview/edit" in ids
     assert "fal-ai/flux-2-max/edit" in ids
     assert "openai/gpt-image-2/edit" in ids
     assert "fal-ai/glm-image/image-to-image" in ids
@@ -30,13 +33,13 @@ def test_fal_models_seed_catalog():
     assert "decart/lucy2-vton/realtime" in ids
 
 
-def test_image_edit_models_ranked_nano_banana_first():
+def test_image_edit_models_ranked_gemini_first():
     image_edit = [m for m in FAL_MODELS if m["category"] == "image_to_image"]
-    assert len(image_edit) == 14
+    assert len(image_edit) == 17
     ranked = sorted(image_edit, key=lambda m: m["sort_order"])
-    assert ranked[0]["endpoint_id"] == "fal-ai/nano-banana-pro/edit"
-    assert ranked[1]["endpoint_id"] == "fal-ai/flux-2-max/edit"
-    assert ranked[2]["endpoint_id"] == "openai/gpt-image-2/edit"
+    assert ranked[0]["endpoint_id"] == "fal-ai/gemini-3-pro-image-preview/edit"
+    assert ranked[1]["endpoint_id"] == "fal-ai/nano-banana-pro/edit"
+    assert ranked[2]["endpoint_id"] == "fal-ai/flux-2-max/edit"
     assert all(m["config"].get("model_info") for m in image_edit)
 
 
@@ -104,7 +107,7 @@ def test_filter_models_image_edit_only():
     models = filter_models_for_request(FakeDb(), has_input=True, image_count=1, image_edit_only=True)
     vton_ids = {m.endpoint_id for m in models if m.capabilities.get("virtual_try_on")}
     assert len(vton_ids) == 0
-    assert len(models) == 14
+    assert len(models) == 17
 
     vton_models = filter_models_for_request(
         FakeDb(), has_input=True, image_count=2, workflow="CUSTOMER_TRY_ON", image_edit_only=True
@@ -140,4 +143,4 @@ def test_filter_without_input_still_lists_catalog_models():
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
     models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
-    assert len(models) == 13
+    assert len(models) == 16

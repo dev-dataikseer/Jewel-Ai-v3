@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { DynamicParamForm } from "@/components/studio/DynamicParamForm";
 import type { ModelDefinition } from "@/types";
 
-const PREFS_KEY = "jewel:modelPrefs:v2";
+const PREFS_KEY = "jewel:modelPrefs:v3";
 
 type ModelPrefs = {
   endpoint_id: string;

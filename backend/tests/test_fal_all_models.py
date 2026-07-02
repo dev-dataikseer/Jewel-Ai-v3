@@ -1,4 +1,4 @@
-"""Per-model smoke tests for fal adapter argument building (all 21 catalog models)."""
+"""Per-model smoke tests for fal adapter argument building (all 24 catalog models)."""
 
 import pytest
 
@@ -21,8 +21,8 @@ def _model_for(endpoint_id: str) -> ModelDefinition:
     )
 
 
-def test_catalog_has_nineteen_models():
-    assert len(FAL_MODELS) == 21
+def test_catalog_has_twenty_four_models():
+    assert len(FAL_MODELS) == 24
 
 
 @pytest.mark.parametrize("spec", FAL_MODELS, ids=[m["endpoint_id"] for m in FAL_MODELS])

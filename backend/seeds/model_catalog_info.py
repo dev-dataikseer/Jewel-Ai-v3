@@ -1,8 +1,25 @@
 """Ranked model catalog metadata for Studio dropdown and admin reference."""
 
 MODEL_INFO: dict[str, dict] = {
-    "fal-ai/nano-banana-pro/edit": {
+    "fal-ai/gemini-3-pro-image-preview/edit": {
         "rank": 1,
+        "model_category": "Dedicated Image Editing",
+        "architecture": (
+            "Google Gemini 3 Pro Image Preview — multimodal foundation model with advanced reasoning. "
+            "Plans composition, lighting, and spatial relationships before rendering."
+        ),
+        "key_strengths": (
+            "Reasoning-based generation, semantic editing without masks, up to 14 reference images, "
+            "character consistency, web search grounding, system prompt control, SynthID watermarking."
+        ),
+        "tags": "gemini-3-pro | google | reasoning | 14-reference | character-consistency | web-search",
+        "pricing": "$0.15/image at 1K, 4K at 2x rate ($0.30)",
+        "max_resolution": "4K (2048x2048)",
+        "multi_image_support": "Up to 14 reference images",
+        "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16",
+    },
+    "fal-ai/nano-banana-pro/edit": {
+        "rank": 2,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "Google Gemini 3 Pro Image — multimodal foundation model with advanced reasoning. "
@@ -19,7 +36,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16",
     },
     "fal-ai/flux-2-max/edit": {
-        "rank": 2,
+        "rank": 3,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "32B Parameter Architecture — Mistral-3 24B vision-language model paired with a rectified flow "
@@ -36,7 +53,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "auto, square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "openai/gpt-image-2/edit": {
-        "rank": 3,
+        "rank": 4,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "OpenAI GPT-Image-2 — natively multimodal reasoning-guided image model. "
@@ -53,7 +70,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "Custom (multiples of 16, aspect ratio <= 3:1)",
     },
     "fal-ai/flux-2-pro/edit": {
-        "rank": 4,
+        "rank": 5,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "Black Forest Labs FLUX.2 [pro] — 32B rectified flow transformer with zero-configuration production pipeline."
@@ -69,7 +86,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "auto, square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "fal-ai/flux-pro/kontext": {
-        "rank": 5,
+        "rank": 6,
         "model_category": "Standard Image-to-Image / Context-Aware",
         "architecture": (
             "Black Forest Labs FLUX.1 Kontext [pro] — 12B multimodal flow transformer for in-context editing."
@@ -85,7 +102,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "21:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, 9:21",
     },
     "fal-ai/nano-banana-2/edit": {
-        "rank": 6,
+        "rank": 7,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "Google Gemini 3.1 Flash Image (Nano Banana 2) — fast-tier multimodal model with reasoning-guided generation."
@@ -100,8 +117,38 @@ MODEL_INFO: dict[str, dict] = {
         "multi_image_support": "Up to 14 reference images",
         "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16",
     },
+    "fal-ai/gemini-3.1-flash-image-preview/edit": {
+        "rank": 8,
+        "model_category": "Dedicated Image Editing",
+        "architecture": (
+            "Google Gemini 3.1 Flash Image Preview — fast-tier multimodal model with reasoning-guided generation."
+        ),
+        "key_strengths": (
+            "Flash-speed execution, up to 14 reference images, web search grounding, thinking level control, "
+            "4 resolution tiers (0.5K-4K), extreme aspect ratios (4:1, 1:8)."
+        ),
+        "tags": "gemini-3.1-flash | google | fast | 14-reference | web-search | thinking-mode",
+        "pricing": "$0.06 (512px), $0.08 (1K), $0.12 (2K), $0.16 (4K); web search +$0.015",
+        "max_resolution": "4K (2048x2048)",
+        "multi_image_support": "Up to 14 reference images",
+        "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16, 4:1, 1:4, 8:1, 1:8",
+    },
+    "fal-ai/nano-banana/edit": {
+        "rank": 9,
+        "model_category": "Dedicated Image Editing",
+        "architecture": "Google Gemini 2.5 Flash Image (original Nano Banana) — fast image editing without resolution tiers.",
+        "key_strengths": (
+            "Budget-friendly at $0.039/image, multi-image editing, aspect ratio control, "
+            "safety tolerance tuning, no resolution upsell complexity."
+        ),
+        "tags": "nano-banana | google | budget | multi-image | fast",
+        "pricing": "$0.039 per image",
+        "max_resolution": "Standard (no 2K/4K tier selector)",
+        "multi_image_support": "Multiple reference images",
+        "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16",
+    },
     "fal-ai/bytedance/seedream/v5/lite/edit": {
-        "rank": 7,
+        "rank": 10,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "ByteDance Seedream 5.0 Lite — DiT with Chain of Thought reasoning pass before pixel generation."
@@ -117,7 +164,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_3K, auto_4K",
     },
     "fal-ai/bytedance/seedream/v4.5/edit": {
-        "rank": 8,
+        "rank": 11,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "ByteDance Seedream 4.5 — unified single-architecture generation and editing model."
@@ -133,7 +180,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_4K",
     },
     "fal-ai/gpt-image-1.5/edit": {
-        "rank": 9,
+        "rank": 12,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "OpenAI GPT Image 1.5 — natively multimodal model on GPT-5 architecture. "
@@ -150,7 +197,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "1024x1024, 1536x1024, 1024x1536",
     },
     "fal-ai/flux-2/edit": {
-        "rank": 10,
+        "rank": 13,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "Black Forest Labs FLUX.2 [dev] — full 32B rectified flow transformer with adjustable parameters."
@@ -166,7 +213,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "fal-ai/glm-image/image-to-image": {
-        "rank": 11,
+        "rank": 14,
         "model_category": "Standard Image-to-Image",
         "architecture": (
             "Zhipu AI GLM-Image — 9B autoregressive generator + 7B diffusion decoder (single-stream DiT)."
@@ -182,7 +229,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, landscape_16_9, landscape_4_3, portrait_16_9, portrait_4_3",
     },
     "fal-ai/firered-image-edit-v1.1": {
-        "rank": 12,
+        "rank": 15,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "FireRed Image Edit 1.1 — open-source editing model retrained from Qwen Image Edit 2509."
@@ -198,7 +245,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "xai/grok-imagine-image/edit": {
-        "rank": 13,
+        "rank": 16,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "xAI Grok Imagine — Aurora engine diffusion optimized for prompt adherence."
@@ -214,7 +261,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "auto, 2:1, 20:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, 1:2",
     },
     "fal-ai/flux/dev/image-to-image": {
-        "rank": 14,
+        "rank": 17,
         "model_category": "Standard Image-to-Image",
         "architecture": (
             "Black Forest Labs FLUX.1 [dev] — 12B flow transformer with strength-based composition control."
