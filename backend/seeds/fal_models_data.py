@@ -18,7 +18,7 @@ NANO_BANANA_EDIT_PARAMS = {
             "type": "string",
             "title": "Resolution",
             "enum": ["1K", "2K", "4K"],
-            "default": "2K",
+            "default": "1K",
         },
         "aspect_ratio": {
             "type": "string",
@@ -124,13 +124,13 @@ GPT_IMAGE_2_PARAMS = {
                 "2560x1440",
                 "3840x2160",
             ],
-            "default": "auto",
+            "default": "1024x1024",
         },
         "quality": {
             "type": "string",
             "title": "Quality",
             "enum": ["auto", "low", "medium", "high"],
-            "default": "high",
+            "default": "medium",
         },
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
         "output_format": {
@@ -151,7 +151,7 @@ GPT_IMAGE_1_5_PARAMS = {
             "type": "string",
             "title": "Image size",
             "enum": ["auto", "1024x1024", "1536x1024", "1024x1536"],
-            "default": "auto",
+            "default": "1024x1024",
         },
         "background": {
             "type": "string",
@@ -163,7 +163,7 @@ GPT_IMAGE_1_5_PARAMS = {
             "type": "string",
             "title": "Quality",
             "enum": ["low", "medium", "high"],
-            "default": "high",
+            "default": "medium",
         },
         "input_fidelity": {
             "type": "string",
@@ -367,8 +367,8 @@ SEEDREAM_EDIT_PARAMS = {
         "image_size": {
             "type": "string",
             "title": "Image size",
-            "enum": ["auto_2K", "auto_3K", "auto_4K"],
-            "default": "auto_2K",
+            "enum": ["square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9", "auto_2K", "auto_3K", "auto_4K"],
+            "default": "square_hd",
         },
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 6, "default": 1},
         "max_images": {"type": "integer", "title": "Max images per gen", "minimum": 1, "maximum": 6, "default": 1},
@@ -691,7 +691,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True, "material_accuracy": True},
         "input_schema": NANO_BANANA_EDIT_PARAMS,
         "default_params": {
-            "resolution": "2K",
+            "resolution": "1K",
             "aspect_ratio": "auto",
             "num_images": 1,
             "output_format": "png",
@@ -727,7 +727,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
         "input_schema": GPT_IMAGE_2_PARAMS,
-        "default_params": {"image_size": "auto", "quality": "high", "num_images": 1, "output_format": "png"},
+        "default_params": {"image_size": "1024x1024", "quality": "medium", "num_images": 1, "output_format": "png"},
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls"},
         "sort_order": 3,
@@ -795,7 +795,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
         "input_schema": SEEDREAM_EDIT_PARAMS,
         "default_params": {
-            "image_size": "auto_2K",
+            "image_size": "square_hd",
             "num_images": 1,
             "max_images": 1,
             "enable_safety_checker": True,
@@ -812,7 +812,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
         "input_schema": SEEDREAM_EDIT_PARAMS,
         "default_params": {
-            "image_size": "auto_2K",
+            "image_size": "square_hd",
             "num_images": 1,
             "max_images": 1,
             "enable_safety_checker": True,
@@ -829,8 +829,8 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
         "input_schema": GPT_IMAGE_1_5_PARAMS,
         "default_params": {
-            "image_size": "auto",
-            "quality": "high",
+            "image_size": "1024x1024",
+            "quality": "medium",
             "input_fidelity": "high",
             "background": "auto",
             "num_images": 1,
