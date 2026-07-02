@@ -103,6 +103,6 @@ def validate_production_settings() -> list[str]:
 def assert_production_settings() -> None:
     """Fail fast on critical misconfiguration in production."""
     issues = validate_production_settings()
-    critical = [w for w in issues if "JWT_SECRET" in w or "FAL_KEY" in w or "API_PUBLIC_URL" in w]
+    critical = [w for w in issues if "JWT_SECRET" in w or "API_PUBLIC_URL" in w]
     if critical:
         raise RuntimeError("Production configuration invalid: " + "; ".join(critical))
