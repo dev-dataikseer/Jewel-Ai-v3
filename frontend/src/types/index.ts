@@ -48,7 +48,9 @@ export type Job = {
   jewelry_type?: string | null;
   input_url?: string | null;
   reference_url?: string | null;
+  model_url?: string | null;
   output_url?: string | null;
+  output_urls?: string[] | null;
   error_message?: string | null;
   provider_used?: string | null;
   provider_model?: string | null;

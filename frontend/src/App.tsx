@@ -6,14 +6,17 @@ import { LoginPage } from "@/pages/LoginPage";
 import { useAuth } from "@/hooks/useAuth";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAdmin } = useAuth();
+  const { isLoading, isAuthenticated, isAdmin } = useAuth();
   if (isLoading) {
     return (
       <div className="min-h-screen grid place-items-center text-sm text-slate-500">Loading…</div>
     );
   }
-  if (!isAdmin) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }

@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowUpRight,
-  Download,
+  Expand,
   Gem,
+  Heart,
   History,
   RefreshCcw,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
+import { GenerationDetailModal } from "@/components/history/GenerationDetailModal";
 import { api, mediaUrl } from "@/lib/api";
 import type { Job, JobsListResponse } from "@/types";
 import { label } from "@/types";
@@ -34,6 +35,7 @@ export function HistoryPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [workflowFilter, setWorkflowFilter] = useState("");
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const { data: favoriteIds = [] } = useQuery({
     queryKey: ["favorites"],
@@ -75,6 +77,31 @@ export function HistoryPage() {
     const all = data?.pages.flatMap((p) => p.items) ?? [];
     return all.map((j) => ({ ...j, favorite: favSet.has(j.id) }));
   }, [data?.pages, favSet]);
+
+  const selectedJobWithFavorite = useMemo(() => {
+    if (!selectedJob) return null;
+    return { ...selectedJob, favorite: favSet.has(selectedJob.id) };
+  }, [selectedJob, favSet]);
+
+  const toggleFavorite = useCallback(
+    async (job: Job) => {
+      const isFav = favSet.has(job.id);
+      try {
+        if (isFav) {
+          await api.delete(`/favorites/${job.id}`);
+        } else {
+          await api.post(`/favorites/${job.id}`);
+        }
+        await queryClient.invalidateQueries({ queryKey: ["favorites"] });
+        setSelectedJob((prev) =>
+          prev?.id === job.id ? { ...prev, favorite: !isFav } : prev
+        );
+      } catch {
+        toast.error("Could not update favorite");
+      }
+    },
+    [favSet, queryClient]
+  );
 
   const refresh = async () => {
     try {
@@ -151,7 +178,12 @@ export function HistoryPage() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {jobs.map((job) => (
-                <JobCard key={job.id} job={job} />
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onOpen={() => setSelectedJob(job)}
+                  onToggleFavorite={toggleFavorite}
+                />
               ))}
             </div>
             {hasNextPage && (
@@ -170,11 +202,27 @@ export function HistoryPage() {
           </>
         )}
       </main>
+
+      {selectedJobWithFavorite && (
+        <GenerationDetailModal
+          job={selectedJobWithFavorite}
+          onClose={() => setSelectedJob(null)}
+          onToggleFavorite={toggleFavorite}
+        />
+      )}
     </AppLayout>
   );
 }
 
-function JobCard({ job }: { job: Job }) {
+function JobCard({
+  job,
+  onOpen,
+  onToggleFavorite,
+}: {
+  job: Job;
+  onOpen: () => void;
+  onToggleFavorite: (job: Job) => void;
+}) {
   const imageUrl = job.output_url || job.input_url;
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -182,7 +230,18 @@ function JobCard({ job }: { job: Job }) {
   });
 
   return (
-    <div className="group relative aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group relative aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
+    >
       {imageUrl ? (
         <img
           src={mediaUrl(imageUrl)}
@@ -202,6 +261,20 @@ function JobCard({ job }: { job: Job }) {
         {job.status === "PROCESSING" ? "PENDING" : job.status}
       </span>
 
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite(job);
+        }}
+        aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"}
+        className="absolute top-2 right-2 z-20 inline-flex size-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+      >
+        <Heart
+          className={`size-3 ${job.favorite ? "fill-red-500 text-red-500" : ""}`}
+        />
+      </button>
+
       <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3 text-white z-10">
         <div className="pt-5 flex justify-between gap-1">
           <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[8px] font-bold uppercase border border-blue-400/25 truncate">
@@ -216,26 +289,9 @@ function JobCard({ job }: { job: Job }) {
           {job.status === "FAILED" && job.error_message && (
             <p className="text-[9px] text-rose-300 line-clamp-2">{job.error_message}</p>
           )}
-          <div className="flex gap-1.5 pt-2 border-t border-slate-800/80">
-            <Link
-              to={`/?jobId=${job.id}`}
-              className="flex-1 inline-flex h-7 items-center justify-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-[9px] font-bold"
-            >
-              <ArrowUpRight className="size-3" />
-              Load Studio
-            </Link>
-            {job.output_url && (
-              <a
-                href={mediaUrl(job.output_url)}
-                download
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Download image for ${label(job.workflow)}`}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500"
-              >
-                <Download className="size-3" />
-              </a>
-            )}
+          <div className="flex items-center justify-center gap-1 pt-2 border-t border-slate-800/80">
+            <Expand className="size-3 text-amber-400" />
+            <span className="text-[9px] font-bold text-amber-300">Compare input &amp; output</span>
           </div>
         </div>
       </div>

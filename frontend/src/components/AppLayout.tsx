@@ -8,7 +8,7 @@ type Props = {
 };
 
 export function AppLayout({ subtitle = "Production Suite", children }: Props) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const location = useLocation();
 
   return (
@@ -31,9 +31,11 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
             <NavLink to="/history" active={location.pathname === "/history"}>
               <History className="size-4" /> History
             </NavLink>
-            <NavLink to="/admin" active={location.pathname === "/admin"}>
-              <Settings className="size-4" /> Admin
-            </NavLink>
+            {isAdmin && (
+              <NavLink to="/admin" active={location.pathname === "/admin"}>
+                <Settings className="size-4" /> Admin
+              </NavLink>
+            )}
             {user ? (
               <button
                 type="button"
