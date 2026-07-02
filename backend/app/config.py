@@ -66,6 +66,22 @@ class Settings(BaseSettings):
                 self.api_public_url = f"https://{domain}"
             if "localhost" in self.frontend_origin:
                 self.frontend_origin = f"https://{domain}"
+
+        # Explicitly read Redis/Celery URLs from the environment so that Railway
+        # reference variables (e.g. ${{Redis.REDIS_URL}}) are always honoured,
+        # even when Pydantic's env-file loading picks up a stale cached value.
+        broker = os.environ.get("CELERY_BROKER_URL", "")
+        if broker and "localhost" in self.celery_broker_url:
+            self.celery_broker_url = broker
+
+        backend = os.environ.get("CELERY_RESULT_BACKEND", "")
+        if backend and "localhost" in self.celery_result_backend:
+            self.celery_result_backend = backend
+
+        redis = os.environ.get("REDIS_URL", "")
+        if redis and "localhost" in self.redis_url:
+            self.redis_url = redis
+
         return self
 
     @property
