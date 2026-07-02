@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,21 @@ def _upload_to_fal(local_path: Path, api_key: str) -> str:
     return client.upload_file(str(local_path))
 
 
+def _public_upload_url(url: str) -> str | None:
+    """Build a public HTTPS URL for a relative /uploads path (worker → web tier)."""
+    if not url.startswith("/uploads/"):
+        return None
+    cfg = get_settings()
+    public_base = cfg.api_public_url.rstrip("/")
+    if not public_base or "localhost" in public_base or "127.0.0.1" in public_base:
+        domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL", "")
+        if domain:
+            public_base = f"https://{domain.removeprefix('https://').removeprefix('http://')}"
+    if not public_base or "localhost" in public_base or "127.0.0.1" in public_base:
+        return None
+    return f"{public_base}{url}"
+
+
 async def _ensure_fal_url(url: str, api_key: str) -> str:
     """Upload local files to fal CDN; pass through external https URLs."""
     if url.startswith("http://") or url.startswith("https://"):
@@ -70,10 +86,14 @@ async def _ensure_fal_url(url: str, api_key: str) -> str:
         return url
 
     local = _resolve_local_path(url)
-    if not local:
-        raise ValueError(f"Cannot resolve input image: {url}")
+    if local:
+        return await asyncio.to_thread(_upload_to_fal, local, api_key)
 
-    return await asyncio.to_thread(_upload_to_fal, local, api_key)
+    public_url = _public_upload_url(url)
+    if public_url:
+        return public_url
+
+    raise ValueError(f"Cannot resolve input image: {url}")
 
 
 def _aspect_to_gpt_size(aspect: str) -> str:

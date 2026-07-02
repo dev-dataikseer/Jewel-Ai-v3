@@ -6,6 +6,7 @@ backend/.pytest_cache/
 backend/uploads/
 backend/jewel.db
 backend/.env
+api.txt
 
 # Production secrets (copy from .env.production.example)
 config/.env.production
