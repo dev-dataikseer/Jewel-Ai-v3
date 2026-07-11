@@ -15,6 +15,17 @@ from app.storage.local import storage
 settings = get_settings()
 
 
+def _asset_out(asset: Asset) -> AssetOut:
+    from app.security.media_signing import sign_media_url
+
+    out = AssetOut.model_validate(asset)
+    data = out.model_dump()
+    data["original_url"] = sign_media_url(data.get("original_url")) or data.get("original_url")
+    # processed_url may be fal CDN — leave as-is if absolute non-upload
+    data["processed_url"] = sign_media_url(data.get("processed_url")) if data.get("processed_url") else None
+    return AssetOut.model_validate(data)
+
+
 def _mirror_to_fal_cdn(content: bytes, content_type: str, filename: str) -> str | None:
     if not settings.fal_key:
         return None
@@ -47,7 +58,7 @@ async def upload_asset(
     db.add(asset)
     db.commit()
     db.refresh(asset)
-    return asset
+    return _asset_out(asset)
 
 
 @router.post("/bulk-upload", response_model=list[AssetOut])
@@ -72,4 +83,4 @@ async def bulk_upload(
     db.commit()
     for a in assets:
         db.refresh(a)
-    return assets
+    return [_asset_out(a) for a in assets]

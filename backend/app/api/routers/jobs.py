@@ -15,7 +15,6 @@ from app.providers.model_validate import validate_generation_request, validate_m
 from app.providers.registry import get_model_definition, resolve_default_endpoint
 from app.providers.types import GenerationRequest
 from app.schemas.common import BulkJobCreate, JobCreate, JobOut, ShareLinkCreate
-from app.services.credits import check_sufficient_credits
 from app.services.queue_dispatch import enqueue_image_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -28,7 +27,17 @@ def _asset_input_url(asset: Asset | None) -> str | None:
 
 
 def _job_to_out(job: GenerationJob) -> JobOut:
-    return JobOut.model_validate(job)
+    from app.security.media_signing import sign_media_url
+
+    out = JobOut.model_validate(job)
+    data = out.model_dump()
+    data["input_url"] = sign_media_url(data.get("input_url"))
+    data["reference_url"] = sign_media_url(data.get("reference_url"))
+    data["model_url"] = sign_media_url(data.get("model_url"))
+    data["output_url"] = sign_media_url(data.get("output_url"))
+    if data.get("output_urls"):
+        data["output_urls"] = [sign_media_url(u) for u in data["output_urls"]]
+    return JobOut.model_validate(data)
 
 
 def _get_user_job(db: Session, job_id: str, user: User) -> GenerationJob | None:
@@ -88,8 +97,13 @@ def create_job(
 ):
     data = body.model_dump()
     validate_job_create(data)
-    if not check_sufficient_credits(db, user.id):
-        raise HTTPException(status_code=402, detail="Insufficient credits")
+    try:
+        from app.security.url_fetch import validate_user_image_url
+
+        validate_user_image_url(body.reference_url)
+        validate_user_image_url(body.model_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     asset = (
         db.query(Asset)
@@ -139,7 +153,7 @@ def create_job(
     db.commit()
     db.refresh(job)
     enqueue_image_job(job.id)
-    return job
+    return _job_to_out(job)
 
 
 @router.post("/bulk", response_model=dict)
@@ -165,6 +179,7 @@ def create_bulk_jobs(
         preset_id=body.style_preset_id,
         status="PROCESSING",
         total_jobs=len(assets),
+        user_id=user.id,
     )
     db.add(batch)
     db.flush()
@@ -210,7 +225,11 @@ def list_jobs(
 ):
     q = db.query(GenerationJob).filter(GenerationJob.user_id == user.id).order_by(GenerationJob.created_at.desc())
     if status:
-        q = q.filter(GenerationJob.status == status)
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if len(statuses) == 1:
+            q = q.filter(GenerationJob.status == statuses[0])
+        elif statuses:
+            q = q.filter(GenerationJob.status.in_(statuses))
     if workflow:
         q = q.filter(GenerationJob.workflow == workflow)
     if favorites_only:
@@ -297,7 +316,7 @@ def get_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
     job = _get_user_job(db, job_id, user)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return _job_to_out(job)
 
 
 @router.post("/{job_id}/regenerate", response_model=JobOut)
@@ -331,7 +350,7 @@ def regenerate_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)
     db.commit()
     db.refresh(job)
     enqueue_image_job(job.id)
-    return job
+    return _job_to_out(job)
 
 
 @router.delete("/{job_id}")

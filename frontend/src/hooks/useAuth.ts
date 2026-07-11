@@ -14,8 +14,21 @@ export function useAuth() {
   const [hasToken, setHasToken] = useState(() => !!getAccessToken());
 
   useEffect(() => {
-    setHasToken(!!getAccessToken());
-  }, []);
+    const sync = () => {
+      const token = !!getAccessToken();
+      setHasToken(token);
+      if (!token) {
+        queryClient.setQueryData(["auth", "me"], null);
+      }
+    };
+    sync();
+    window.addEventListener("jewel-auth-change", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("jewel-auth-change", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [queryClient]);
 
   const {
     data: user,
@@ -32,6 +45,14 @@ export function useAuth() {
     enabled: hasToken,
     staleTime: 1000 * 60 * 5,
   });
+
+  useEffect(() => {
+    if (hasToken && isError) {
+      clearTokens();
+      setHasToken(false);
+      queryClient.setQueryData(["auth", "me"], null);
+    }
+  }, [hasToken, isError, queryClient]);
 
   const login = useCallback(
     async (payload: { email: string; password: string }) => {

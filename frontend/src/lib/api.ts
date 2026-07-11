@@ -17,11 +17,13 @@ export function getRefreshToken(): string | null {
 export function setTokens(access: string, refresh: string) {
   localStorage.setItem(ACCESS_KEY, access);
   localStorage.setItem(REFRESH_KEY, refresh);
+  window.dispatchEvent(new Event("jewel-auth-change"));
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  window.dispatchEvent(new Event("jewel-auth-change"));
 }
 
 export const api = axios.create({
@@ -89,14 +91,15 @@ api.interceptors.response.use(
       (error.code === "ECONNABORTED" ? "Request timed out. Please try again." : error.message) ||
       "Request failed";
 
-    return Promise.reject(
-      Object.assign(error, { message, friendlyMessage: message })
-    );
+    return Promise.reject(Object.assign(error, { message, friendlyMessage: message }));
   }
 );
 
+/** Resolve media paths; signed /uploads URLs from API already include query params. */
 export function mediaUrl(url?: string | null) {
   if (!url) return "";
-  if (url.startsWith("http")) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/uploads/") || url.startsWith("/api/")) return url;
+  if (url.startsWith("uploads/")) return `/${url}`;
   return url;
 }

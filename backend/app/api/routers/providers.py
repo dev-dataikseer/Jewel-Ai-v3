@@ -108,17 +108,16 @@ async def fal_webhook(
             async def process_image():
                 db_local = SessionLocal()
                 try:
+                    from uuid import uuid4
                     from app.storage.local import storage
-                    from app.services.credits import deduct_credits_for_job
                     from app.tasks.generate import _update_batch
 
                     extra_urls: list[str] = []
                     primary_url = ""
                     for idx, img_url in enumerate(img_urls):
                         content = await safe_fetch_image_bytes(img_url)
-                        suffix = "" if idx == 0 else f"_{idx + 1}"
                         saved_url = storage.save_bytes(
-                            content, filename=f"generated_{job_id}{suffix}.png"
+                            content, filename=f"generated_{uuid4().hex}.png"
                         )
                         if idx == 0:
                             primary_url = saved_url
@@ -128,14 +127,13 @@ async def fal_webhook(
                     job_local = db_local.query(GenerationJob).filter(GenerationJob.id == job_id).first()
                     if job_local and job_local.status != "COMPLETED":
                         meta = job_local.provider_metadata or {}
+                        if job_local.cost is None and model_def and model_def.cost_per_call is not None:
+                            job_local.cost = float(model_def.cost_per_call)
                         job_local.output_url = primary_url
                         job_local.output_urls = extra_urls if extra_urls else None
                         job_local.status = "COMPLETED"
                         job_local.provider_metadata = {**meta, "webhook_completed": True}
-                        job_local.credits_used = max(1, int((job_local.cost or 0.1) * 100))
                         db_local.commit()
-                        if job_local.user_id:
-                            deduct_credits_for_job(db_local, job_local.user_id, job_local.credits_used, job_local.id)
                         if job_local.batch_id:
                             _update_batch(db_local, job_local.batch_id)
                 except Exception as e:

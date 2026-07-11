@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from fal_client import SyncClient
@@ -53,9 +54,30 @@ def upload_file_to_fal(path: Path, api_key: str) -> str:
 
 
 async def fetch_and_upload_to_fal(url: str, api_key: str) -> str:
-    async with httpx.AsyncClient(timeout=FETCH_TIMEOUT, follow_redirects=True) as http:
-        resp = await http.get(url)
-        resp.raise_for_status()
-        data = resp.content
-        content_type = (resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+    """Fetch a remote image and upload to fal. SSRF-hardened for non-app URLs."""
+    from app.security.url_fetch import _app_public_host, is_app_upload_url, safe_fetch_image_bytes
+
+    if is_app_upload_url(url):
+        parsed = urlparse(url)
+        if not parsed.scheme:
+            raise ValueError("Relative upload URLs must be resolved locally before fal upload")
+        host = (parsed.hostname or "").lower()
+        app_host = _app_public_host()
+        allowed_local = host in ("localhost", "127.0.0.1") and "localhost" in (
+            get_settings().api_public_url or ""
+        )
+        if app_host and host == app_host:
+            pass
+        elif allowed_local:
+            pass
+        else:
+            raise ValueError("App upload URL host is not the configured API public host")
+        async with httpx.AsyncClient(timeout=FETCH_TIMEOUT, follow_redirects=False) as http:
+            resp = await http.get(url)
+            resp.raise_for_status()
+            data = resp.content
+            content_type = (resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+    else:
+        data = await safe_fetch_image_bytes(url, timeout=FETCH_TIMEOUT)
+        content_type = "image/jpeg"
     return await asyncio.to_thread(upload_bytes_to_fal, data, content_type, api_key)

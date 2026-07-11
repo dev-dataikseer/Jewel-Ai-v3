@@ -11,12 +11,27 @@ from app.pipeline.composer import ComposeInput, compose_prompt
 from app.providers.prompt_augment import augment_prompt_for_workflow
 from app.providers.router import route_generation
 from app.providers.types import GenerationRequest
-from app.services.credits import deduct_credits_for_job
 from app.storage.local import storage
 from app.tasks.celery_app import celery_app
+from app.config import get_settings
 
 logger = get_logger(__name__)
 STUCK_MINUTES = 15
+WEBHOOK_PENDING_TIMEOUT_MINUTES = 20
+
+
+def _stuck_cutoff_minutes() -> int:
+    try:
+        return int(get_settings().stuck_job_minutes or STUCK_MINUTES)
+    except Exception:
+        return STUCK_MINUTES
+
+
+def _webhook_timeout_minutes() -> int:
+    try:
+        return int(get_settings().webhook_pending_timeout_minutes or WEBHOOK_PENDING_TIMEOUT_MINUTES)
+    except Exception:
+        return WEBHOOK_PENDING_TIMEOUT_MINUTES
 
 
 def _get_meta(job: GenerationJob) -> dict:
@@ -91,16 +106,19 @@ async def _process_job_async(job_id: str) -> None:
             merged = {**meta, "promptDebug": composed.debug, "providerChain": chain, "usage": result.usage, "webhook_pending": True}
             job.provider_used = result.provider
             job.provider_model = result.model
+            job.cost = result.cost
             job.provider_metadata = merged
             db.commit()
             return
-            
-        filename = f"generated_{job_id}.png"
+
+        from uuid import uuid4
+
+        filename = f"generated_{uuid4().hex}.png"
         output_url = storage.save_bytes(result.image_bytes, filename=filename)
         extra_urls: list[str] = []
         extra_bytes = (result.metadata or {}).get("all_image_bytes") or []
         for idx, blob in enumerate(extra_bytes, start=2):
-            extra_urls.append(storage.save_bytes(blob, filename=f"generated_{job_id}_{idx}.png"))
+            extra_urls.append(storage.save_bytes(blob, filename=f"generated_{uuid4().hex}.png"))
 
         merged = {**meta, "promptDebug": composed.debug, "providerChain": chain, "usage": result.usage}
         job.status = "COMPLETED"
@@ -111,11 +129,7 @@ async def _process_job_async(job_id: str) -> None:
         job.provider_model = result.model
         job.cost = result.cost
         job.provider_metadata = merged
-        job.credits_used = max(1, int(result.cost * 100))
         db.commit()
-
-        if job.user_id:
-            deduct_credits_for_job(db, job.user_id, job.credits_used, job.id)
 
         if job.batch_id:
             _update_batch(db, job.batch_id)
@@ -154,15 +168,32 @@ def process_image_job(self, job_id: str) -> None:
 def sweep_stuck_jobs() -> int:
     db = SessionLocal()
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=STUCK_MINUTES)
+        now = datetime.now(timezone.utc)
+        stuck_cutoff = now - timedelta(minutes=_stuck_cutoff_minutes())
+        webhook_cutoff = now - timedelta(minutes=_webhook_timeout_minutes())
         stuck = (
             db.query(GenerationJob)
-            .filter(GenerationJob.status == "PROCESSING", GenerationJob.processing_started_at < cutoff)
+            .filter(GenerationJob.status == "PROCESSING", GenerationJob.processing_started_at < stuck_cutoff)
             .all()
         )
+        acted = 0
         for job in stuck:
-            meta = job.provider_metadata or {}
-            if meta.get("webhook_pending") and meta.get("usage", {}).get("request_id"):
+            meta = dict(job.provider_metadata or {})
+            started = job.processing_started_at
+            webhook_pending = bool(meta.get("webhook_pending") and meta.get("usage", {}).get("request_id"))
+            if webhook_pending:
+                # Fail permanently if fal webhook never arrives.
+                if started and started < webhook_cutoff:
+                    job.status = "FAILED"
+                    job.error_message = (
+                        f"Timed out waiting for fal webhook after {_webhook_timeout_minutes()} minutes"
+                    )
+                    meta["webhook_timed_out"] = True
+                    job.provider_metadata = meta
+                    db.commit()
+                    if job.batch_id:
+                        _update_batch(db, job.batch_id)
+                    acted += 1
                 continue
             job.status = "PENDING"
             job.error_message = None
@@ -170,6 +201,7 @@ def sweep_stuck_jobs() -> int:
             from app.services.queue_dispatch import enqueue_image_job
 
             enqueue_image_job(job.id)
-        return len(stuck)
+            acted += 1
+        return acted
     finally:
         db.close()

@@ -45,7 +45,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     credits: Mapped[int] = mapped_column(Integer, default=100)
-    role: Mapped[str] = mapped_column(String(32), default="admin")
+    role: Mapped[str] = mapped_column(String(32), default="user")
     team_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("teams.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -268,6 +268,7 @@ class Batch(Base):
     __tablename__ = "batches"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     workflow: Mapped[str] = mapped_column(String(64), nullable=False)
     jewelry_type: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -286,7 +287,7 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     original_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     processed_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False)

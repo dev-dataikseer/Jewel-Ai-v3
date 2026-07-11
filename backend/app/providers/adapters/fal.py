@@ -374,11 +374,10 @@ class FalAdapter:
             )
 
         all_bytes: list[bytes] = []
-        async with httpx.AsyncClient(timeout=FETCH_TIMEOUT) as http:
-            for img_url in img_urls:
-                resp = await http.get(img_url)
-                resp.raise_for_status()
-                all_bytes.append(resp.content)
+        from app.security.url_fetch import safe_fetch_image_bytes
+
+        for img_url in img_urls:
+            all_bytes.append(await safe_fetch_image_bytes(img_url, timeout=FETCH_TIMEOUT))
 
         cost = model_def.cost_per_call if model_def and model_def.cost_per_call else 0.1
         return GenerationResult(

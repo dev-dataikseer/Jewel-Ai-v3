@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     admin_password: str = "changeme"
     default_user_email: str = "studio@jewelai.com"
     default_user_password: str = "studio123"
+    force_seed_passwords: bool = False
     allow_prompt_reseed: bool | None = None
+    webhook_pending_timeout_minutes: int = 20
+    stuck_job_minutes: int = 15
 
     @property
     def effective_allow_prompt_reseed(self) -> bool:
@@ -106,12 +109,31 @@ def validate_production_settings() -> list[str]:
         warnings.append("FERNET_KEY should be set to encrypt provider API keys at rest")
     if "localhost" in s.api_public_url:
         warnings.append("API_PUBLIC_URL should be a public HTTPS URL for fal webhooks")
+    if s.admin_password in ("changeme", "admin", "password", "123456"):
+        warnings.append("ADMIN_PASSWORD must not use a default/weak value in production")
+    if s.default_user_password in ("studio123", "changeme", "password", "123456"):
+        warnings.append("DEFAULT_USER_PASSWORD must not use a default/weak value in production")
+    if s.storage_backend == "local":
+        warnings.append("STORAGE_BACKEND=local is ephemeral on most hosts; use r2/s3/object in production")
+    elif s.storage_backend in ("r2", "s3", "object"):
+        if not (s.r2_bucket_name and s.r2_access_key_id and s.r2_secret_access_key and s.r2_endpoint_url):
+            warnings.append("Object storage selected but R2/AWS bucket credentials are incomplete")
     return warnings
 
 
 def assert_production_settings() -> None:
     """Fail fast on critical misconfiguration in production."""
     issues = validate_production_settings()
-    critical = [w for w in issues if "JWT_SECRET" in w or "API_PUBLIC_URL" in w]
+    critical_markers = (
+        "JWT_SECRET",
+        "API_PUBLIC_URL",
+        "ADMIN_PASSWORD",
+        "DEFAULT_USER_PASSWORD",
+        "FAL_KEY",
+        "FERNET_KEY",
+        "STORAGE_BACKEND=local",
+        "bucket credentials",
+    )
+    critical = [w for w in issues if any(m in w for m in critical_markers)]
     if critical:
         raise RuntimeError("Production configuration invalid: " + "; ".join(critical))

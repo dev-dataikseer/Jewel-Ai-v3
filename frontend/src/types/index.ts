@@ -59,6 +59,10 @@ export type Job = {
   subject_version_id?: string | null;
   variant_version_id?: string | null;
   credits_used?: number;
+  cost?: number | null;
+  retry_count?: number;
+  processing_started_at?: string | null;
+  user_id?: string | null;
   created_at: string;
   favorite?: boolean;
 };
@@ -178,7 +182,7 @@ export type User = {
   email: string;
   name?: string | null;
   role: string;
-  credits: number;
+  credits?: number;
 };
 
 export type AdminMetrics = {
@@ -195,6 +199,83 @@ export type AdminMetrics = {
     error?: string | null;
     created_at?: string;
   }>;
+};
+
+export type UsageAnalytics = {
+  window_days: number;
+  summary: {
+    total_jobs: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+    success_rate: number;
+    estimated_cost_usd_all_time: number;
+    estimated_cost_usd_completed: number;
+    estimated_cost_usd_window: number;
+    jobs_in_window: number;
+    status_counts: Record<string, number>;
+    status_counts_window: Record<string, number>;
+  };
+  by_model: Array<{
+    model: string;
+    provider: string;
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+    estimated_cost_usd: number;
+  }>;
+  by_workflow: Array<{
+    workflow: string;
+    total: number;
+    completed: number;
+    failed: number;
+    estimated_cost_usd: number;
+  }>;
+  by_user: Array<{
+    user_id?: string | null;
+    email: string;
+    total: number;
+    completed: number;
+    failed: number;
+    estimated_cost_usd: number;
+  }>;
+  by_day: Array<{
+    date: string;
+    total: number;
+    completed: number;
+    failed: number;
+    estimated_cost_usd: number;
+  }>;
+  live_jobs: Array<{
+    id: string;
+    status: string;
+    workflow: string;
+    model?: string | null;
+    user_email?: string | null;
+    created_at?: string | null;
+    processing_started_at?: string | null;
+  }>;
+  recent_jobs: Array<{
+    id: string;
+    status: string;
+    workflow: string;
+    jewelry_type?: string | null;
+    provider?: string | null;
+    model?: string | null;
+    estimated_cost_usd?: number | null;
+    user_email?: string | null;
+    error_message?: string | null;
+    retry_count: number;
+    has_output: boolean;
+    created_at?: string | null;
+    updated_at?: string | null;
+    processing_started_at?: string | null;
+    duration_ms?: number | null;
+  }>;
+  notes?: string[];
 };
 
 export type ConfigOptions = {

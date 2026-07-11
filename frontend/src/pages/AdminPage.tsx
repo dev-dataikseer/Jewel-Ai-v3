@@ -17,6 +17,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { PromptEditor } from "@/components/PromptEditor";
 import { PromptSandbox } from "@/components/admin/PromptSandbox";
+import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { api } from "@/lib/api";
 import type { AdminMetrics, ConfigOptions, RateEntry } from "@/types";
@@ -24,6 +25,7 @@ import { label } from "@/types";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "monitoring", label: "Monitoring", icon: Activity },
   { id: "providers", label: "Providers", icon: KeyRound },
   { id: "prompts", label: "Prompts", icon: SlidersHorizontal },
   { id: "test", label: "Prompt Test", icon: TestTube2 },
@@ -148,6 +150,8 @@ export function AdminPage() {
                 </div>
               </div>
             )}
+
+            {tab === "monitoring" && <UsageMonitor />}
 
             {tab === "providers" && <ProviderSettings />}
 

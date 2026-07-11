@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY backend /app
 COPY prompts /app/prompts
 
-CMD ["sh", "-c", "celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}"]
+CMD ["sh", "-c", "celery -A app.tasks.celery_app.celery_app worker --beat --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}"]

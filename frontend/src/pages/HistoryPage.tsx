@@ -59,15 +59,10 @@ export function HistoryPage() {
       if (pageParam) params.cursor = pageParam;
       if (workflowFilter) params.workflow = workflowFilter;
       if (statusFilter === "FAVORITES") params.favorites_only = true;
-      else if (statusFilter !== "ALL" && statusFilter !== "PENDING") {
-        params.status = statusFilter;
-      }
+      else if (statusFilter === "PENDING") params.status = "PENDING,PROCESSING";
+      else if (statusFilter !== "ALL") params.status = statusFilter;
       const res = await api.get<JobsListResponse>("/jobs", { params });
-      let items = res.data.items;
-      if (statusFilter === "PENDING") {
-        items = items.filter((j) => j.status === "PENDING" || j.status === "PROCESSING");
-      }
-      return { ...res.data, items };
+      return res.data;
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,

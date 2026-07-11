@@ -13,8 +13,8 @@ Create a project with:
 | Service | Dockerfile | Notes |
 |---------|------------|--------|
 | **web** | `Dockerfile` | FastAPI + React SPA on `$PORT` |
-| **worker** | `Dockerfile.worker` | Celery image generation |
-| **PostgreSQL** | Plugin | Auto-injects `DATABASE_URL` |
+| **worker** | `Dockerfile.worker` | Celery worker **with Beat** for stuck/webhook sweeps |
+| **PostgreSQL** | Plugin | Auto-injects `DATABASE_URL` — use **one** Postgres only |
 | **Redis** | Plugin | Auto-injects `REDIS_URL` |
 
 ## 3. Environment variables (web + worker)
@@ -23,45 +23,55 @@ Create a project with:
 |----------|----------|---------|
 | `NODE_ENV` | yes | `production` |
 | `JWT_SECRET` | yes | long random string |
-| `FERNET_KEY` | yes | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `FERNET_KEY` | yes | Fernet key |
 | `FAL_KEY` | yes | fal.ai API key |
 | `ADMIN_EMAIL` | yes | `admin@jewelai.com` |
-| `ADMIN_PASSWORD` | yes | strong password |
+| `ADMIN_PASSWORD` | yes | strong (not `changeme`) |
 | `DEFAULT_USER_EMAIL` | yes | `studio@jewelai.com` |
-| `DEFAULT_USER_PASSWORD` | yes | strong password |
+| `DEFAULT_USER_PASSWORD` | yes | strong (not `studio123`) |
+| `FORCE_SEED_PASSWORDS` | no | `false` — only `true` to reset seed passwords |
 | `ALLOW_PROMPT_RESEED` | no | `false` |
-| `API_PUBLIC_URL` | yes* | `https://hj-jewel-ai.data-ikseer.com` |
-| `FRONTEND_ORIGIN` | yes* | `https://hj-jewel-ai.data-ikseer.com` |
+| `STORAGE_BACKEND` | yes (prod) | `r2` |
+| `R2_*` / Railway `AWS_*` | yes if r2 | bucket credentials |
+| `API_PUBLIC_URL` | yes* | public HTTPS URL |
+| `FRONTEND_ORIGIN` | yes* | same origin as SPA |
 
-\*If unset, Railway’s `RAILWAY_PUBLIC_DOMAIN` is applied automatically when placeholders still point at localhost.
+\*If unset, Railway’s `RAILWAY_PUBLIC_DOMAIN` is applied when placeholders still point at localhost.
 
-`DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, and `PORT` are set by Railway.
+**Invariant:** web and worker must share the **same** Postgres and Redis.
 
-For the worker, set:
+Worker example:
 
 ```
 CELERY_BROKER_URL=${{Redis.REDIS_URL}}
 CELERY_RESULT_BACKEND=${{Redis.REDIS_URL}}/1
 REDIS_URL=${{Redis.REDIS_URL}}
 DATABASE_URL=${{Postgres.DATABASE_URL}}
+STORAGE_BACKEND=r2
+FAL_KEY=...
+JWT_SECRET=...
+FERNET_KEY=...
+API_PUBLIC_URL=https://...
+NODE_ENV=production
 ```
 
 ## 4. Custom domain
 
-1. Railway → web service → **Settings** → **Networking** → **Custom Domain**
+1. Railway → web → **Networking** → **Custom Domain**
 2. Add `hj-jewel-ai.data-ikseer.com`
-3. Point DNS CNAME to Railway’s target
-4. Set `API_PUBLIC_URL` and `FRONTEND_ORIGIN` to `https://hj-jewel-ai.data-ikseer.com`
+3. DNS CNAME → Railway target
+4. Set `API_PUBLIC_URL` / `FRONTEND_ORIGIN` to that HTTPS URL
 
 ## 5. Verify
 
-- `GET https://hj-jewel-ai.data-ikseer.com/health` → `database: true`, `redis: true`
-- Login as admin → **Admin → Users** loads (no “Try again”)
-- Studio generate completes (worker service running)
+- `GET /health` → `database: true` (HTTP 503 if DB down)
+- Admin → **Monitoring** loads
+- Studio generate completes (worker + Beat)
+- Unsigned `/uploads/...` → 401
 
 ## Local Docker (optional)
 
 ```bash
-cd Jewel_V3/config
+cd config
 docker compose up -d --build
 ```

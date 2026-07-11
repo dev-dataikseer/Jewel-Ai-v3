@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth.deps import RequireAdmin, get_current_user
@@ -26,11 +26,10 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(
-    body: RefreshRequest | None = None,
-    refresh_token: str | None = Query(None, alias="refresh_token"),
+    body: RefreshRequest,
     db: Session = Depends(get_db),
 ):
-    token = (body.refresh_token if body else None) or refresh_token
+    token = body.refresh_token
     if not token:
         raise HTTPException(status_code=400, detail="refresh_token required")
     payload = decode_token(token)

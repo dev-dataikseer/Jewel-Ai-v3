@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, StrictUndefined, UndefinedError
+from jinja2 import BaseLoader, StrictUndefined, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment
 
-_jinja = Environment(loader=BaseLoader(), undefined=StrictUndefined, autoescape=False)
+_jinja = SandboxedEnvironment(loader=BaseLoader(), undefined=StrictUndefined, autoescape=False)
 
 TOKEN_BUDGET_WORDS = 1200
 NEGATIVE_TYPE = "negative"

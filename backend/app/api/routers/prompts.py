@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth.deps import RequireAdmin, RequireOperator
+from app.auth.deps import RequireAdmin, RequireOperator, RequireUser
 from app.database import get_db
 from app.models import (
     PromptMasterTemplate,
@@ -78,7 +78,7 @@ def _serialize_subject_version(ver: PromptSubjectVersion) -> dict:
 
 
 @router.get("/templates")
-def list_templates(db: Session = Depends(get_db)):
+def list_templates(user: RequireUser, db: Session = Depends(get_db)):
     rows = db.query(PromptMasterTemplate).all()
     result = []
     for t in rows:
@@ -151,7 +151,7 @@ def upsert_template(body: dict, user: RequireAdmin, db: Session = Depends(get_db
 
 
 @router.get("/subjects")
-def list_subjects(workflow: str | None = None, db: Session = Depends(get_db)):
+def list_subjects(user: RequireUser, workflow: str | None = None, db: Session = Depends(get_db)):
     q = db.query(PromptSubject)
     if workflow:
         q = q.filter(PromptSubject.workflow == workflow)
@@ -231,7 +231,7 @@ def upsert_subject(body: dict, user: RequireAdmin, db: Session = Depends(get_db)
 
 
 @router.get("/variants")
-def list_variants(workflow: str | None = None, db: Session = Depends(get_db)):
+def list_variants(user: RequireUser, workflow: str | None = None, db: Session = Depends(get_db)):
     q = db.query(PromptVariant)
     if workflow:
         q = q.filter(PromptVariant.workflow == workflow)
@@ -296,7 +296,7 @@ def upsert_variant(body: dict, user: RequireAdmin, db: Session = Depends(get_db)
 
 
 @router.get("/workflows/{workflow}/layer-config")
-def get_layer_config(workflow: str, db: Session = Depends(get_db)):
+def get_layer_config(workflow: str, user: RequireUser, db: Session = Depends(get_db)):
     row = db.query(PromptWorkflowLayerConfig).filter(PromptWorkflowLayerConfig.workflow == workflow).first()
     structural = list(row.structural_layers) if row and row.structural_layers else default_structural_config(workflow)
     return {"workflow": workflow, "structural_layers": structural}
@@ -319,7 +319,7 @@ def update_layer_config(workflow: str, body: dict, user: RequireAdmin, db: Sessi
 
 
 @router.get("/presets")
-def list_presets(db: Session = Depends(get_db)):
+def list_presets(user: RequireUser, db: Session = Depends(get_db)):
     return db.query(StylePreset).filter(StylePreset.is_active == True).all()  # noqa: E712
 
 

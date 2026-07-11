@@ -52,14 +52,18 @@ class StorageService:
     def resolve_path(self, url: str) -> Path | None:
         if self.uses_object_storage:
             return None
-        if not url.startswith("/uploads/"):
+        path_part = url.split("?", 1)[0]
+        if not path_part.startswith("/uploads/"):
             return None
-        path = self.uploads_dir / url.replace("/uploads/", "", 1)
+        path = self.uploads_dir / path_part.replace("/uploads/", "", 1)
         if path.exists():
             return path
         return None
 
     def read_upload(self, filename: str) -> tuple[bytes, str]:
+        filename = filename.split("?", 1)[0].lstrip("/")
+        if filename.startswith("uploads/"):
+            filename = filename[len("uploads/") :]
         ext = Path(filename).suffix.lower()
         content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
         if self.uses_object_storage:
@@ -74,16 +78,22 @@ class StorageService:
         return path.read_bytes(), content_type
 
     def public_url(self, url: str) -> str:
-        """Absolute URL for external services (fal worker fetch)."""
-        if url.startswith("http://") or url.startswith("https://"):
-            return url
-        if url.startswith("/uploads/"):
-            base = settings.api_public_url.rstrip("/")
-            return f"{base}{url}"
-        return url
+        """Absolute URL for external services (fal worker fetch). Uses signed /uploads when needed."""
+        from app.security.media_signing import sign_media_url
+
+        signed = sign_media_url(url) or url
+        if signed.startswith("http://") or signed.startswith("https://"):
+            return signed
+        if signed.startswith("/uploads/"):
+            base = (settings.r2_public_url or settings.api_public_url).rstrip("/")
+            # Prefer API signed proxy so private buckets stay private.
+            if settings.r2_public_url and self.uses_object_storage and not signed.startswith("/uploads/"):
+                return f"{base}{signed}"
+            return f"{settings.api_public_url.rstrip('/')}{signed}"
+        return signed
 
     def read_bytes_by_url(self, url: str) -> bytes | None:
-        filename = parse_upload_path(url)
+        filename = parse_upload_path(url.split("?", 1)[0])
         if not filename:
             return None
         try:

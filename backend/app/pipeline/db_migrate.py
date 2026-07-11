@@ -370,3 +370,20 @@ def migrate_workflow_subjects(db: Session) -> None:
                 new_subj.active_version_id = new_ver.id
             by_jt[key] = new_subj
     db.commit()
+
+
+def migrate_batch_user_column(engine: Engine) -> None:
+    """Add batches.user_id if missing (tenancy for bulk jobs)."""
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        _add_column_if_missing(conn, inspector, "batches", "user_id", "VARCHAR(36)")
+        dialect = engine.dialect.name
+        if dialect == "postgresql" and inspector.has_table("batches"):
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_batches_user_id ON batches (user_id)"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_user_id ON assets (user_id)"))
+            except Exception:
+                pass

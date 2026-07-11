@@ -9,7 +9,12 @@ from app.models import (
     PromptSubjectVersion,
     User,
 )
-from app.pipeline.layers import default_master_scaffold, default_subject_scaffold, layers_from_legacy_master, layers_from_legacy_subject
+from app.pipeline.layers import (
+    default_master_scaffold,
+    default_subject_scaffold,
+    layers_from_legacy_master,
+    layers_from_legacy_subject,
+)
 from app.providers.registry import seed_model_definitions, seed_providers
 from seeds.prompts_data import JEWELRY_TYPES, WORKFLOWS
 
@@ -22,22 +27,19 @@ def seed_admin_user(db: Session) -> None:
     if not email or not password:
         return
 
-    for user in db.query(User).filter(User.role == "admin").all():
-        if user.email.strip() != email:
-            db.delete(user)
-    db.flush()
-
+    # Do not delete other admins on every boot — that is destructive.
     existing = db.query(User).filter(User.email == email).first()
-    hashed = hash_password(password)
     if existing:
-        existing.hashed_password = hashed
         existing.is_active = True
         existing.role = "admin"
+        # Only reset password when explicitly forced.
+        if settings.force_seed_passwords:
+            existing.hashed_password = hash_password(password)
     else:
         db.add(
             User(
                 email=email,
-                hashed_password=hashed,
+                hashed_password=hash_password(password),
                 name="Admin",
                 role="admin",
                 credits=10000,
@@ -53,17 +55,17 @@ def seed_default_user(db: Session) -> None:
         return
 
     existing = db.query(User).filter(User.email == email).first()
-    hashed = hash_password(password)
     if existing:
-        existing.hashed_password = hashed
         existing.is_active = True
         if existing.role == "admin" and email != settings.admin_email.strip():
             existing.role = "user"
+        if settings.force_seed_passwords:
+            existing.hashed_password = hash_password(password)
     else:
         db.add(
             User(
                 email=email,
-                hashed_password=hashed,
+                hashed_password=hash_password(password),
                 name="Studio User",
                 role="user",
                 credits=500,
@@ -161,8 +163,6 @@ def seed_prompts(db: Session) -> None:
 
     _backfill_layers(db)
     db.commit()
-
-
 
 
 def run_all_seeds(db: Session) -> None:

@@ -361,9 +361,10 @@ export function StudioPage() {
       return [job];
     },
     onSuccess: (jobs) => {
-      setSessionJobs(jobs);
+      setSessionJobs((prev) => [...jobs, ...prev]);
       if (jobs[0]) setActiveJobId(jobs[0].id);
       queryClient.invalidateQueries({ queryKey: ["recent-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
       toast.success(jobs.length > 1 ? "Bulk batch started" : "Generation started");
     },
     onError: (err: Error) => toast.error(err.message || "Generation failed"),
@@ -393,10 +394,11 @@ export function StudioPage() {
         await api.post(`/favorites/${job.id}`);
         setFavoriteIds((s) => new Set(s).add(job.id));
       }
+      queryClient.invalidateQueries({ queryKey: ["favorites"] });
     } catch {
       toast.error("Could not update favorite");
     }
-  }, [favoriteIds]);
+  }, [favoriteIds, queryClient]);
 
   const schemaProps = selectedModel?.input_schema?.properties ?? {};
   const showAspectRatio = "aspect_ratio" in schemaProps || "image_size" in schemaProps;

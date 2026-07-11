@@ -1,4 +1,4 @@
-"""Rate limiting middleware for job creation, uploads, and webhooks."""
+"""Rate limiting middleware for auth, jobs, uploads, and webhooks."""
 import time
 from collections import defaultdict
 
@@ -11,7 +11,10 @@ from app.config import get_settings
 _buckets: dict[str, list[float]] = defaultdict(list)
 LIMIT = 30
 WINDOW = 60
+AUTH_LIMIT = 10
+AUTH_WINDOW = 60
 WEBHOOK_LIMIT = 60
+BULK_LIMIT = 10
 settings = get_settings()
 _redis_client = None
 _redis_checked = False
@@ -47,21 +50,6 @@ def _rate_limit_key(request: Request) -> str:
     return f"ip:{request.client.host if request.client else 'unknown'}"
 
 
-def _redis_allow(key: str, limit: int, window: int) -> bool:
-    client = _get_redis()
-    if not client:
-        return True
-    now = int(time.time())
-    bucket = f"rl:{key}:{now // window}"
-    try:
-        count = client.incr(bucket)
-        if count == 1:
-            client.expire(bucket, window + 1)
-        return count <= limit
-    except Exception:
-        return True
-
-
 def _memory_allow(key: str, limit: int, window: int) -> bool:
     now = time.time()
     _buckets[key] = [t for t in _buckets[key] if now - t < window]
@@ -72,16 +60,35 @@ def _memory_allow(key: str, limit: int, window: int) -> bool:
 
 
 def _allow(key: str, limit: int, window: int = WINDOW) -> bool:
-    if _get_redis():
-        return _redis_allow(key, limit, window)
+    """Prefer Redis; on Redis unavailable/error use in-process limiter (never fail-open)."""
+    client = _get_redis()
+    if client:
+        now = int(time.time())
+        bucket = f"rl:{key}:{now // window}"
+        try:
+            count = client.incr(bucket)
+            if count == 1:
+                client.expire(bucket, window + 1)
+            return count <= limit
+        except Exception:
+            pass
     return _memory_allow(key, limit, window)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if request.method == "POST":
-            if path.endswith("/jobs") or "/assets/upload" in path:
+        method = request.method
+        if method == "POST":
+            if path.endswith("/auth/login") or path.endswith("/auth/refresh"):
+                key = f"{_rate_limit_key(request)}:auth"
+                if not _allow(key, AUTH_LIMIT, AUTH_WINDOW):
+                    raise HTTPException(status_code=429, detail="Too many auth attempts")
+            elif path.endswith("/jobs/bulk") or path.endswith("/assets/bulk-upload"):
+                key = f"{_rate_limit_key(request)}:bulk"
+                if not _allow(key, BULK_LIMIT):
+                    raise HTTPException(status_code=429, detail="Rate limit exceeded")
+            elif path.endswith("/jobs") or "/assets/upload" in path:
                 key = f"{_rate_limit_key(request)}:jobs"
                 if not _allow(key, LIMIT):
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")

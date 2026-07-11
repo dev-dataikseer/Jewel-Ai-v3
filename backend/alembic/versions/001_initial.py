@@ -4,7 +4,11 @@ Revision ID: 001_initial
 Revises:
 Create Date: 2026-07-02
 
+Full schema is created via SQLAlchemy metadata + additive migrators in
+`app.pipeline.db_migrate` on startup. Subsequent revisions (002+) apply
+incremental changes.
 """
+
 from typing import Sequence, Union
 
 revision: str = "001_initial"
@@ -14,8 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-  pass
+    # Intentionally empty — baseline tables come from create_all / ORM.
+    pass
 
 
 def downgrade() -> None:
-  pass
+    pass

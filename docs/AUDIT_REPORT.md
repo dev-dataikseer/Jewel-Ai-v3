@@ -139,3 +139,17 @@ New modules: `app/providers/model_validate.py`, `app/providers/fal_response.py`
 2. E2E test with Playwright for Studio generate → output visible without navigation
 3. Prometheus metrics on `/health` and job queue depth
 4. Move rate limiter and circuit breaker state to Redis for multi-worker deployments
+
+## July 2026 system audit remediation (in progress)
+
+See [SYSTEM_AUDIT_REPORT.md](./SYSTEM_AUDIT_REPORT.md). Notable code fixes landed locally:
+
+- Job URL SSRF hardening + host allowlist suffix fix
+- Seed passwords create-only (`FORCE_SEED_PASSWORDS`)
+- Celery worker `--beat` + webhook-pending timeout
+- Signed `/uploads` URLs; auth required without signature
+- Login/bulk rate limits; prompt GET auth; Jinja sandbox
+- Frontend auth sync, Studio session/favorites/History PENDING
+- Alembic `003_batch_user`; `batches.user_id`
+
+P2-14 remains **partial**: `001_initial` is still an intentional placeholder; schema also uses `create_all` + `db_migrate`.

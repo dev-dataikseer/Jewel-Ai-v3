@@ -89,9 +89,13 @@ class JobOut(BaseModel):
     master_version_id: Optional[str] = None
     subject_version_id: Optional[str] = None
     variant_version_id: Optional[str] = None
+    cost: Optional[float] = None
     credits_used: int = 0
+    retry_count: int = 0
+    processing_started_at: Optional[datetime] = None
     batch_id: Optional[str] = None
     project_id: Optional[str] = None
+    user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

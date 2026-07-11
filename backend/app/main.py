@@ -3,7 +3,7 @@ from pathlib import Path
 
 import os
 import redis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,11 +26,17 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    from app.pipeline.db_migrate import migrate_layer_columns, migrate_job_indexes, migrate_tenancy_columns
+    from app.pipeline.db_migrate import (
+        migrate_layer_columns,
+        migrate_job_indexes,
+        migrate_tenancy_columns,
+        migrate_batch_user_column,
+    )
 
     migrate_layer_columns(engine)
     migrate_job_indexes(engine)
     migrate_tenancy_columns(engine)
+    migrate_batch_user_column(engine)
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects
@@ -66,7 +72,8 @@ if storage.uses_object_storage:
 else:
     uploads_path = Path(settings.uploads_dir)
     uploads_path.mkdir(parents=True, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+    # Always serve via signed/auth router (no anonymous StaticFiles).
+    app.include_router(storage_files.router)
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
@@ -80,7 +87,7 @@ app.include_router(public.router, prefix="/api")
 
 
 @app.get("/health")
-def health():
+def health(response: Response):
     db_ok = False
     redis_ok = False
     try:
@@ -94,6 +101,8 @@ def health():
         redis_ok = r.ping()
     except Exception:
         pass
+    if not db_ok:
+        response.status_code = 503
     return {
         "status": "ok" if db_ok else "degraded",
         "service": "jewel-ai-api",
