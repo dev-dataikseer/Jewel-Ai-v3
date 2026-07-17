@@ -15,22 +15,31 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex h-[3.75rem] max-w-[1600px] w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Link to="/" className="flex min-w-0 items-center gap-3 hover:opacity-90 transition-opacity">
-            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
-              <Gem className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-[15px] font-semibold text-slate-900 leading-none">
-                Jewel AI Studio
-              </h1>
-              <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                {subtitle}
-              </p>
-            </div>
-          </Link>
+        <div className="mx-auto flex h-[3.75rem] max-w-[1600px] w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          {/* Brand + credits status (left) — balance sits with identity, not after Admin */}
+          <div className="flex min-w-0 items-center gap-3">
+            <Link to="/" className="flex min-w-0 items-center gap-3 hover:opacity-90 transition-opacity">
+              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
+                <Gem className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-[15px] font-semibold text-slate-900 leading-none">
+                  Jewel AI Studio
+                </h1>
+                <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  {subtitle}
+                </p>
+              </div>
+            </Link>
+            {user && (
+              <div className="hidden sm:block">
+                <FalCreditsWidget />
+              </div>
+            )}
+          </div>
 
-          <nav className="flex items-center gap-0.5 sm:gap-1" aria-label="Primary">
+          {/* Primary nav + account (right) */}
+          <nav className="flex shrink-0 items-center gap-0.5 sm:gap-1" aria-label="Primary">
             <NavLink to="/" active={location.pathname === "/"}>
               <Sparkles className="size-3.5" />
               <span className="hidden sm:inline">Studio</span>
@@ -52,8 +61,9 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
 
             <div className="ml-1 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden />
 
+            {/* Mobile: credits near account actions */}
             {user && (
-              <div className="ml-1">
+              <div className="sm:hidden">
                 <FalCreditsWidget />
               </div>
             )}

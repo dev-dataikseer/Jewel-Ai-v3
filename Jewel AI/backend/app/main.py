@@ -35,19 +35,28 @@ async def lifespan(app: FastAPI):
             migrate_job_indexes,
             migrate_tenancy_columns,
             migrate_batch_user_column,
+            migrate_provider_admin_key_column,
+            migrate_generation_job_runtime_columns,
         )
 
         migrate_layer_columns(engine)
         migrate_job_indexes(engine)
         migrate_tenancy_columns(engine)
         migrate_batch_user_column(engine)
+        migrate_provider_admin_key_column(engine)
+        migrate_generation_job_runtime_columns(engine)
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects
 
         migrate_workflow_subjects(db)
         run_all_seeds(db)
-        sweep_stuck_jobs()
+        try:
+            sweep_stuck_jobs()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("sweep_stuck_jobs skipped during startup")
     finally:
         db.close()
     circuit_breaker.init_circuit_breaker()

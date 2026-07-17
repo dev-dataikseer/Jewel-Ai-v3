@@ -42,11 +42,38 @@ def resolve_fal_billing_key(db: Session | None = None) -> str | None:
     """
     Platform Billing APIs require an Admin-scoped fal key.
 
-    Prefer FAL_ADMIN_KEY, then fall back to the generation key (works only if that
-    key already has Admin scope).
+    Priority:
+    1. Provider.encrypted_admin_api_key (Admin UI)
+    2. FAL_ADMIN_KEY env / .env (re-read on each call so .env edits apply after restart
+       and after settings cache clear)
+    3. Generation key fallback (only works if that key already has Admin scope)
     """
-    settings = get_settings()
-    admin = (settings.fal_admin_key or "").strip()
+    import os
+
+    if db is not None:
+        try:
+            from app.models import Provider
+            from app.auth.security import decrypt_secret
+
+            provider = (
+                db.query(Provider)
+                .filter(Provider.name == "FAL")
+                .order_by(Provider.priority.asc())
+                .first()
+            )
+            if provider and getattr(provider, "encrypted_admin_api_key", None):
+                key = decrypt_secret(provider.encrypted_admin_api_key)
+                if key:
+                    return key
+        except Exception as exc:
+            logger.debug("Could not resolve FAL admin key from DB: %s", exc)
+
+    # Live process env first, then settings (.env). Clear settings cache if env was added later.
+    admin = (os.environ.get("FAL_ADMIN_KEY") or "").strip()
+    if not admin:
+        from app.config import get_settings
+
+        admin = (get_settings().fal_admin_key or "").strip()
     if admin:
         return admin
     return resolve_fal_api_key(db)
@@ -58,11 +85,18 @@ def get_credits_view(db: Session | None = None, *, refresh: bool = False) -> dic
 
     Never raises for transient fal failures — returns last cache or Unavailable.
     """
+    import os
+
+    from app.config import get_settings
+
     settings = get_settings()
     threshold = float(settings.fal_credits_low_threshold or 5.0)
     cached = get_cached_billing()
 
     if refresh or cached is None:
+        # Pick up FAL_ADMIN_KEY added to .env after the API process started
+        if not (os.environ.get("FAL_ADMIN_KEY") or "").strip() and not (settings.fal_admin_key or "").strip():
+            get_settings.cache_clear()
         try:
             cached = refresh_credits_cache(db)
         except FalBillingError as exc:

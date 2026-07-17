@@ -198,6 +198,7 @@ export type Provider = {
   is_active: boolean;
   health_status: string;
   has_api_key: boolean;
+  has_admin_api_key?: boolean;
   capabilities?: Record<string, unknown>;
 };
 

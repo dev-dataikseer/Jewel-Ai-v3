@@ -175,6 +175,7 @@ class ProviderOut(BaseModel):
     is_active: bool
     health_status: str
     has_api_key: bool = False
+    has_admin_api_key: bool = False
     capabilities: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"from_attributes": True}
@@ -183,6 +184,7 @@ class ProviderOut(BaseModel):
 class ProviderUpdate(BaseModel):
     model_name: Optional[str] = None
     api_key: Optional[str] = None
+    admin_api_key: Optional[str] = None
     is_active: Optional[bool] = None
     priority: Optional[int] = None
     base_url: Optional[str] = None

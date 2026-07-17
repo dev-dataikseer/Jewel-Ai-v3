@@ -81,14 +81,16 @@ export function FalCreditsWidget() {
 
   return (
     <div
-      className={`inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-lg border px-2 text-[12px] font-medium ${
+      className={`inline-flex h-8 max-w-[280px] items-center gap-1.5 rounded-lg border px-2 text-[12px] font-medium ${
         showLow
           ? "border-amber-200 bg-amber-50 text-amber-900"
-          : "border-slate-200 bg-slate-50 text-slate-700"
+          : data?.available
+            ? "border-slate-200 bg-slate-50 text-slate-700"
+            : "border-rose-200 bg-rose-50 text-rose-800"
       }`}
       title={titleHint}
     >
-      {showLow ? (
+      {showLow || (!data?.available && data?.error) ? (
         <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-hidden />
       ) : (
         <Wallet className="size-3.5 shrink-0 text-slate-500" aria-hidden />
@@ -97,12 +99,16 @@ export function FalCreditsWidget() {
         <p className="truncate tabular-nums">
           {isLoading && !data ? "Credits…" : `Credits: ${label}`}
         </p>
-        {updated && (
+        {data?.error && !data.available ? (
+          <p className="truncate text-[10px] font-normal text-rose-600" title={data.error}>
+            {data.error}
+          </p>
+        ) : updated ? (
           <p className="truncate text-[10px] font-normal text-slate-500">
             Updated {updated}
             {data?.stale ? " · stale" : ""}
           </p>
-        )}
+        ) : null}
       </div>
       <button
         type="button"

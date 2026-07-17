@@ -203,6 +203,8 @@ class Provider(Base):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     encrypted_api_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    # Admin-scoped key for Platform Billing (GET /account/billing?expand=credits)
+    encrypted_admin_api_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     env_key_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     base_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=100)

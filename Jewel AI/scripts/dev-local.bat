@@ -89,7 +89,13 @@ set "ADMIN_EMAIL=admin@jewelai.com"
 set "ADMIN_PASSWORD=changeme"
 set "API_PUBLIC_URL=http://127.0.0.1:8000"
 
-start "Jewel AI - API" cmd /k "cd /d "%API%" && set PYTHONPATH=. && set DATABASE_URL=sqlite:///./jewel.db && set ADMIN_EMAIL=admin@jewelai.com && set ADMIN_PASSWORD=changeme && set API_PUBLIC_URL=http://127.0.0.1:8000 && "%VENV%\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
+REM Load FAL_ADMIN_KEY from backend\.env into this process (pydantic also reads .env;
+REM explicit set helps when a parent shell polluted env vars).
+for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b "FAL_ADMIN_KEY=" "%API%\.env"`) do (
+  set "FAL_ADMIN_KEY=%%B"
+)
+
+start "Jewel AI - API" cmd /k "cd /d "%API%" && set PYTHONPATH=. && set DATABASE_URL=sqlite:///./jewel.db && set ADMIN_EMAIL=admin@jewelai.com && set ADMIN_PASSWORD=changeme && set API_PUBLIC_URL=http://127.0.0.1:8000 && if defined FAL_ADMIN_KEY set FAL_ADMIN_KEY=!FAL_ADMIN_KEY! && "%VENV%\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
 
 timeout /t 3 /nobreak >nul
 

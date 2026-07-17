@@ -387,3 +387,39 @@ def migrate_batch_user_column(engine: Engine) -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_user_id ON assets (user_id)"))
             except Exception:
                 pass
+
+
+def migrate_provider_admin_key_column(engine: Engine) -> None:
+    """Add providers.encrypted_admin_api_key for fal Platform Billing Admin key."""
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        dialect = engine.dialect.name
+        col_type = "BYTEA" if dialect == "postgresql" else "BLOB"
+        _add_column_if_missing(conn, inspector, "providers", "encrypted_admin_api_key", col_type)
+
+
+def migrate_generation_job_runtime_columns(engine: Engine) -> None:
+    """Add V4 job runtime columns missing from older SQLite DBs."""
+    inspector = inspect(engine)
+    if not inspector.has_table("generation_jobs"):
+        return
+    dialect = engine.dialect.name
+    dt = "TIMESTAMP" if dialect == "postgresql" else "DATETIME"
+    with engine.begin() as conn:
+        _add_column_if_missing(conn, inspector, "generation_jobs", "celery_task_id", "VARCHAR(255)")
+        _add_column_if_missing(conn, inspector, "generation_jobs", "processing_started_at", dt)
+        try:
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_jobs_celery_task_id ON generation_jobs (celery_task_id)")
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_jobs_status_processing_started "
+                    "ON generation_jobs (status, processing_started_at)"
+                )
+            )
+        except Exception:
+            pass

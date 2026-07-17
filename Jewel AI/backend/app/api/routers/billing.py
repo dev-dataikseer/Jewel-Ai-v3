@@ -33,4 +33,8 @@ def get_fal_credits(user: RequireUser, db: Session = Depends(get_db)):
 @router.post("/fal-credits/refresh", response_model=FalCreditsOut)
 def refresh_fal_credits(user: RequireAdmin, db: Session = Depends(get_db)):
     """Manual refresh — admin only (hits fal.ai Platform Billing API)."""
+    # Pick up FAL_ADMIN_KEY added to .env after process start
+    from app.config import get_settings
+
+    get_settings.cache_clear()
     return FalCreditsOut(**get_credits_view(db, refresh=True))

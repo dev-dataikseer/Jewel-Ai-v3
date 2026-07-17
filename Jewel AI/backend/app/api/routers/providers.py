@@ -25,6 +25,7 @@ def _provider_out(p: Provider) -> ProviderOut:
         is_active=p.is_active,
         health_status=p.health_status,
         has_api_key=bool(p.encrypted_api_key),
+        has_admin_api_key=bool(getattr(p, "encrypted_admin_api_key", None)),
         capabilities=p.capabilities or {},
     )
 
@@ -45,6 +46,8 @@ def update_provider(name: str, body: ProviderUpdate, user: RequireAdmin, db: Ses
         prov.model_name = body.model_name
     if body.api_key:
         prov.encrypted_api_key = encrypt_secret(body.api_key)
+    if body.admin_api_key:
+        prov.encrypted_admin_api_key = encrypt_secret(body.admin_api_key)
     if body.is_active is not None:
         prov.is_active = body.is_active
     if body.priority is not None:

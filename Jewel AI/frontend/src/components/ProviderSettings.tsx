@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Activity, Save } from "lucide-react";
+import { Activity, Save, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
+import type { FalCreditsResponse } from "@/components/FalCreditsWidget";
 import type { ModelDefinition, Provider } from "@/types";
 
 export function ProviderSettings() {
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
+  const [adminApiKey, setAdminApiKey] = useState("");
   const [modelEndpoint, setModelEndpoint] = useState("fal-ai/flux-pro/kontext");
 
   const { data: providers = [], isLoading } = useQuery({
@@ -26,12 +28,15 @@ export function ProviderSettings() {
     mutationFn: async () => {
       await api.patch("/providers/FAL", {
         api_key: apiKey || undefined,
+        admin_api_key: adminApiKey || undefined,
         model_name: modelEndpoint,
       });
     },
     onSuccess: () => {
       setApiKey("");
+      setAdminApiKey("");
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["billing", "fal-credits"] });
       toast.success("fal.ai settings saved");
     },
     onError: () => toast.error("Failed to save fal.ai settings"),
@@ -49,6 +54,23 @@ export function ProviderSettings() {
     onError: () => toast.error("fal.ai provider test failed"),
   });
 
+  const testBillingMutation = useMutation({
+    mutationFn: async () =>
+      (await api.post<FalCreditsResponse>("/billing/fal-credits/refresh")).data,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["billing", "fal-credits"], data);
+      if (data.available && data.current_balance != null) {
+        toast.success(
+          `Billing OK — ${data.currency} ${data.current_balance.toFixed(2)}` +
+            (data.username ? ` (${data.username})` : "")
+        );
+      } else {
+        toast.error(data.error || "Billing credits unavailable — check Admin API key");
+      }
+    },
+    onError: () => toast.error("Billing refresh failed"),
+  });
+
   if (isLoading) {
     return <p className="text-sm text-slate-500">Loading provider...</p>;
   }
@@ -58,8 +80,9 @@ export function ProviderSettings() {
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
         <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">fal.ai Provider Settings</h2>
         <p className="text-xs text-slate-500 mt-1">
-          Configure FAL_KEY and the default image-plus-text endpoint. Studio model parameters are generated from each
-          model schema.
+          Generation uses an API-scoped key. Credits in the header require an{" "}
+          <span className="font-semibold text-slate-700">Admin-scoped</span> key (fal dashboard → Keys → Admin)
+          for <code className="text-[10px]">GET /account/billing?expand=credits</code>.
         </p>
       </div>
       <div className="p-6 space-y-5">
@@ -87,15 +110,35 @@ export function ProviderSettings() {
           </div>
           <div>
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              FAL_KEY
+              FAL_KEY (generation)
             </label>
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={fal?.has_api_key ? "Saved - enter to replace" : "Enter fal.ai API key"}
+              placeholder={fal?.has_api_key ? "Saved — enter to replace" : "Enter fal.ai API key"}
               className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              FAL Admin API key (billing / credits)
+            </label>
+            <input
+              type="password"
+              value={adminApiKey}
+              onChange={(e) => setAdminApiKey(e.target.value)}
+              placeholder={
+                fal?.has_admin_api_key
+                  ? "Saved — enter to replace Admin-scoped key"
+                  : "Paste Admin API key (Authorization: Key …)"
+              }
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Required for header Credits. API-scope keys return 403 on billing. You can also set{" "}
+              <code className="text-[10px]">FAL_ADMIN_KEY</code> in backend/.env.
+            </p>
           </div>
         </div>
 
@@ -117,6 +160,15 @@ export function ProviderSettings() {
           >
             <Activity className="size-4 text-blue-600" />
             {testMutation.isPending ? "Testing..." : "Test fal.ai"}
+          </button>
+          <button
+            type="button"
+            onClick={() => testBillingMutation.mutate()}
+            disabled={testBillingMutation.isPending}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            <Wallet className="size-4 text-emerald-600" />
+            {testBillingMutation.isPending ? "Checking…" : "Test billing / credits"}
           </button>
         </div>
       </div>
