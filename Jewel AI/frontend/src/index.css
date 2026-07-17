@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-ink: #0f172a;
+  --app-muted: #64748b;
+  --app-border: #e2e8f0;
+  --app-accent: #2563eb;
+  --app-accent-soft: #eff6ff;
+  --app-accent-hover: #1d4ed8;
+}
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-950 antialiased;
+    font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "ss01" on, "kern" on;
+    letter-spacing: -0.011em;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight text-slate-900;
+    letter-spacing: -0.02em;
+  }
+
+  label {
+    @apply font-semibold;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  .ui-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .ui-label {
+    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500;
+  }
+
+  .ui-input {
+    @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition
+      placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20;
+  }
+
+  .ui-btn-primary {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white
+      transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-btn-secondary {
+    @apply inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700
+      transition hover:bg-slate-50;
+  }
+}
+
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,204 @@
+==============================================================================
+FEATURE: CATALOG IMAGE
+==============================================================================
+
+Model-agnostic prompt set for GPT Image, GPT Edit, Nano Banana (Pro/2/Edit),
+FLUX, FLUX Kontext, SDXL, Imagen, Seedream, and similar image generation/editing models.
+
+------------------------------------------------------------------------------
+MASTER PROMPT
+------------------------------------------------------------------------------
+
+ROLE: Act as a master commercial product photographer and high-end jewelry retoucher shooting for a luxury e-commerce catalog with locked brand-studio consistency.
+
+CAMERA & RENDERING: High-end macro product photography, 100mm macro lens, f/11 aperture for edge-to-edge sharpness, focus-stacked, clean commercial resolution. Output must be free of pixel bursting, banding, compression artifacts, chromatic fringing, and AI smear.
+
+LOCKED BRAND STUDIO THEME (do not invent other surfaces):
+  - Default: Pure photographic white seamless infinity sweep (cool-neutral white, NOT cream, beige, ivory, or warm parchment).
+  - Alternate only when explicitly requested: Polished black acrylic with a subtle mirrored reflection fading to black.
+  Never use cream velvet, beige fabric, golden-hour outdoor bokeh, marble lifestyle sets, oak tabletops, cushions, pillows, jewelry pillows, or decorative props unless the client brief explicitly overrides this lock for a single job.
+
+LIGHTING & MATERIAL PHYSICS: Soft wrap lighting from large soft fill sources placed off-camera. Authentic ambient occlusion and a precise dark contact shadow anchoring the jewelry. Metal must show controlled specular highlights without a visible softbox rectangle, circular disc, lamp, halo, or glowing orb reflected in the metal or floating in the frame. Top lighting must not create a hard hotspot or blown specular disc on the crown of the piece.
+
+UPRIGHT PRESENTATION LOCK: Jewelry must appear upright, standing, or hanging as in a professional catalog — never lying flat on cushions, pillows, velvet pads, fabric nests, or decorative props. Use an invisible mount, clear acrylic stand, or clean contact with the seamless/acrylic ground only. Preserve the client's source angle and orientation when a presentation reference is provided.
+
+QUALITY STANDARD: Commercial e-commerce ready with no retouching required. Luxury target: Cartier / Tiffany campaign grade, editorial sharpness, believable material physics. Zero tolerance: melted or warped prongs, incorrect gemstone optics, floating jewelry, pixel burst, banding, softbox reflections as shapes, design alteration, or cream/beige theme drift.
+
+PRESERVATION LOCK: CRITICAL MANDATE: strictly preserve the exact original geometry, facet cuts, true colors, and scale of the jewelry piece. Do not warp the metal structure, do not shift or melt the prongs, and do not alter the internal refractions of the gemstones. COMPOSITION LOCK: standalone product photograph only. Do NOT include a model, hand, wrist, arm, neck, ear, or any human body part. Do not add mannequins, lifestyle staging, or narrative scenery. Do not render any lamp, light fixture, halo, glowing disc, or light orb as a visible object — illumination is implied through soft falloff and shadow only. SOURCE ARTIFACTS: if the uploaded source contains studio watermarks, weight labels, price tags, supplier stamps, SKU strings, or any overlay text burned into corners, treat them as non-jewelry artifacts. Do not reproduce, redraw, ghost, or reposition them — exclude all overlay text and stamps entirely.
+
+AVOID: cream background, beige background, warm parchment, cushions, pillows, jewelry pillows, fabric nests, decorative props, 3d render, digital illustration, artificial AI glow, over-smoothed metal, pixel bursting, banding, neon colors, cartoon, painterly effect, low quality, blurry, distorted jewelry, melted or warped metal, floating jewelry, missing contact shadow, gemstone color shift, metal tarnish, hallmark distortion, chain link errors, CGI look, plastic sheen, watermark, text overlay, visible lamp or light fixture, glowing halo or softbox disc in metal or frame, dramatic single-spotlight editorial mood unless explicitly requested, reproduced source-image watermark or weight/price label text.
+
+USAGE: Combine this Master Prompt with the matching Child Prompt for the specific jewelry type being processed. The Child Prompt adds piece-specific placement, framing, and physical behavior on top of everything specified above.
+
+
+------------------------------------------------------------------------------
+CHILD PROMPTS (jewelry-type specific)
+------------------------------------------------------------------------------
+
+--- RING ---
+
+SUBJECT: Ring. A luxury ring positioned upright to showcase the center stone, the profile of the band, and any side-stone detailing.
+
+PHYSICS: Rigid metal band; weight implied through a firm contact shadow, not deformation.
+
+FRAMING & PLACEMENT: Stand the ring upright (not lying on its side on a cushion). Rotate roughly 15 degrees toward camera so the center stone's table facet is visible; macro focus on the table facet and prong tips; scale the piece to occupy 30-45% of frame width. Invisible mount or clean acrylic contact only.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions or props. No lamp, halo, or softbox disc as a visible object.
+
+Reminder: preserve every original detail of this ring exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- NECKLACE ---
+
+SUBJECT: Necklace / chain. A luxury necklace presented in an upright catalog hang — chain links catching light evenly, pendant (if present) centered and forward-facing.
+
+PHYSICS: Chain hangs from an invisible or acrylic support in a controlled vertical presentation; lowest point (or pendant) hangs true to gravity. Do not stage the piece lying on cushions or fabric.
+
+FRAMING & PLACEMENT: Upright hanging presentation with even illumination along chain links; macro focus on the clasp or pendant central stone; leave visible chain on both sides for scale. Match client reference angle when provided. No U-drape on pillows.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc in metal or frame.
+
+Reminder: preserve every original detail of this necklace exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BANGLES ---
+
+SUBJECT: Bangles. Rigid luxury bangles, stacked or single, upright to highlight continuous metalwork and engraved or set surface detail.
+
+PHYSICS: No drape — rigid circular form; stacked bangles show slight independent tilt, not a fused single object.
+
+FRAMING & PLACEMENT: Stand bangles upright on edge or on a clear acrylic support — never nestled in cushions. Angle to reveal circumference edge and clasp; macro focus on maximum engraving or stone density.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this bangles exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BRACELET ---
+
+SUBJECT: Bracelet. A luxury flexible bracelet (chain, tennis, or link style) in upright catalog presentation with consistent light catch across every link.
+
+PHYSICS: Flexible links may show a controlled curve while remaining upright on an acrylic/invisible mount — not collapsed flat on fabric.
+
+FRAMING & PLACEMENT: Clasp visible but not centered; macro focus on the largest stone or most detailed link; show the full form. No pillow staging.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this bracelet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- KARA ---
+
+SUBJECT: Kara. A traditional rigid Sikh/Punjabi kara (steel or precious-metal bracelet), circular and unbroken, presented as a premium catalog product.
+
+PHYSICS: Fully rigid circular form; no drape; no deformation. Weight implied only through contact shadow.
+
+FRAMING & PLACEMENT: Stand the kara upright on edge (vertical plane toward camera) on white seamless or black acrylic — never lying flat on cushions. Slight angle to reveal inner and outer band thickness and any engraved or patterned detail; macro focus on the densest engraving or hallmark area; scale to occupy 35-50% of frame width.
+
+COMPOSITION REMINDER: standalone product shot of the kara. No body parts, no cushions, no props, no softbox disc or lamp object.
+
+Reminder: preserve every original detail of this kara exactly as captured in the source image -- design, metal, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (STUDS) ---
+
+SUBJECT: Earrings (Studs). A pair of luxury stud earrings in balanced left-right alignment, each capturing internal gemstone light identically.
+
+PHYSICS: Rigid, no drape; the piece holds its exact form regardless of orientation.
+
+FRAMING & PLACEMENT: Frame both earrings symmetrically at matched scale and angle, upright facing camera; macro focus on the front-facing gemstone table; keep spacing proportional. No cushion staging.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this earrings (studs) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (DROPS) ---
+
+SUBJECT: Earrings (Drops). Luxury drop earrings arranged upright to showcase articulated setting and natural suspension of the lower element.
+
+PHYSICS: Drop element hangs true to gravity, perpendicular to the floor.
+
+FRAMING & PLACEMENT: Full drop length visible top to bottom on invisible mount; matched hang angle for both earrings. No cushions.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this earrings (drops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- EARRINGS (HOOPS) ---
+
+SUBJECT: Earrings (Hoops). Luxury hoop earrings showcasing outer paving or texture and inner metallic curvature.
+
+PHYSICS: Rigid circular form.
+
+FRAMING & PLACEMENT: Stand upright; angle to reveal outer paved surface and a portion of the inner band; macro focus on hinge and densest paving. No cushions.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this earrings (hoops) exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- PENDANT ---
+
+SUBJECT: Pendant. A luxury pendant emphasizing craftsmanship and the central stone or motif, shown with bail and a short length of chain, hanging upright.
+
+PHYSICS: Hangs plumb from the bail under gravity.
+
+FRAMING & PLACEMENT: Center pendant face-forward hanging upright; bail at top of frame; no cushion staging.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this pendant exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- WATCH ---
+
+SUBJECT: Watch. A luxury timepiece with clear dial texture, hand and index detail, and strap or bracelet in an elegant upright presentation.
+
+PHYSICS: Case remains rigid; strap follows a controlled curve on acrylic/invisible support — not a fabric pillow nest unless the source already shows that and must be preserved.
+
+FRAMING & PLACEMENT: Dial at classic 10:10 presentation; upright facing camera; macro focus on dial center and indexes.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. Prefer acrylic/seamless over beige cushions. No softbox disc.
+
+Reminder: preserve every original detail of this watch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- BROOCH ---
+
+SUBJECT: Brooch. A luxury brooch composed to catch studio light evenly across its full geometric arrangement.
+
+PHYSICS: Rigid flat or sculptural form; no drape.
+
+FRAMING & PLACEMENT: Face-forward and level; upright presentation; full outer silhouette with margin. No cushions.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this brooch exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- ANKLET ---
+
+SUBJECT: Anklet. A delicate luxury anklet in upright hanging catalog presentation, highlighting fine chain links and charm or clasp detail.
+
+PHYSICS: Fine chain hangs from invisible support; charm hangs plumb.
+
+FRAMING & PLACEMENT: Upright hang; clasp off-center; macro on finest chain detail. No cushions.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this anklet exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- CUFFLINKS ---
+
+SUBJECT: Cufflinks. Premium cufflinks showcasing the front face design and polished toggle or chain-link back mechanism.
+
+PHYSICS: Rigid front face; back mechanism hangs or folds naturally.
+
+FRAMING & PLACEMENT: Pair symmetrically at matched angle, upright; no cushion staging.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this cufflinks exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.
+
+--- MULTIPLE ITEMS ---
+
+SUBJECT: Multiple Items. A curated luxury jewelry set arranged harmoniously as a cohesive catalog composition, each piece individually legible and upright.
+
+PHYSICS: Each item obeys its own physics; items must not merge or hide silhouettes.
+
+FRAMING & PLACEMENT: Clear visual hierarchy on white seamless or black acrylic only; every item upright with its own contact shadow; no cushions or beige props.
+
+COMPOSITION REMINDER: standalone product shot. No body parts. No cushions. No softbox disc.
+
+Reminder: preserve every original detail of this multiple items exactly as captured in the source image -- design, metal, gemstones, engravings, proportions, and texture. Apply only the transformation defined in the Master Prompt.

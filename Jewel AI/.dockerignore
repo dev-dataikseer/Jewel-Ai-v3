@@ -1,0 +1,21 @@
+# Git / build context should be the Jewel AI app root (contains backend/, frontend/, deploy/).
+.git
+**/__pycache__
+**/*.pyc
+**/.venv
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+**/uploads
+**/*.db
+**/.pytest_cache
+**/coverage
+**/.mypy_cache
+**/.ruff_cache
+**/jewel.db
+docs/Modals
+**/*.md
+!README.md

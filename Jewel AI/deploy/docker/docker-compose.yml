@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jewel_ai
+      POSTGRES_USER: jewel
+      POSTGRES_PASSWORD: jewel
+    ports:
+      - "5432:5432"
+    volumes:
+      - jewel_ai_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jewel -d jewel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    env_file:
+      - ../env/.env.production
+    environment:
+      DATABASE_URL: postgresql://jewel:jewel@postgres:5432/jewel_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      API_PUBLIC_URL: https://hj-jewel-ai.data-ikseer.com
+      FRONTEND_ORIGIN: https://hj-jewel-ai.data-ikseer.com
+      SCHEMA_VIA_ALEMBIC: "true"
+      NODE_ENV: production
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    # Match Railway: worker + beat so stuck-job sweep and billing refresh run.
+    command: celery -A app.tasks.celery_app.celery_app worker --beat --loglevel=INFO --concurrency=3
+    env_file:
+      - ../env/.env.production
+    environment:
+      DATABASE_URL: postgresql://jewel:jewel@postgres:5432/jewel_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      API_PUBLIC_URL: https://hj-jewel-ai.data-ikseer.com
+      FRONTEND_ORIGIN: https://hj-jewel-ai.data-ikseer.com
+      SCHEMA_VIA_ALEMBIC: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  jewel_ai_postgres:

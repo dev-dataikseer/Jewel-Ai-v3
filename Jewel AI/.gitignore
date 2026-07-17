@@ -1,0 +1,24 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/uploads/
+backend/jewel.db
+backend/.env
+
+# Production secrets (copy from deploy/env/.env.production.example)
+deploy/env/.env.production
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+
+# Archived artifacts with sensitive fragments
+archive/artifacts/
+
+# OS
+.DS_Store
+Thumbs.db

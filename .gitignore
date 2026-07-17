@@ -1,21 +1,22 @@
-# Python
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/.pytest_cache/
-backend/uploads/
-backend/jewel.db
-backend/.env
-api.txt
+# Nested app secrets / build artifacts
+Jewel AI/backend/.venv/
+Jewel AI/backend/**/__pycache__/
+Jewel AI/backend/.pytest_cache/
+Jewel AI/backend/uploads/
+Jewel AI/backend/*.db
+Jewel AI/backend/.env
+Jewel AI/deploy/env/.env.production
+Jewel AI/frontend/node_modules/
+Jewel AI/frontend/dist/
+Jewel AI/frontend/.vite/
+Jewel AI/frontend/tsconfig.tsbuildinfo
 
-# Production secrets (copy from .env.production.example)
-config/.env.production
+# Local duplicates / archives
+Jewel AI - Copy/
+archive/artifacts/
 
-# Node
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-
-# OS
 .DS_Store
 Thumbs.db
+*.pyc
+.venv/
+node_modules/

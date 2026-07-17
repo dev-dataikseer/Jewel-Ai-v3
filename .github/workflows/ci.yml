@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Jewel AI/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Pip audit
+        continue-on-error: true
+        run: pip install pip-audit && pip-audit -r requirements.txt
+      - name: Alembic upgrade (empty SQLite)
+        env:
+          DATABASE_URL: sqlite:///./alembic_ci.db
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: development
+          SCHEMA_VIA_ALEMBIC: "true"
+        run: alembic upgrade head
+      - name: Pytest
+        env:
+          DATABASE_URL: sqlite:///./test_ci.db
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: development
+        run: python -m pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Jewel AI/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: Jewel AI/frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: npm audit
+        continue-on-error: true
+        run: npm audit --omit=dev
+      - name: Build
+        run: npm run build

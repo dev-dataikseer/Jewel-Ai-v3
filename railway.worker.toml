@@ -1,8 +1,0 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.worker"
-
-# Celery workers do not serve HTTP traffic — no healthcheck.
-[deploy]
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
