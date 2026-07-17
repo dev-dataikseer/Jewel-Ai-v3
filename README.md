@@ -1,13 +1,14 @@
 # Jewel AI
 
-Canonical application lives in **[`Jewel AI/`](./Jewel%20AI/)** (V4).
+Canonical application sources live in **[`Jewel AI/`](./Jewel%20AI/)** (V4).
 
-Railway **Root Directory** must be set to `Jewel AI`. See [`Jewel AI/docs/DEPLOY_LAYOUT.md`](./Jewel%20AI/docs/DEPLOY_LAYOUT.md).
+Railway uses **repo-root** `railway.toml` + `Dockerfile` (Root Directory must stay empty).
+See [`Jewel AI/docs/DEPLOY_LAYOUT.md`](./Jewel%20AI/docs/DEPLOY_LAYOUT.md).
 
 ```
+railway.toml / Dockerfile     ← Railway entrypoints (repo root)
 Jewel AI/
   backend/     FastAPI + Celery
   frontend/    React (Vite)
   deploy/      Docker / nginx / env examples
-  Dockerfile   API + SPA image
 ```

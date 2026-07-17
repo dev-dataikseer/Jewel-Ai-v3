@@ -2,20 +2,19 @@
 
 ## Git vs Railway root
 
-The canonical application tree lives under **`Jewel AI/`** at the repository root
-(`backend/`, `frontend/`, `deploy/`, `Dockerfile`, `railway.toml`).
+Application sources live under **`Jewel AI/`** (`backend/`, `frontend/`, `deploy/`).
 
-In the Railway dashboard:
+Railway looks for **`railway.toml` at the git repository root**. That file (and root
+`Dockerfile` / `Dockerfile.worker`) copy sources from `Jewel AI/…`.
 
 | Setting | Value |
 |---------|-------|
-| **Root Directory** | `Jewel AI` |
-| API service Dockerfile | `Dockerfile` (monolith: API + SPA) |
-| Worker service Dockerfile | `deploy/docker/Dockerfile.worker` (worker + beat) |
-| Worker config | `railway.worker.toml` |
+| **Root Directory** | *(leave empty)* — do **not** set to `Jewel AI` |
+| API config | `railway.toml` → `Dockerfile` |
+| Worker config | `railway.worker.toml` → `Dockerfile.worker` |
 
-Do **not** point Railway at the parent folder that also contains `archive/` or
-`Jewel AI - Copy/` — those are not the deployable app.
+If Root Directory is mistakenly set to `Jewel AI`, either clear it or point the
+service config at the nested `Jewel AI/railway.toml` instead.
 
 ## Local compose (mirrors Railway)
 
@@ -26,7 +25,6 @@ docker compose up --build
 
 - **api**: `alembic upgrade head` then uvicorn; `SCHEMA_VIA_ALEMBIC=true`
 - **worker**: Celery worker **with beat** (stuck-job sweep + fal credits refresh)
-- **web**: optional nginx front (local); Railway serves SPA from the API image
 
 ## App version
 
