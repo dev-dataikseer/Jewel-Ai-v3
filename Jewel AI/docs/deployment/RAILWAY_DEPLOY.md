@@ -35,7 +35,9 @@ Create a project with:
 | `NODE_ENV` | yes | `production` |
 | `JWT_SECRET` | yes | long random string |
 | `FERNET_KEY` | yes | Fernet key |
-| `FAL_KEY` | yes | fal.ai API key |
+| `FAL_KEY` | yes | fal.ai API key (generation / paid image calls) |
+| `FAL_ADMIN_KEY` | yes* | fal.ai **Admin**-scoped key for header Credits (`GET /account/billing`) |
+| `FAL_CREDITS_LOW_THRESHOLD` | no | Low-balance warning threshold (default `5`) |
 | `ADMIN_EMAIL` | yes | `admin@jewelai.com` |
 | `ADMIN_PASSWORD` | yes | strong (not `changeme`) |
 | `DEFAULT_USER_EMAIL` | yes | `studio@jewelai.com` |
@@ -49,6 +51,8 @@ Create a project with:
 
 \*If unset, Railway’s `RAILWAY_PUBLIC_DOMAIN` is applied when placeholders still point at localhost.
 
+\*Without `FAL_ADMIN_KEY`, image generation still works with `FAL_KEY`, but the header shows **Credits: Unavailable** (API-scope keys get 403 on billing). Create an Admin key in the [fal.ai dashboard → Keys](https://fal.ai/dashboard/keys), then add it under Railway → **Jewel-Ai-v3** (and **worker**) → **Variables**.
+
 **Invariant:** web and worker must share the **same** Postgres and Redis.
 
 Worker example:
@@ -60,6 +64,7 @@ REDIS_URL=${{Redis.REDIS_URL}}
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 STORAGE_BACKEND=r2
 FAL_KEY=...
+FAL_ADMIN_KEY=...
 JWT_SECRET=...
 FERNET_KEY=...
 API_PUBLIC_URL=https://...

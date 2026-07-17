@@ -28,23 +28,25 @@ APP_VERSION = "4.0.0"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # When SCHEMA_VIA_ALEMBIC=true, operators run `alembic upgrade head` instead of create_all.
+    # Still apply additive, idempotent column patches so new columns never block boot.
+    from app.pipeline.db_migrate import (
+        migrate_layer_columns,
+        migrate_job_indexes,
+        migrate_tenancy_columns,
+        migrate_batch_user_column,
+        migrate_provider_admin_key_column,
+        migrate_generation_job_runtime_columns,
+    )
+
     if not settings.schema_via_alembic:
         Base.metadata.create_all(bind=engine)
-        from app.pipeline.db_migrate import (
-            migrate_layer_columns,
-            migrate_job_indexes,
-            migrate_tenancy_columns,
-            migrate_batch_user_column,
-            migrate_provider_admin_key_column,
-            migrate_generation_job_runtime_columns,
-        )
-
         migrate_layer_columns(engine)
         migrate_job_indexes(engine)
         migrate_tenancy_columns(engine)
         migrate_batch_user_column(engine)
-        migrate_provider_admin_key_column(engine)
         migrate_generation_job_runtime_columns(engine)
+    # Always ensure Admin billing column exists (safe IF NOT EXISTS on Postgres).
+    migrate_provider_admin_key_column(engine)
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects

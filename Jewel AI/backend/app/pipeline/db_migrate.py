@@ -391,11 +391,24 @@ def migrate_batch_user_column(engine: Engine) -> None:
 
 def migrate_provider_admin_key_column(engine: Engine) -> None:
     """Add providers.encrypted_admin_api_key for fal Platform Billing Admin key."""
-    inspector = inspect(engine)
+    import logging
+
+    log = logging.getLogger(__name__)
+    dialect = engine.dialect.name
     with engine.begin() as conn:
-        dialect = engine.dialect.name
-        col_type = "BYTEA" if dialect == "postgresql" else "BLOB"
-        _add_column_if_missing(conn, inspector, "providers", "encrypted_admin_api_key", col_type)
+        # Prefer IF NOT EXISTS on Postgres — avoids stale inspector / silent no-ops.
+        if dialect == "postgresql":
+            conn.execute(
+                text(
+                    "ALTER TABLE providers "
+                    "ADD COLUMN IF NOT EXISTS encrypted_admin_api_key BYTEA"
+                )
+            )
+            log.info("Ensured providers.encrypted_admin_api_key (postgresql)")
+            return
+        inspector = inspect(engine)
+        _add_column_if_missing(conn, inspector, "providers", "encrypted_admin_api_key", "BLOB")
+        log.info("Ensured providers.encrypted_admin_api_key (sqlite)")
 
 
 def migrate_generation_job_runtime_columns(engine: Engine) -> None:
