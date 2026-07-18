@@ -92,19 +92,15 @@ def enqueue_image_job(job_id: str) -> None:
         logger.info("Job queued via Celery", extra={"extra_fields": {"job_id": job_id, "celery_task_id": async_result.id}})
         return
 
-    if settings.is_production:
-        msg = "No Celery worker available — job cannot be processed in production"
-        logger.error(msg, extra={"extra_fields": {"job_id": job_id}})
-        _fail_job_enqueue(job_id, msg)
-        return
-
+    # Fall back to in-process thread so Studio keeps working if the worker
+    # image is mid-redeploy / unhealthy. Not durable across API restarts.
     from app.tasks.generate import _process_job_async
 
     reason = "no Redis" if not _redis_available() else "no Celery worker"
     logger.warning(
         "Processing job in background thread (%s) — not durable across restarts",
         reason,
-        extra={"extra_fields": {"job_id": job_id}},
+        extra={"extra_fields": {"job_id": job_id, "production": settings.is_production}},
     )
 
     def _run() -> None:
