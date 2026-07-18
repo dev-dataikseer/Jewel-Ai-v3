@@ -1,4 +1,7 @@
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth.deps import RequireAdmin, RequireOperator, RequireUser
@@ -78,16 +81,60 @@ def _serialize_subject_version(ver: PromptSubjectVersion) -> dict:
     }
 
 
+def _versions_by_ids(db: Session, model, ids: list[str | None]) -> dict:
+    clean = [i for i in ids if i]
+    if not clean:
+        return {}
+    return {row.id: row for row in db.query(model).filter(model.id.in_(clean)).all()}
+
+
+class PromptTemplateUpsert(BaseModel):
+    workflow: str
+    name: Optional[str] = None
+    prompt_text: Optional[str] = None
+    layers: Optional[list[Any]] = None
+    composition_mode: str = "layered"
+    raw_override: Optional[str] = None
+    is_active: bool = True
+
+
+class PromptSubjectUpsert(BaseModel):
+    jewelry_type: str
+    workflow: str = "CATALOG_IMAGE"
+    prompt_text: Optional[str] = None
+    layers: Optional[list[Any]] = None
+    composition_mode: str = "layered"
+    raw_override: Optional[str] = None
+    is_active: bool = True
+
+
+class PromptVariantUpsert(BaseModel):
+    workflow: str
+    variant_key: str
+    label: Optional[str] = None
+    sort_order: int = 0
+    prompt_text: str
+    negative_addon: Optional[str] = None
+    is_active: bool = True
+
+
+class PromptFragmentUpsert(BaseModel):
+    fragment_key: Optional[str] = None
+    key: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    prompt_text: Optional[str] = None
+    content_json: Optional[Any] = None
+    is_active: bool = True
+
+
 @router.get("/templates")
 def list_templates(user: RequireUser, db: Session = Depends(get_db)):
     rows = db.query(PromptMasterTemplate).all()
+    versions = _versions_by_ids(db, PromptMasterVersion, [t.active_version_id for t in rows])
     result = []
     for t in rows:
-        ver = (
-            db.query(PromptMasterVersion).filter(PromptMasterVersion.id == t.active_version_id).first()
-            if t.active_version_id
-            else None
-        )
+        ver = versions.get(t.active_version_id) if t.active_version_id else None
         layers = sort_layers(ver.layers) if ver and ver.layers else []
         result.append(
             {
@@ -106,11 +153,11 @@ def list_templates(user: RequireUser, db: Session = Depends(get_db)):
 
 
 @router.post("/templates")
-def upsert_template(body: dict, user: RequireAdmin, db: Session = Depends(get_db)):
-    workflow = body["workflow"]
+def upsert_template(body: PromptTemplateUpsert, user: RequireAdmin, db: Session = Depends(get_db)):
+    workflow = body.workflow
     tmpl = db.query(PromptMasterTemplate).filter(PromptMasterTemplate.workflow == workflow).first()
     if not tmpl:
-        tmpl = PromptMasterTemplate(workflow=workflow, name=body.get("name", workflow), is_active=True)
+        tmpl = PromptMasterTemplate(workflow=workflow, name=body.name or workflow, is_active=True)
         db.add(tmpl)
         db.flush()
 
@@ -124,12 +171,12 @@ def upsert_template(body: dict, user: RequireAdmin, db: Session = Depends(get_db
     db.query(PromptMasterVersion).filter(PromptMasterVersion.template_id == tmpl.id).update({"is_active": False})
 
     structural = _get_structural_config(db, workflow)
-    if body.get("layers"):
-        layers = sort_layers(body["layers"])
+    if body.layers:
+        layers = sort_layers(body.layers)
         validate_master_layers(layers)
-        prompt_text = body.get("prompt_text") or assemble_raw_text_from_layers(layers)
+        prompt_text = body.prompt_text or assemble_raw_text_from_layers(layers)
     else:
-        prompt_text = body.get("prompt_text") or ""
+        prompt_text = body.prompt_text or ""
         layers = derive_layers_from_raw_text(prompt_text, workflow, scope="master", structural_config=structural)
         validate_master_layers(layers)
 
@@ -137,16 +184,16 @@ def upsert_template(body: dict, user: RequireAdmin, db: Session = Depends(get_db
         template_id=tmpl.id,
         version=version_num,
         prompt_text=prompt_text,
-        composition_mode=body.get("composition_mode", "layered"),
+        composition_mode=body.composition_mode,
         layers=layers,
-        raw_override=body.get("raw_override"),
+        raw_override=body.raw_override,
         is_active=True,
         source="admin",
     )
     db.add(ver)
     db.flush()
     tmpl.active_version_id = ver.id
-    tmpl.is_active = body.get("is_active", True)
+    tmpl.is_active = body.is_active
     db.commit()
     return {"id": tmpl.id, "version_id": ver.id, "version": version_num}
 
@@ -157,13 +204,10 @@ def list_subjects(user: RequireUser, workflow: str | None = None, db: Session = 
     if workflow:
         q = q.filter(PromptSubject.workflow == workflow)
     rows = q.all()
+    versions = _versions_by_ids(db, PromptSubjectVersion, [s.active_version_id for s in rows])
     result = []
     for s in rows:
-        ver = (
-            db.query(PromptSubjectVersion).filter(PromptSubjectVersion.id == s.active_version_id).first()
-            if s.active_version_id
-            else None
-        )
+        ver = versions.get(s.active_version_id) if s.active_version_id else None
         layers = sort_layers(ver.layers) if ver and ver.layers else []
         result.append(
             {
@@ -182,9 +226,9 @@ def list_subjects(user: RequireUser, workflow: str | None = None, db: Session = 
 
 
 @router.post("/subjects")
-def upsert_subject(body: dict, user: RequireAdmin, db: Session = Depends(get_db)):
-    jt = body["jewelry_type"]
-    workflow = body.get("workflow", "CATALOG_IMAGE")
+def upsert_subject(body: PromptSubjectUpsert, user: RequireAdmin, db: Session = Depends(get_db)):
+    jt = body.jewelry_type
+    workflow = body.workflow
     subj = (
         db.query(PromptSubject)
         .filter(PromptSubject.workflow == workflow, PromptSubject.jewelry_type == jt)
@@ -204,12 +248,12 @@ def upsert_subject(body: dict, user: RequireAdmin, db: Session = Depends(get_db)
     vnum = (last.version + 1) if last else 1
     db.query(PromptSubjectVersion).filter(PromptSubjectVersion.subject_id == subj.id).update({"is_active": False})
 
-    if body.get("layers"):
-        layers = sort_layers(body["layers"])
+    if body.layers:
+        layers = sort_layers(body.layers)
         validate_subject_layers(layers)
-        prompt_text = body.get("prompt_text") or assemble_raw_text_from_layers(layers)
+        prompt_text = body.prompt_text or assemble_raw_text_from_layers(layers)
     else:
-        prompt_text = body.get("prompt_text") or ""
+        prompt_text = body.prompt_text or ""
         layers = derive_layers_from_raw_text(prompt_text, workflow, scope="subject")
         validate_subject_layers(layers)
 
@@ -217,16 +261,16 @@ def upsert_subject(body: dict, user: RequireAdmin, db: Session = Depends(get_db)
         subject_id=subj.id,
         version=vnum,
         prompt_text=prompt_text,
-        composition_mode=body.get("composition_mode", "layered"),
+        composition_mode=body.composition_mode,
         layers=layers,
-        raw_override=body.get("raw_override"),
+        raw_override=body.raw_override,
         is_active=True,
         source="admin",
     )
     db.add(ver)
     db.flush()
     subj.active_version_id = ver.id
-    subj.is_active = body.get("is_active", True)
+    subj.is_active = body.is_active
     db.commit()
     return {"id": subj.id, "version_id": ver.id}
 
@@ -237,13 +281,10 @@ def list_variants(user: RequireUser, workflow: str | None = None, db: Session = 
     if workflow:
         q = q.filter(PromptVariant.workflow == workflow)
     rows = q.order_by(PromptVariant.sort_order).all()
+    versions = _versions_by_ids(db, PromptVariantVersion, [v.active_version_id for v in rows])
     result = []
     for v in rows:
-        ver = (
-            db.query(PromptVariantVersion).filter(PromptVariantVersion.id == v.active_version_id).first()
-            if v.active_version_id
-            else None
-        )
+        ver = versions.get(v.active_version_id) if v.active_version_id else None
         result.append(
             {
                 "id": v.id,
@@ -259,17 +300,17 @@ def list_variants(user: RequireUser, workflow: str | None = None, db: Session = 
 
 
 @router.post("/variants")
-def upsert_variant(body: dict, user: RequireAdmin, db: Session = Depends(get_db)):
+def upsert_variant(body: PromptVariantUpsert, user: RequireAdmin, db: Session = Depends(get_db)):
     var = db.query(PromptVariant).filter(
-        PromptVariant.workflow == body["workflow"],
-        PromptVariant.variant_key == body["variant_key"],
+        PromptVariant.workflow == body.workflow,
+        PromptVariant.variant_key == body.variant_key,
     ).first()
     if not var:
         var = PromptVariant(
-            workflow=body["workflow"],
-            variant_key=body["variant_key"],
-            label=body.get("label", body["variant_key"]),
-            sort_order=body.get("sort_order", 0),
+            workflow=body.workflow,
+            variant_key=body.variant_key,
+            label=body.label or body.variant_key,
+            sort_order=body.sort_order,
             is_active=True,
         )
         db.add(var)
@@ -285,8 +326,8 @@ def upsert_variant(body: dict, user: RequireAdmin, db: Session = Depends(get_db)
     ver = PromptVariantVersion(
         variant_id=var.id,
         version=vnum,
-        prompt_text=body["prompt_text"],
-        negative_addon=body.get("negative_addon"),
+        prompt_text=body.prompt_text,
+        negative_addon=body.negative_addon,
         is_active=True,
     )
     db.add(ver)
@@ -504,6 +545,7 @@ def list_fragments(user: RequireUser, db: Session = Depends(get_db)):
 
     rows = db.query(PromptFragment).order_by(PromptFragment.fragment_key.asc()).all()
     by_key = {r.fragment_key: r for r in rows}
+    versions = _versions_by_ids(db, PromptFragmentVersion, [r.active_version_id for r in rows])
     result = []
     for key in FRAGMENT_KEYS:
         t = by_key.get(key)
@@ -520,11 +562,7 @@ def list_fragments(user: RequireUser, db: Session = Depends(get_db)):
                 }
             )
             continue
-        ver = (
-            db.query(PromptFragmentVersion).filter(PromptFragmentVersion.id == t.active_version_id).first()
-            if t.active_version_id
-            else None
-        )
+        ver = versions.get(t.active_version_id) if t.active_version_id else None
         result.append(
             {
                 "id": t.id,
@@ -541,17 +579,17 @@ def list_fragments(user: RequireUser, db: Session = Depends(get_db)):
 
 
 @router.post("/fragments")
-def upsert_fragment(body: dict, user: RequireAdmin, db: Session = Depends(get_db)):
+def upsert_fragment(body: PromptFragmentUpsert, user: RequireAdmin, db: Session = Depends(get_db)):
     import json
 
     from app.models import PromptFragment, PromptFragmentVersion
     from app.prompt_engine.fragment_defaults import ENVIRONMENT_POOL, FRAGMENT_LABELS
 
-    key = body.get("fragment_key") or body.get("key")
+    key = body.fragment_key or body.key
     if not key:
         raise HTTPException(status_code=400, detail="fragment_key required")
-    prompt_text = body.get("prompt_text")
-    content_json = body.get("content_json")
+    prompt_text = body.prompt_text
+    content_json = body.content_json
     if key == ENVIRONMENT_POOL and content_json is None and prompt_text:
         try:
             content_json = json.loads(prompt_text)
@@ -567,8 +605,8 @@ def upsert_fragment(body: dict, user: RequireAdmin, db: Session = Depends(get_db
     if not frag:
         frag = PromptFragment(
             fragment_key=key,
-            name=body.get("name") or FRAGMENT_LABELS.get(key, key),
-            description=body.get("description"),
+            name=body.name or FRAGMENT_LABELS.get(key, key),
+            description=body.description,
             is_active=True,
         )
         db.add(frag)
@@ -595,10 +633,10 @@ def upsert_fragment(body: dict, user: RequireAdmin, db: Session = Depends(get_db
     db.add(ver)
     db.flush()
     frag.active_version_id = ver.id
-    frag.name = body.get("name") or frag.name
-    if body.get("description") is not None:
-        frag.description = body.get("description")
-    frag.is_active = body.get("is_active", True)
+    frag.name = body.name or frag.name
+    if body.description is not None:
+        frag.description = body.description
+    frag.is_active = body.is_active
     db.commit()
     return {"id": frag.id, "version_id": ver.id, "version": version_num}
 

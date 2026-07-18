@@ -1,9 +1,11 @@
 ﻿import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { StudioPage } from "@/pages/StudioPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { useAuth } from "@/hooks/useAuth";
 
+const StudioPage = lazy(() =>
+  import("@/pages/StudioPage").then((m) => ({ default: m.StudioPage })),
+);
 const HistoryPage = lazy(() =>
   import("@/pages/HistoryPage").then((m) => ({ default: m.HistoryPage })),
 );

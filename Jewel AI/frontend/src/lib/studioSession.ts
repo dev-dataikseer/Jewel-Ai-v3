@@ -15,6 +15,7 @@ export type StudioSessionDraft = {
   stylePresetId: string;
   promptText: string;
   lightingStyle?: string;
+  catalogMode?: "modern" | "reference_mirror" | "style_mood";
   sessionJobIds: string[];
   activeJobId: string | null;
   lastBatchId?: string | null;

@@ -15,7 +15,7 @@ ENV PYTHONPATH=/app
 ENV NODE_ENV=production
 ENV SCHEMA_VIA_ALEMBIC=true
 
-COPY backend/requirements.txt /app/requirements.txt
+COPY backend/requirements.lock.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend /app

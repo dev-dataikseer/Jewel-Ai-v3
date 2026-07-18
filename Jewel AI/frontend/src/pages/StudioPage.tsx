@@ -302,6 +302,13 @@ export function StudioPage() {
       if (draft.tryOnPreset === "customer" || draft.tryOnPreset === "studio") {
         setTryOnPreset(draft.tryOnPreset);
       }
+      if (
+        draft.catalogMode === "modern" ||
+        draft.catalogMode === "reference_mirror" ||
+        draft.catalogMode === "style_mood"
+      ) {
+        setCatalogMode(draft.catalogMode);
+      }
       if (draft.jewelryTypes?.length) setJewelryTypes(draft.jewelryTypes);
       if (draft.aspectRatio) setAspectRatio(draft.aspectRatio);
       if (draft.personGeneration) setPersonGeneration(draft.personGeneration);
@@ -357,6 +364,7 @@ export function StudioPage() {
       stylePresetId,
       promptText,
       lightingStyle,
+      catalogMode,
       lastBatchId,
       sessionJobIds: sessionJobs.map((j) => j.id).slice(0, 40),
       activeJobId,
@@ -381,6 +389,7 @@ export function StudioPage() {
     stylePresetId,
     promptText,
     lightingStyle,
+    catalogMode,
     lastBatchId,
     sessionJobs,
     activeJobId,

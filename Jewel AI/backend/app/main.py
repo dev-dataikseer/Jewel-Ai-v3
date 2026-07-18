@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
 import redis
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -47,10 +48,8 @@ async def lifespan(app: FastAPI):
         migrate_batch_user_column(engine)
         migrate_generation_job_runtime_columns(engine)
         migrate_prompt_fragments(engine)
-    else:
-        migrate_prompt_fragments(engine)
-    # Always ensure Admin billing column exists (safe IF NOT EXISTS on Postgres).
-    migrate_provider_admin_key_column(engine)
+        migrate_provider_admin_key_column(engine)
+    # When SCHEMA_VIA_ALEMBIC=true, operators run `alembic upgrade head` — no boot DDL.
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects
@@ -105,6 +104,15 @@ app = FastAPI(
 )
 
 
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers.setdefault("X-Request-ID", request_id)
+        return response
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -135,11 +143,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
 )
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 if storage.uses_object_storage:
     app.include_router(storage_files.router)

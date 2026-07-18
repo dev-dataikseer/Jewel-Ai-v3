@@ -15,14 +15,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8)
     name: Optional[str] = None
     role: str = "user"
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    password: Optional[str] = Field(default=None, min_length=6)
+    password: Optional[str] = Field(default=None, min_length=8)
     name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
@@ -30,7 +30,7 @@ class UserUpdate(BaseModel):
 
 class MeUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    password: Optional[str] = Field(default=None, min_length=6)
+    password: Optional[str] = Field(default=None, min_length=8)
     current_password: Optional[str] = None
     name: Optional[str] = None
 

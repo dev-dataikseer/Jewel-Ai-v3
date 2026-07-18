@@ -25,7 +25,11 @@ docker compose up --build
 
 - **api**: `alembic upgrade head` then uvicorn; `SCHEMA_VIA_ALEMBIC=true`
 - **worker**: Celery worker **with beat** (stuck-job sweep + fal credits refresh)
+- Images install from `backend/requirements.lock.txt`
 
 ## App version
 
 Production image / product line: **Jewel AI V4**.
+
+Canonical Railway instructions: [`docs/deployment/RAILWAY_DEPLOY.md`](deployment/RAILWAY_DEPLOY.md)
+(Root Directory empty — same as this file).

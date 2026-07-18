@@ -49,13 +49,27 @@ class StorageService:
     def save_upload(self, file: BinaryIO, filename: str, content_type: str) -> str:
         return self.save_bytes(file.read(), filename=filename, content_type=content_type)
 
+    def _contained_upload_path(self, relative: str) -> Path:
+        """Resolve relative path under uploads_dir; reject traversal."""
+        rel = relative.replace("\\", "/").lstrip("/")
+        if not rel or ".." in Path(rel).parts:
+            raise FileNotFoundError(relative)
+        root = self.uploads_dir.resolve()
+        path = (self.uploads_dir / rel).resolve()
+        if path != root and root not in path.parents:
+            raise FileNotFoundError(relative)
+        return path
+
     def resolve_path(self, url: str) -> Path | None:
         if self.uses_object_storage:
             return None
         path_part = url.split("?", 1)[0]
         if not path_part.startswith("/uploads/"):
             return None
-        path = self.uploads_dir / path_part.replace("/uploads/", "", 1)
+        try:
+            path = self._contained_upload_path(path_part.replace("/uploads/", "", 1))
+        except FileNotFoundError:
+            return None
         if path.exists():
             return path
         return None
@@ -67,12 +81,14 @@ class StorageService:
         ext = Path(filename).suffix.lower()
         content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
         if self.uses_object_storage:
+            if not filename or ".." in Path(filename).parts:
+                raise FileNotFoundError(filename)
             try:
                 data = get_object_bytes(self._s3_client(), settings.r2_bucket_name, filename)
             except Exception as exc:
                 raise FileNotFoundError(filename) from exc
             return data, content_type
-        path = self.uploads_dir / filename
+        path = self._contained_upload_path(filename)
         if not path.exists():
             raise FileNotFoundError(filename)
         return path.read_bytes(), content_type

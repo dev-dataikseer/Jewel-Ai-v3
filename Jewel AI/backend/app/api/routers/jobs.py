@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -116,17 +117,34 @@ def _stamp_timing(meta: dict | None, stage: str) -> dict:
     return out
 
 
-def _batch_to_out(db: Session, batch: Batch, *, include_jobs: bool = True) -> BatchOut:
-    jobs = (
-        db.query(GenerationJob)
-        .filter(GenerationJob.batch_id == batch.id)
-        .order_by(GenerationJob.created_at.asc())
+def _batch_status_counts(db: Session, batch_id: str) -> dict[str, int]:
+    rows = (
+        db.query(GenerationJob.status, func.count(GenerationJob.id))
+        .filter(GenerationJob.batch_id == batch_id)
+        .group_by(GenerationJob.status)
         .all()
     )
-    pending = sum(1 for j in jobs if j.status == "PENDING")
-    processing = sum(1 for j in jobs if j.status == "PROCESSING")
-    failed = sum(1 for j in jobs if j.status == "FAILED")
-    cancelled = sum(1 for j in jobs if j.status == "CANCELLED")
+    return {status: int(n) for status, n in rows}
+
+
+def _batch_to_out(db: Session, batch: Batch, *, include_jobs: bool = True) -> BatchOut:
+    jobs_out: list = []
+    if include_jobs:
+        jobs = (
+            db.query(GenerationJob)
+            .filter(GenerationJob.batch_id == batch.id)
+            .order_by(GenerationJob.created_at.asc())
+            .all()
+        )
+        counts = {
+            "PENDING": sum(1 for j in jobs if j.status == "PENDING"),
+            "PROCESSING": sum(1 for j in jobs if j.status == "PROCESSING"),
+            "FAILED": sum(1 for j in jobs if j.status == "FAILED"),
+            "CANCELLED": sum(1 for j in jobs if j.status == "CANCELLED"),
+        }
+        jobs_out = [_job_to_out(j, lean=True) for j in jobs]
+    else:
+        counts = _batch_status_counts(db, batch.id)
     return BatchOut(
         id=batch.id,
         name=batch.name,
@@ -135,13 +153,13 @@ def _batch_to_out(db: Session, batch: Batch, *, include_jobs: bool = True) -> Ba
         status=batch.status,
         total_jobs=batch.total_jobs,
         completed_jobs=batch.completed_jobs,
-        pending_jobs=pending,
-        processing_jobs=processing,
-        failed_jobs=failed,
-        cancelled_jobs=cancelled,
+        pending_jobs=counts.get("PENDING", 0),
+        processing_jobs=counts.get("PROCESSING", 0),
+        failed_jobs=counts.get("FAILED", 0),
+        cancelled_jobs=counts.get("CANCELLED", 0),
         created_at=batch.created_at,
         updated_at=batch.updated_at,
-        jobs=[_job_to_out(j, lean=True) for j in jobs] if include_jobs else [],
+        jobs=jobs_out,
     )
 
 

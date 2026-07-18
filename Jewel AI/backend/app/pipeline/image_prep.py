@@ -181,7 +181,12 @@ async def prepare_job_images_for_model(
     model_endpoint_id: str | None = None,
     logo_url: str | None = None,
 ) -> ModelImagePlan:
-    """Full pipeline: packet → validate → fal CDN URLs."""
+    """Full pipeline: packet → validate → fal CDN URLs.
+
+    Prefer calling ``build_model_image_plan`` from the worker and letting the fal
+    adapter run ``prepare_images`` — this helper is kept for tests/scripts that
+    need a single-step prep without going through route_generation.
+    """
     plan = build_model_image_plan(
         job,
         model_spec=model_spec,

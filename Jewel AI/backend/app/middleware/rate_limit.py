@@ -59,8 +59,11 @@ def _memory_allow(key: str, limit: int, window: int) -> bool:
     return True
 
 
-def _allow(key: str, limit: int, window: int = WINDOW) -> bool:
-    """Prefer Redis; on Redis unavailable/error use in-process limiter (never fail-open)."""
+def _allow(key: str, limit: int, window: int = WINDOW, *, fail_closed: bool = False) -> bool:
+    """Prefer Redis; on Redis unavailable/error use in-process limiter (never fail-open).
+
+    When fail_closed=True (prod auth), Redis must be reachable — otherwise deny.
+    """
     client = _get_redis()
     if client:
         now = int(time.time())
@@ -71,7 +74,10 @@ def _allow(key: str, limit: int, window: int = WINDOW) -> bool:
                 client.expire(bucket, window + 1)
             return count <= limit
         except Exception:
-            pass
+            if fail_closed:
+                return False
+    elif fail_closed:
+        return False
     return _memory_allow(key, limit, window)
 
 
@@ -82,7 +88,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if method == "POST":
             if path.endswith("/auth/login") or path.endswith("/auth/refresh"):
                 key = f"{_rate_limit_key(request)}:auth"
-                if not _allow(key, AUTH_LIMIT, AUTH_WINDOW):
+                # Multi-worker prod: memory fallback is bypassable — require Redis.
+                auth_fail_closed = bool(settings.is_production)
+                if not _allow(key, AUTH_LIMIT, AUTH_WINDOW, fail_closed=auth_fail_closed):
                     raise HTTPException(status_code=429, detail="Too many auth attempts")
             elif path.endswith("/jobs/bulk") or path.endswith("/assets/bulk-upload"):
                 key = f"{_rate_limit_key(request)}:bulk"
