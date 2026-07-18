@@ -93,6 +93,8 @@ async def _process_job_async(job_id: str) -> None:
             ),
             model_endpoint_id=model_endpoint,
             image_ctx=ImageContext(**packet.to_image_context_kwargs()),
+            user_id=job.user_id,
+            job_id=job.id,
         )
 
         db.refresh(job)

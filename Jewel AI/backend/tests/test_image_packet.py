@@ -122,11 +122,10 @@ def test_attachment_includes_logo_slot():
         ),
     )
     keys = {p.key for p in parts}
-    assert "attach_catalog_theme" in keys
-    assert "attach_logo" in keys
-    logo = next(p for p in parts if p.key == "attach_logo")
-    assert "Image 3" in logo.text
-    assert "shop brand logo" in logo.text.lower()
+    assert "attach_role_map" in keys
+    role_map = next(p for p in parts if p.key == "attach_role_map")
+    assert "[IMAGE_3]: COMPANY LOGO" in role_map.text
+    assert "REFERENCE ENVIRONMENT" in role_map.text
 
 
 def test_multi_jewelry_subject_framing():

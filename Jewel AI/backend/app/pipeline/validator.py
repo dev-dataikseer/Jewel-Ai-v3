@@ -67,6 +67,26 @@ def sanitize_user_prompt(text: str | None) -> str | None:
     return cleaned or None
 
 
+# Deterministic multi-type order for compose / regression stability.
+SUBTYPE_ORDER: list[str] = [
+    "Ring",
+    "Necklace",
+    "Earrings (Studs)",
+    "Earrings (Drops)",
+    "Earrings (Hoops)",
+    "Bracelet",
+    "Bangles",
+    "Pendant",
+    "Kara",
+    "Watch",
+    "Brooch",
+    "Anklet",
+    "Cufflinks",
+    "Multiple Items",
+]
+_SUBTYPE_RANK = {name: i for i, name in enumerate(SUBTYPE_ORDER)}
+
+
 def parse_jewelry_types(raw: str | None) -> list[str]:
     """Split comma-separated jewelry types; default Ring when empty."""
     if not raw or not str(raw).strip():
@@ -82,10 +102,10 @@ def parse_jewelry_types(raw: str | None) -> list[str]:
 
 
 def normalize_jewelry_types(types: list[str]) -> list[str]:
-    """When specific types are selected, drop the generic 'Multiple Items' subject."""
+    """Drop generic 'Multiple Items' when specifics present; sort by SUBTYPE_ORDER."""
     if len(types) > 1 and "Multiple Items" in types:
-        return [t for t in types if t != "Multiple Items"]
-    return types
+        types = [t for t in types if t != "Multiple Items"]
+    return sorted(types, key=lambda t: (_SUBTYPE_RANK.get(t, 1000), t))
 
 
 def validate_job_create(data: dict) -> None:

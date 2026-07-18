@@ -1,0 +1,502 @@
+================================================================================
+JEWEL AI — PROMPT ENGINE REFERENCE
+File: docs/architecture/prompt_engine.txt
+Last updated: July 2026
+================================================================================
+
+This document explains EVERY feature of the Jewel AI prompt engine: how text
+prompts are built, how images (product / theme / logo / portrait) are attached,
+how jewelry types and workflows combine, and how single + bulk generation share
+one pipeline. There are NO hardcoded generation prompts in the Studio UI —
+Admin-edited DB layers are the source of truth at runtime.
+
+
+--------------------------------------------------------------------------------
+1. WHAT THE PROMPT ENGINE IS
+--------------------------------------------------------------------------------
+
+The prompt engine is the system that turns:
+
+  - Workflow (e.g. Catalog Image)
+  - Jewelry type(s) (e.g. Ring, Necklace)
+  - Optional Studio fields (lighting, variant, user note, style preset)
+  - Attached images (product, theme/logo/portrait)
+
+into:
+
+  1) A final TEXT prompt string (and optional negative prompt)
+  2) An ordered list of IMAGE URLs for fal.ai
+  3) Debug metadata (versions, slots, logo mode) stored on the job
+
+It is used for BOTH:
+  - Single generation  (POST /jobs)
+  - Bulk generation    (POST /jobs/bulk → N jobs, same builder per job)
+
+
+--------------------------------------------------------------------------------
+2. HIGH-LEVEL PIPELINE (EVERY JOB)
+--------------------------------------------------------------------------------
+
+  Studio / Bulk upload
+        │
+        ▼
+  Job created (workflow, jewelry_type, URLs, logo meta, model endpoint)
+        │
+        ▼
+  Worker: process_image_job / _process_job_async
+        │
+        ├─► build_image_packet(job, model)
+        │     → ordered image_urls + roles + logoMode
+        │
+        ├─► build_final_prompt(db, ComposeInput, image_ctx)
+        │     ├─ compose_prompt_document  (master + subjects + variants)
+        │     ├─ append_attachments       (Image 1/2/3 role hints)
+        │     └─ adapt_document           (model char budget packing)
+        │
+        ▼
+  GenerationRequest(prompt, negative_prompt, image_urls, model_params)
+        │
+        ▼
+  fal.ai model
+        │
+        ▼
+  If logoMode == "compose" → composite_logo_beneath (fallback bar)
+  If logoMode == "model"   → logo already placed by the model (no paste)
+        │
+        ▼
+  Save output + provider_metadata (composedPrompt, imageRoles, logoMode)
+
+
+Same code path for webhook finalize: reads logoMode from job metadata and only
+composites when logoMode is "compose".
+
+
+--------------------------------------------------------------------------------
+3. CODE MAP (WHERE THINGS LIVE)
+--------------------------------------------------------------------------------
+
+Prompt engine package:
+  backend/app/prompt_engine/engine.py         build_final_prompt orchestrator
+  backend/app/prompt_engine/document.py       PromptPart, PromptDocument, FinalPrompt
+  backend/app/prompt_engine/attachments.py    ImageContext + IMAGE_N role maps
+  backend/app/prompt_engine/execution_mode.py Catalog Layer 3 (mirror vs modern dynamic)
+  backend/app/prompt_engine/environment_rotation.py  Redis/in-memory env rotation
+  backend/app/prompt_engine/model_adapter.py  pack_parts / adapt_document (char budget)
+  backend/app/prompt_engine/profiles.py       per-family packing profiles
+  backend/app/prompt_engine/capacity.py       official vs recommended char limits
+
+Layer composer (DB → document):
+  backend/app/pipeline/composer.py            compose_prompt_document, ComposeInput
+  backend/app/pipeline/layers.py              assemble layers, multi-subject framing
+  backend/app/pipeline/validator.py           jewelry type parse/normalize
+  backend/app/pipeline/image_packet.py        product/theme/logo/portrait slot builder
+
+Worker:
+  backend/app/tasks/generate.py               wires packet + prompt + fal + logo
+
+Admin / seeds:
+  DB tables: PromptMasterTemplate/Version, PromptSubject/Version, PromptVariant/Version
+  Optional seed files: data/seed-prompt-templates/*.txt
+  Style presets: StylePreset.prompt_addon
+
+Frontend:
+  StudioPage.tsx     uploads + jewelry multi-select + logo/theme brand kit
+  ModelSelector.tsx  model + params (no hardcoded prompt body)
+
+
+--------------------------------------------------------------------------------
+4A. CATALOG EXECUTION MODES (Layer 3 — Python routed)
+--------------------------------------------------------------------------------
+
+For CATALOG_IMAGE / BULK_GENERATION only, after DB master+subjects compose:
+
+Flags (independent):
+  has_reference = theme/style image attached (imageRoles theme)
+  has_logo      = logo included in fal image_urls (has_logo / logoMode=model)
+
+| has_reference | has_logo | Branch |
+|---------------|----------|--------|
+| False | False | Modern Dynamic Catalog + no branding |
+| False | True  | Modern Dynamic + apply logo watermark |
+| True  | False | Reference Mirroring + brand cleanup only |
+| True  | True  | Reference Mirroring + erase ref branding + apply logo |
+
+Modern Dynamic Catalog:
+  - Backend chooses ONE concrete environment sentence (ENVIRONMENT_POOL)
+  - Rotation via Redis key jewel:env-rotate:{user_id} (lookback ENV_ROTATION_LOOKBACK)
+  - Model is NOT asked to "randomly select" — that caused repetitive backgrounds
+
+Branding clauses never mention IMAGE_N for logo unless has_logo is true
+(prevents dangling IMAGE_3 hallucination).
+
+Layer 4 attachment map emits only attached slots:
+  [IMAGE_1] product, optional [IMAGE_2] reference, optional [IMAGE_N] logo.
+
+promptDebug fields:
+  hasReference, hasLogo, environmentChosen, subtypesIncluded,
+  executionMode, executionModeVersion
+
+Eval checklist: docs/architecture/prompt_eval_checklist.md
+
+
+--------------------------------------------------------------------------------
+4. TEXT PROMPT COMPOSITION (FEATURES)
+--------------------------------------------------------------------------------
+
+4.1 Three DB layers per workflow
+--------------------------------
+MASTER (one active version per workflow)
+  Workflow-wide rules: role, camera, lighting, preservation lock, negatives.
+  Contains insert points for subjects, variants, and user text.
+
+SUBJECT / CHILD (one active version per workflow × jewelry type)
+  Type-specific anatomy and placement (Ring vs Necklace vs Bracelet, etc.).
+  Catalog master + Ring subject ≠ Try-on master + Ring subject.
+
+VARIANT (optional dropdown options)
+  e.g. background style, metal type, gemstone target color.
+  Mapped by workflow via VARIANT_FIELD_MAP in composer.py.
+
+STYLE PRESET (optional)
+  Admin StylePreset.prompt_addon appended as a PromptPart(key="style_preset").
+
+USER PROMPT (optional)
+  Studio "additional instruction" → sanitized → user_insert layer.
+
+There are NO hardcoded catalog/try-on prompt strings in application code at
+generation time. Empty scaffolds exist only if DB rows are missing.
+
+
+4.2 Compose order
+-----------------
+1. Load active master layers for workflow
+2. Parse jewelry_type ("Ring" or "Ring, Necklace")
+3. Load active subject version(s) for each type under that workflow
+4. Render master Jinja with variables
+5. At insert_point: inject subject layer(s)
+   - Single type: subject parts as-is
+   - Multiple types: framed as Item 1 (Ring): … Item 2 (Necklace): …
+6. Insert variant text (if selected)
+7. Insert user prompt_text (if any)
+8. Apply word budget on layer parts (~1200 words; drop optional then important)
+9. Append lighting_style / style_preset parts when present
+10. Return PromptDocument (parts + negative_parts)
+
+
+4.3 Jinja variables available in layers
+---------------------------------------
+  {{ jewelry_type }}            selected type(s), comma-joined for master
+  {{ metal_type }}
+  {{ background_style }}
+  {{ gemstone_target_color }}
+  {{ gemstone_type }}
+  {{ lighting_style }}
+  {{ prompt_text }}
+  {{ variant_text }}
+  {{ workflow }}
+
+Strict Jinja: undefined variables FAIL composition with a clear error.
+Unresolved {{ … }} is never sent to fal.ai.
+
+
+4.4 Priorities (packing)
+------------------------
+Each PromptPart has priority:
+  critical  — never dropped first (preservation lock, core subject)
+  important — dropped after optional if over budget
+  optional  — dropped first (artifact scrub, soft hints)
+
+adapt_document packs by CHARACTER budget for the selected model profile
+(e.g. Nano Banana ~3600 recommended; GPT Image 2 higher official limit).
+
+
+4.5 Negative prompt
+-------------------
+Built from master/subject `negative` layers + variant negative_addon.
+Sent separately when the model schema supports it; otherwise omitted.
+
+
+4.6 Multi jewelry types (feature)
+---------------------------------
+Studio: multi-select → jewelry_type: "Ring, Necklace"
+
+Compose:
+  - Master Jinja sees jewelry_type = "Ring, Necklace"
+  - Subjects for Ring AND Necklace are both injected
+  - Multi framing text asks the model to keep items visually separate
+
+Special case "Multiple Items":
+  - Alone → uses dedicated Multiple Items subject
+  - With specific types → specific types win; Multiple Items ignored
+
+Bulk: each job gets the SAME jewelry_type string from the shared Studio form.
+
+
+4.7 Workflows that use the engine
+---------------------------------
+  CATALOG_IMAGE          (default for Studio catalog + most bulk uploads)
+  BULK_GENERATION        (seed exists; UI bulk usually keeps CATALOG_IMAGE;
+                          API alias BULK_GENERATION → CATALOG_IMAGE)
+  JEWELRY_ON_MODEL
+  CUSTOMER_TRY_ON
+  GEMSTONE_COLOR_CHANGE
+  BACKGROUND_REPLACEMENT
+  LUXURY_ENHANCEMENT
+  REFERENCE_STYLE_MATCH
+  CUSTOM_PROMPT
+  (+ VIRTUAL_TRY_ON UI maps to CUSTOMER_TRY_ON or JEWELRY_ON_MODEL)
+
+
+--------------------------------------------------------------------------------
+5. IMAGE PACKET (FEATURES) — product / theme / logo / portrait
+--------------------------------------------------------------------------------
+
+Module: backend/app/pipeline/image_packet.py
+Function: build_image_packet(job, model_endpoint_id=..., model_spec=...)
+
+5.1 Slot order (canonical)
+--------------------------
+  Slot A  product     job.input_url              (required for I2I)
+  Slot B  theme OR    job.reference_url (catalog/style)
+          portrait    job.model_url or reference (try-on workflows)
+  Slot C  logo        job.provider_metadata.logoUrl  (optional)
+
+Never drops product when truncating to model max_images.
+
+
+5.2 logoMode policy
+-------------------
+  "model"   — logo URL is included in fal image_urls; model places branding
+  "compose" — logo NOT sent to fal; after generation, composite_logo_beneath
+              pastes logo in a bar under the image (legacy fallback)
+  "omit"    — no logo on the job
+
+Decision:
+  - If LOGO_FORCE_COMPOSE=1 (env) → always "compose" when logo present
+  - Else if model has free capacity after product (+ theme/portrait) → "model"
+  - Else → "compose"
+  - Single-url models (e.g. FLUX Kontext image_url only) → "compose"
+  - Try-on with max 2 slots already filled → "compose"
+
+
+5.3 Model capacity
+------------------
+Read from ModelSpec ImageContract:
+  urls_array     → max_reference_images (often 3–14)
+  single_url     → effective max 1 (unless reference_image_field)
+  try_on_*       → typically 2 (person + garment)
+  none           → 0 (T2I)
+
+Catalog default model (nano-banana-pro/edit) supports multi-image, so
+product + theme + logo is the normal catalog path.
+
+
+5.4 ImageContext (for text attachments)
+---------------------------------------
+Built from the packet:
+  has_product, has_style_reference, has_portrait, has_logo
+  image_count
+  roles: [{index: 1, role: "product"}, {index: 2, role: "theme"}, ...]
+
+Passed into build_final_prompt → append_attachments.
+
+
+5.5 Metadata persisted on the job
+---------------------------------
+  provider_metadata.imageRoles     ordered slots with urls
+  provider_metadata.logoMode       model | compose | omit
+  provider_metadata.logoApplied    same after finalize, or none
+  provider_metadata.imagePacketDebug
+  provider_metadata.composedPrompt final text
+  provider_metadata.promptDebug    layer/packing debug
+  job.final_prompt                 final text column
+
+
+--------------------------------------------------------------------------------
+6. ATTACHMENT TEXT (HOW THE MODEL KNOWS IMAGE ROLES)
+--------------------------------------------------------------------------------
+
+Module: backend/app/prompt_engine/attachments.py
+
+Attachments are SHORT instructions appended AFTER layer compose. They tell the
+model which Image N is which. They do not replace the master/subject prompts.
+
+Catalog / Bulk (with theme):
+  Image 1 = jewelry product — preserve geometry and materials
+  Image 2 = theme reference — match studio presentation / framing
+  (+ logo part if has_logo)
+
+Reference style match:
+  Image 1 = product (preserve design)
+  Image 2 = style reference (match mood/lighting/framing)
+
+Try-on:
+  Image 1 = jewelry product
+  Image 2 = model/customer portrait — place jewelry naturally
+
+Logo (when included in fal images):
+  ATTACHED LOGO: Image N is the shop brand logo.
+  Place naturally (corner / signage / tag). Do not stretch, invent marks,
+  or obscure the jewelry.
+
+Catalog/bulk also may add:
+  Exclude watermarks, weight labels, price tags, burned-in overlay text
+  (skipped if master already covers watermark language)
+
+
+--------------------------------------------------------------------------------
+7. MODEL ADAPTER (CHAR BUDGET / OMIT)
+--------------------------------------------------------------------------------
+
+adapt_document(PromptDocument, model_spec) → FinalPrompt
+
+  - Resolves packing profile by model family (nano_banana, gpt_image, flux, …)
+  - Uses recommended packing budget; respects documented official max when tighter
+  - Drops optional → important parts until under budget; truncates critical last
+  - VTON models with omit_prompt=True → empty prompt string (images-only APIs)
+
+Debug records dropped_keys, profile name, char_count, max_chars.
+
+
+--------------------------------------------------------------------------------
+8. SINGLE VS BULK — SAME ENGINE
+--------------------------------------------------------------------------------
+
+Single job:
+  One product asset → one GenerationJob
+  Optional shared theme + logo from Studio / brand kit
+
+Bulk:
+  N product assets → N GenerationJobs in one Batch
+  Shared across jobs: workflow, jewelry_type(s), theme, logo, model, params
+  Per job: that product’s input_url only
+  Each job calls the SAME build_image_packet + build_final_prompt
+
+There is NO separate bulk prompt path and NO frontend-authored master prompt.
+
+
+--------------------------------------------------------------------------------
+9. STUDIO INPUTS → ENGINE INPUTS
+--------------------------------------------------------------------------------
+
+Studio field                 Job / engine field
+---------------------------  ----------------------------------
+Product image(s)             input_url (per job)
+Theme / style reference      reference_url
+Portrait (try-on)            model_url (or reference remapped)
+Shop logo                    meta.logoUrl / logo_asset_id
+Jewelry type multi-select    jewelry_type = "Ring, Necklace"
+Workflow sidebar             workflow (apiWorkflow)
+Additional instruction       prompt_text
+Lighting / variants          lighting_style, metal_type, etc.
+Style preset                 style_preset_id → prompt_addon
+AI model                     meta.modelEndpointId + modelParams
+Brand kit (localStorage)     hydrates theme/logo URLs into Studio only;
+                             server never reads localStorage directly
+
+
+--------------------------------------------------------------------------------
+10. LOGO BEHAVIOR (END-TO-END)
+--------------------------------------------------------------------------------
+
+Desired: model places the logo (reference image), not a fixed bottom bar.
+
+Flow:
+  1. User uploads logo (or brand kit restores it)
+  2. Job stores logoUrl in provider_metadata
+  3. build_image_packet decides logoMode
+  4. If model: logo URL is in image_urls; attachment text instructs placement
+  5. If compose: fal runs without logo; worker pastes logo under output
+  6. Webhook path respects the same logoMode from metadata
+
+Rollback:
+  Set environment LOGO_FORCE_COMPOSE=true (config: logo_force_compose)
+  → all jobs with a logo use bottom-bar compose without code revert.
+
+Studio UX:
+  Label: "Shop logo (reference — model places it)"
+  Shows planned slots (Product → Image 1 · Theme → Image 2 · Logo → Image 3)
+  Warns when model is single-image: logo will use under-output fallback
+
+
+--------------------------------------------------------------------------------
+11. ADMIN EDITING (SOURCE OF TRUTH)
+--------------------------------------------------------------------------------
+
+Admin → Prompt Editor:
+  - Edit master layers per workflow
+  - Edit subject (child) layers per jewelry type
+  - Edit variants
+  - Version history; activate older versions
+  - Preview / sandbox uses build_final_prompt (same as production)
+
+Seed TXT files under data/seed-prompt-templates/ import into DB when
+ALLOW_PROMPT_RESEED is enabled (default in development). Admin versions
+(source=admin) are not overwritten by reseed.
+
+
+--------------------------------------------------------------------------------
+12. DEBUGGING A GENERATION
+--------------------------------------------------------------------------------
+
+On a completed/failed job inspect:
+
+  job.final_prompt
+  job.master_version_id / subject_version_id / variant_version_id
+  job.jewelry_type
+  job.workflow
+  provider_metadata.composedPrompt
+  provider_metadata.promptDebug
+  provider_metadata.imageRoles
+  provider_metadata.logoMode / logoApplied
+  provider_metadata.modelEndpointId
+  provider_metadata.imagePacketDebug
+
+If logo is missing from the frame:
+  - Check logoMode: if "compose", model never saw the logo
+  - Check model max_images and whether theme already filled slots
+  - Prefer multi-image edit models (Nano Banana Pro, Seedream, GPT Image 2, …)
+
+If prompt looks wrong:
+  - Check Admin active master/subject versions for that workflow + type
+  - Check promptDebug.dropped_keys for packing cuts
+  - Check jewelry_type spelling vs seeded subject names
+
+
+--------------------------------------------------------------------------------
+13. FEATURE CHECKLIST (MUST REMAIN TRUE)
+--------------------------------------------------------------------------------
+
+[x] Single generate uses prompt engine (master + jewelry subjects + variants)
+[x] Bulk generate uses the same packet + prompt builder as single
+[x] Product is always Image 1 for catalog/edit models
+[x] Theme optional → fal image + attachment text
+[x] Logo optional → fal image when capacity allows; else compose fallback
+[x] Multiple jewelry types → master + all subtype subject prompts
+[x] Try-on keeps product + portrait; logo only if slot remains
+[x] Webhook and sync finalize share logo mode behavior
+[x] Admin-edited prompts remain source of truth
+[x] No second hardcoded prompt system in the frontend
+
+
+--------------------------------------------------------------------------------
+14. RELATED DOCS
+--------------------------------------------------------------------------------
+
+  docs/architecture/PROMPT_PIPELINE.md     deeper architecture + Admin ops
+  docs/integrations/fal_ai_img2img_registry.md   fal model schemas
+  docs/product/WEBAPP_GUIDE.md             Studio user guide
+
+
+--------------------------------------------------------------------------------
+15. QUICK MENTAL MODEL
+--------------------------------------------------------------------------------
+
+  TEXT  = Admin master + jewelry subject(s) + variants + attachments + packing
+  IMAGES = product [+ theme|portrait] [+ logo if model can take it]
+  LOGO   = prefer model placement; bottom-bar only as capacity fallback
+  BULK   = many products, one shared text/theme/logo recipe, same engine
+
+================================================================================
+END OF FILE
+================================================================================
