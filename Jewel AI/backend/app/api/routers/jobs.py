@@ -44,6 +44,13 @@ def _asset_input_url(asset: Asset | None) -> str | None:
     return asset.processed_url or asset.original_url
 
 
+def _asset_storage_url(asset: Asset | None) -> str | None:
+    """Prefer durable /uploads path (needed for logo compose from object storage)."""
+    if not asset:
+        return None
+    return asset.original_url or asset.processed_url
+
+
 def _job_to_out(job: GenerationJob, *, lean: bool = False) -> JobOut:
     from app.security.media_signing import sign_media_url
     from app.services.job_timing import attach_eta_fields
@@ -209,7 +216,9 @@ def create_job(
         )
         if not logo_asset:
             raise HTTPException(status_code=404, detail="Logo asset not found")
-        logo_url = _asset_input_url(logo_asset)
+        # Must use storage path (/uploads/...), not fal CDN processed_url —
+        # logo compose reads bytes from object storage / local uploads.
+        logo_url = _asset_storage_url(logo_asset)
 
     project = Project(
         name=f"Project {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
@@ -318,7 +327,7 @@ def create_bulk_jobs(
         )
         if not logo_asset:
             raise HTTPException(status_code=404, detail="Logo asset not found")
-        logo_url = _asset_input_url(logo_asset)
+        logo_url = _asset_storage_url(logo_asset)
 
     # Shared secondary image: try-on uses model_url; others use reference_url
     shared_model_url = body.model_url

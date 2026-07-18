@@ -51,10 +51,21 @@ def composite_logo_beneath(
 
 
 def load_logo_bytes_from_storage(logo_url: str, storage) -> bytes | None:
-    """Read logo bytes from local/object storage given an /uploads/... URL."""
+    """Read logo bytes from local/object storage, or fetch absolute http(s) URLs."""
     if not logo_url:
         return None
     path = logo_url.split("?", 1)[0]
+    if path.startswith("http://") or path.startswith("https://"):
+        try:
+            import httpx
+
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                resp = client.get(path)
+                if resp.status_code >= 400:
+                    return None
+                return resp.content
+        except Exception:
+            return None
     if path.startswith("/uploads/"):
         key = path.removeprefix("/uploads/").lstrip("/")
     elif path.startswith("uploads/"):

@@ -436,6 +436,7 @@ export function StudioPage() {
     { file: File; url: string }[]
   >([]);
   const [referencePreview, setReferencePreview] = useState("");
+  const [logoPreview, setLogoPreview] = useState("");
 
   useEffect(() => {
     const urls = primaryFiles.map((file) => ({
@@ -453,6 +454,14 @@ export function StudioPage() {
       if (url) URL.revokeObjectURL(url);
     };
   }, [referenceFile]);
+
+  useEffect(() => {
+    const url = logoFile ? URL.createObjectURL(logoFile) : "";
+    setLogoPreview(url);
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [logoFile]);
 
   const uploadOne = async (file: File, label = "image") => {
     const form = new FormData();
@@ -509,6 +518,10 @@ export function StudioPage() {
           ? await uploadOne(referenceFile, needsModelReference ? "portrait" : "reference")
           : null;
         const logoAsset = logoFile ? await uploadOne(logoFile, "logo") : null;
+        // Prefer durable /uploads path for logo compose (not fal CDN mirror).
+        const logoStorageUrl = logoAsset
+          ? String(logoAsset.original_url || "").split("?")[0] || logoAsset.original_url
+          : null;
         const selectedVariant = workflowVariants.find(
           (v) => v.variant_key === workflowVariantKey,
         );
@@ -534,7 +547,7 @@ export function StudioPage() {
           reference_url: needsModelReference ? undefined : referenceUrl,
           model_url: modelUrl,
           ...(logoAsset
-            ? { logo_asset_id: logoAsset.id, logo_url: logoAsset.original_url }
+            ? { logo_asset_id: logoAsset.id, logo_url: logoStorageUrl }
             : {}),
           ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
           ...(apiWorkflow === "GEMSTONE_COLOR_CHANGE" && selectedVariant
@@ -1154,7 +1167,7 @@ export function StudioPage() {
                   <UploadZone
                     id="studio-logo-upload"
                     label="Shop logo (placed under output)"
-                    previews={[]}
+                    previews={logoPreview ? [logoPreview] : []}
                     onFiles={(files) => setLogoFile(files?.[0] || null)}
                     single
                   />
@@ -1169,7 +1182,7 @@ export function StudioPage() {
                 <UploadZone
                   id="studio-logo-upload-single"
                   label="Shop logo (optional)"
-                  previews={[]}
+                  previews={logoPreview ? [logoPreview] : []}
                   onFiles={(files) => setLogoFile(files?.[0] || null)}
                   single
                 />
