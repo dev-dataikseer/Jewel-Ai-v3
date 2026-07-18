@@ -16,6 +16,7 @@ Railway looks for **`railway.toml` at the git repository root**. That file (and 
 | **Root Directory** | *(leave empty)* — do **not** set to `Jewel AI` |
 | API / web config | `railway.toml` → root `Dockerfile` |
 | Worker config | `railway.worker.toml` → root `Dockerfile.worker` |
+| Beat config | `railway.beat.toml` → root `Dockerfile.beat` |
 
 If Root Directory is mistakenly set to `Jewel AI`, either clear it or point the
 service config at the nested `Jewel AI/railway.toml` instead. See also
@@ -42,11 +43,14 @@ Create a project with:
 | Service | Dockerfile | Notes |
 |---------|------------|--------|
 | **web** | root `Dockerfile` | FastAPI + React SPA on `$PORT` |
-| **worker** | root `Dockerfile.worker` | Celery worker **with Beat** for stuck/webhook sweeps |
+| **worker** | root `Dockerfile.worker` | Celery workers only (scale freely) |
+| **beat** | root `Dockerfile.beat` | Celery Beat **only** — keep **replicas=1** |
 | **PostgreSQL** | Plugin | Auto-injects `DATABASE_URL` — use **one** Postgres only |
 | **Redis** | Plugin | Auto-injects `REDIS_URL` (required for auth rate limits in prod) |
 
 **Bulk generation:** keep the **worker** service running. Without Celery workers, the API falls back to in-process threads (`queueMode: inline`) — fine for local/dev, but bulk progress is not durable across API restarts. Studio warns when running inline.
+
+**Beat:** create a separate **beat** service from `railway.beat.toml` / `Dockerfile.beat`, copy the same env as worker (`DATABASE_URL`, `REDIS_URL`, `CELERY_*`, `FAL_*`), and keep **one** replica so stuck-job sweep and fal credits refresh are not duplicated.
 
 ## 3. Environment variables (web + worker)
 
@@ -107,6 +111,7 @@ docker compose up --build
 ```
 
 - **api**: `alembic upgrade head` then uvicorn; `SCHEMA_VIA_ALEMBIC=true`
-- **worker**: Celery worker **with beat** (stuck-job sweep + fal credits refresh)
+- **worker**: Celery worker only
+- **beat**: Celery Beat only (stuck-job sweep + fal credits refresh)
 
 Docker images install from `backend/requirements.lock.txt` for reproducible deps.

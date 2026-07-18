@@ -1,0 +1,1 @@
+Ensure item properties do not blend across pieces.

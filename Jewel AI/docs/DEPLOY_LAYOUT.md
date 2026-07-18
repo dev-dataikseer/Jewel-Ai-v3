@@ -24,7 +24,8 @@ docker compose up --build
 ```
 
 - **api**: `alembic upgrade head` then uvicorn; `SCHEMA_VIA_ALEMBIC=true`
-- **worker**: Celery worker **with beat** (stuck-job sweep + fal credits refresh)
+- **worker**: Celery worker only (no Beat)
+- **beat**: Celery Beat only (replicas=1) — stuck-job sweep + fal credits refresh
 - Images install from `backend/requirements.lock.txt`
 
 ## App version

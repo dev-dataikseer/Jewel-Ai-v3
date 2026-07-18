@@ -62,7 +62,7 @@ The **AI Model** dropdown loads from `GET /api/models?image_edit_only=true&has_i
 | 7 | Seedream 5 Lite Edit | `fal-ai/bytedance/seedream/v5/lite/edit` |
 | 8 | Seedream 4.5 Edit | `fal-ai/bytedance/seedream/v4.5/edit` |
 | 9 | GPT Image 1.5 Edit | `fal-ai/gpt-image-1.5/edit` |
-| 10 | FLUX 2 Dev Edit | `fal-ai/flux-2/dev/edit` |
+| 10 | FLUX 2 Dev Edit | `fal-ai/flux-2/edit` |
 | 11 | GLM-Image I2I | `fal-ai/glm-image/image-to-image` |
 | 12 | FireRed Image Edit | `fal-ai/firered-image-edit-v1.1` |
 | 13 | Grok Imagine Edit | `xai/grok-imagine-image/edit` |

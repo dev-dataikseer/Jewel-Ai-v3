@@ -52,37 +52,44 @@ Notes: All outputs carry an invisible SynthID watermark automatically (Google-si
 ```json
 {
   "prompt": "string, required",
-  "image_urls": ["array of URLs"],
+  "image_urls": ["array of URLs, up to 10 reference images"],
+  "image_size": "auto",
   "num_images": 1,
   "output_format": "jpeg",
-  "seed": null,
-  "guidance_scale": null
+  "safety_tolerance": "2",
+  "enable_safety_checker": true,
+  "seed": null
 }
 ```
-Notes: Multi-image composition supported — reference images by natural description or index in your prompt text ("using image 2"). Pricing is per-megapixel ($0.07 first MP, $0.03 each additional) — relevant if you're budgeting bulk gemstone-color jobs.
+Notes: No `guidance_scale` on Max (unlike Dev). `image_size` is `auto` or a size preset; `num_images` 1–4; `safety_tolerance` `"1"`–`"5"`. Multi-image composition supported — reference images by natural description or index in prompt text ("using image 2"). Pricing is per-megapixel ($0.07 first MP, $0.03 each additional) — relevant if you're budgeting bulk gemstone-color jobs. Canonical schema: `backend/seeds/fal_models_data.py` → `FLUX_2_MAX_PARAMS`.
 
 ### 4. GPT Image 2 Edit — `openai/gpt-image-2/edit` — **Confirmed** (your CUSTOM_PROMPT default)
 ```json
 {
   "prompt": "string, required",
-  "image_urls": ["array of URLs, required"],
-  "mask_image_url": "optional — must match input image dimensions, for masked/region-limited edits",
+  "image_urls": ["array of URLs, required — up to 16"],
+  "image_size": "auto",
   "quality": "high",
+  "num_images": 1,
   "output_format": "png"
 }
 ```
-Notes: `quality` also accepts `medium`/`low`/`auto` — cost scales sharply with quality (roughly $0.01/image low → $0.41/image high at 4K). Input images are always processed at high fidelity regardless of `quality` setting — no separate `input_fidelity` param on this model (unlike GPT Image 1.5, where it existed). No transparent-background support. Supports up to 16 reference images per call, useful if you ever need multi-image compositing beyond your current 3-image (subject/reference/logo) pattern.
+Notes: `quality` accepts `auto`/`low`/`medium`/`high` — cost scales sharply with quality. `image_size` presets: `auto`, `square_hd`, `square`, `portrait_4_3`, `portrait_16_9`, `landscape_4_3`, `landscape_16_9`. Seeded schema has **no mask field** (do not send `mask_image_url`). Input images are always processed at high fidelity regardless of `quality`. No transparent-background support. Supports up to 16 reference images per call.
 
 ### 5. FLUX 2 Pro Edit — `fal-ai/flux-2-pro/edit` — **Confirmed**
 ```json
 {
   "prompt": "string, required",
   "image_urls": ["array of URLs, up to 9 reference images / 9MP total input"],
-  "output_format": "jpeg"
+  "image_size": "auto",
+  "num_images": 1,
+  "output_format": "jpeg",
+  "safety_tolerance": "2",
+  "enable_safety_checker": true,
+  "seed": null
 }
 ```
-Notes: Deliberately has no `guidance_scale` or step count to tune — "production-optimized," fixed internal settings. Reference images addressable by index in prompt text ("replace the background with image 3").
-
+Notes: Deliberately has no `guidance_scale` or step count to tune — "production-optimized," fixed internal settings. `num_images` 1–4; `safety_tolerance` `"1"`–`"5"`. Reference images addressable by index in prompt text ("replace the background with image 3").
 ### 6. FLUX Kontext (Pro) — `fal-ai/flux-pro/kontext` — **Confirmed** (your LUXURY_ENHANCEMENT default)
 ```json
 {

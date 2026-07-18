@@ -51,8 +51,11 @@ _FILE_TO_KEY: dict[str, str] = {
     "BRAND_NOREF_NOLOGO": BRAND_CATALOG_NO_LOGO,
     "ATTACH_PRIMARY_SUBJECT": ATTACH_PRIMARY_SUBJECT,
     "ATTACH_ENVIRONMENT_REFERENCE": ATTACH_ENVIRONMENT_REFERENCE,
+    "ATTACH_CATALOG_ROLE_MAP": ATTACH_CATALOG_ROLE_MAP,
+    "ATTACH_ARTIFACT_SCRUB": ATTACH_ARTIFACT_SCRUB,
     "ATTACH_LOGO": ATTACH_LOGO,
     "ATTACH_TRYON_PERSON": ATTACH_TRY_ON,
+    "ATTACH_PRODUCT": ATTACH_PRODUCT,
     "BACKGROUND_SOURCE_REF": BACKGROUND_SOURCE_REF,
     "BACKGROUND_SOURCE_GENERATED": BACKGROUND_SOURCE_GENERATED,
     "CUSTOM_PRESERVE": CUSTOM_PRESERVE,
@@ -61,6 +64,7 @@ _FILE_TO_KEY: dict[str, str] = {
     "TRYON_CUSTOMER_PRESERVE": TRYON_CUSTOMER_PRESERVE,
     "TRYON_PLACEMENT_ANATOMY": TRYON_PLACEMENT_ANATOMY,
     "MULTI_ITEM_FRAME": MULTI_ITEM_FRAME,
+    "MULTI_ITEM_BLEND_GUARD": MULTI_ITEM_BLEND_GUARD,
     "USER_ADDITION_WRAP": USER_ADDITION_WRAP,
     "ENVIRONMENT_POOL": ENVIRONMENT_POOL,
 }
@@ -177,15 +181,16 @@ def _load_from_files() -> tuple[dict[str, str], list[str]]:
         else:
             loaded[key] = text
 
-    # Compose catalog role map from primary + placeholders
-    primary = loaded.get(ATTACH_PRIMARY_SUBJECT, "")
-    if primary:
-        loaded[ATTACH_CATALOG_ROLE_MAP] = (
-            "ATTACHMENT ROLES & INSTRUCTIONS:\n"
-            f"{primary}"
-            "{{THEME_LINE}}"
-            "{{LOGO_LINE}}"
-        )
+    # Prefer seeded catalog role map; else compose from primary + placeholders.
+    if ATTACH_CATALOG_ROLE_MAP not in loaded:
+        primary = loaded.get(ATTACH_PRIMARY_SUBJECT, "")
+        if primary:
+            loaded[ATTACH_CATALOG_ROLE_MAP] = (
+                "ATTACHMENT ROLES & INSTRUCTIONS:\n"
+                f"{primary}"
+                "{{THEME_LINE}}"
+                "{{LOGO_LINE}}"
+            )
     return loaded, env_pool
 
 

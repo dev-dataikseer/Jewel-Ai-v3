@@ -55,8 +55,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.worker
-    # Match Railway: worker + beat so stuck-job sweep and billing refresh run.
-    command: celery -A app.tasks.celery_app.celery_app worker --beat --loglevel=INFO --concurrency=3
+    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=3
     env_file:
       - ../env/.env.production
     environment:
@@ -66,6 +65,25 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       API_PUBLIC_URL: https://hj-jewel-ai.data-ikseer.com
       FRONTEND_ORIGIN: https://hj-jewel-ai.data-ikseer.com
+      SCHEMA_VIA_ALEMBIC: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.beat
+    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
+    env_file:
+      - ../env/.env.production
+    environment:
+      DATABASE_URL: postgresql://jewel:jewel@postgres:5432/jewel_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
       SCHEMA_VIA_ALEMBIC: "true"
     depends_on:
       postgres:

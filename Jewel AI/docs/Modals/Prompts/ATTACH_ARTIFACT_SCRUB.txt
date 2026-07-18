@@ -1,0 +1,1 @@
+Exclude source watermarks, weight labels, price tags, and burned-in overlay text.
