@@ -47,7 +47,13 @@ async def upload_asset(
     validate_upload(file.content_type or "image/jpeg", len(content), content)
     ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
     filename = f"asset-{uuid.uuid4().hex}{ext}"
-    url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
+    try:
+        url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
+        ) from exc
     fal_url = _mirror_to_fal_cdn(content, file.content_type or "image/jpeg", filename)
     asset = Asset(
         user_id=user.id,
@@ -75,7 +81,13 @@ async def bulk_upload(
         validate_upload(file.content_type or "image/jpeg", len(content), content)
         ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
         filename = f"asset-{uuid.uuid4().hex}{ext}"
-        url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
+        try:
+            url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
+            ) from exc
         fal_url = _mirror_to_fal_cdn(content, file.content_type or "image/jpeg", filename)
         asset = Asset(user_id=user.id, original_url=url, processed_url=fal_url, type="PRODUCT")
         db.add(asset)
