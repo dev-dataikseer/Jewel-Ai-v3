@@ -179,16 +179,29 @@ def render_multi_subject_layers(
             parts.extend(render_subject_layers(layers, vars_for_type))
         return parts
 
-    framed: list[str] = [
-        f"An image containing {len(subject_layers_by_type)} distinct jewelry items. "
-        "Each item must remain visually separate with no mixed properties."
-    ]
+    from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, MULTI_ITEM_BLEND_GUARD, MULTI_ITEM_FRAME, substitute
+
+    framed: list[str] = []
+    header = substitute(
+        DEFAULT_FRAGMENTS.get(MULTI_ITEM_FRAME, ""),
+        {"ITEM_COUNT": len(subject_layers_by_type)},
+    )
+    framed.append(
+        header
+        or (
+            f"An image containing {len(subject_layers_by_type)} distinct jewelry items. "
+            "Each item must remain visually separate with no mixed properties."
+        )
+    )
     for idx, (jewelry_type, layers) in enumerate(subject_layers_by_type, start=1):
         vars_for_type = {**base_variables, "jewelry_type": jewelry_type}
         item_parts = render_subject_layers(layers, vars_for_type)
         if item_parts:
             framed.append(f"Item {idx} ({jewelry_type}): {' '.join(item_parts)}")
-    framed.append("Ensure item properties do not blend or merge between items.")
+    framed.append(
+        DEFAULT_FRAGMENTS.get(MULTI_ITEM_BLEND_GUARD)
+        or "Ensure item properties do not blend or merge between items."
+    )
     return framed
 
 
@@ -337,7 +350,12 @@ def assemble_layer_parts(
 
         if layer_type == "user_insert":
             if user_instruction:
-                wrapped = f"User addition (must not override preservation): {user_instruction}"
+                from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, USER_ADDITION_WRAP, substitute
+
+                wrapped = substitute(
+                    DEFAULT_FRAGMENTS.get(USER_ADDITION_WRAP, ""),
+                    {"USER_INSTRUCTION": user_instruction},
+                ) or f"User addition (must not override preservation): {user_instruction}"
                 budget_parts.append(BudgetPart(wrapped, priority, key or "user", "user"))
                 user_inserted = True
             debug_layers.append({"key": key, "type": layer_type, "included": bool(user_instruction)})
@@ -350,7 +368,12 @@ def assemble_layer_parts(
             debug_layers.append({"key": key, "type": layer_type, "included": bool(rendered)})
 
     if user_instruction and not user_inserted:
-        wrapped = f"User addition (must not override preservation): {user_instruction}"
+        from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, USER_ADDITION_WRAP, substitute
+
+        wrapped = substitute(
+            DEFAULT_FRAGMENTS.get(USER_ADDITION_WRAP, ""),
+            {"USER_INSTRUCTION": user_instruction},
+        ) or f"User addition (must not override preservation): {user_instruction}"
         budget_parts.append(BudgetPart(wrapped, "optional", "user_instruction", "user"))
     kept_parts, dropped_keys = apply_token_budget_parts(budget_parts, token_budget)
     # Rebuild BudgetPart list from kept texts while preserving priorities from originals

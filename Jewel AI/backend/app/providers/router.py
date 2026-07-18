@@ -25,8 +25,8 @@ def _model_supports_request(model_def, request: GenerationRequest) -> bool:
         return False
     if has_images and not caps.get("image_to_image", False):
         return False
-    if request.workflow in ("JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON") and not caps.get("person_generation", False):
-        return False
+    # Jewelry try-on defaults to image-edit compositing — do not require person_generation.
+    # Garment VTON models still advertise person_generation / virtual_try_on separately.
     if request.workflow == "GEMSTONE_COLOR_CHANGE" and not caps.get("material_accuracy", False):
         return False
     return True
@@ -38,8 +38,6 @@ def provider_supports_request(provider: Provider, request: GenerationRequest) ->
     if not has_images:
         return False
     if not caps.get("image_to_image", False):
-        return False
-    if request.workflow in ("JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON") and not caps.get("person_generation", False):
         return False
     if request.workflow == "GEMSTONE_COLOR_CHANGE" and not caps.get("material_accuracy", False):
         return False

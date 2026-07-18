@@ -38,7 +38,8 @@ VARIANT_FIELD_MAP = {
     "GEMSTONE_COLOR_CHANGE": "gemstone_target_color",
     "BACKGROUND_REPLACEMENT": "background_style",
     "LUXURY_ENHANCEMENT": "metal_type",
-    "REFERENCE_STYLE_MATCH": "background_style",
+    "REFERENCE_STYLE_MATCH": "background_style",  # legacy
+    "CATALOG_IMAGE": "background_style",  # style_mood optional variant
 }
 
 
@@ -54,6 +55,8 @@ class ComposeInput:
     lighting_style: str | None = None
     style_preset_id: str | None = None
     style_preset_addon: str | None = None
+    catalog_mode: str | None = None  # modern | reference_mirror | style_mood
+    try_on_mode: str | None = None  # studio | customer
 
 
 @dataclass

@@ -17,6 +17,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { PromptEditor } from "@/components/PromptEditor";
 import { PromptSandbox } from "@/components/admin/PromptSandbox";
+import { PromptFragmentsAdmin } from "@/components/admin/PromptFragmentsAdmin";
 import { StylePresetsAdmin } from "@/components/admin/StylePresetsAdmin";
 import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
@@ -175,6 +176,7 @@ export function AdminPage() {
                   jewelryTypes={options?.jewelryTypes ?? ["Ring"]}
                 />
                 <StylePresetsAdmin workflows={options?.workflows ?? []} />
+                <PromptFragmentsAdmin />
               </div>
             )}
 

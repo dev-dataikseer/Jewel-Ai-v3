@@ -355,23 +355,23 @@ export type JobsListResponse = {
 export const WORKFLOWS = [
   { id: "CATALOG_IMAGE", label: "Catalog Image", bulk: true },
   { id: "VIRTUAL_TRY_ON", label: "Virtual Try-On", bulk: true },
-  { id: "JEWELRY_ON_MODEL", label: "Jewelry On Model", bulk: true },
   { id: "GEMSTONE_COLOR_CHANGE", label: "Gemstone Color Change", bulk: true },
-  { id: "CUSTOMER_TRY_ON", label: "Customer Try-On", bulk: true },
-  { id: "REFERENCE_STYLE_MATCH", label: "Style from Reference", bulk: true },
   { id: "BACKGROUND_REPLACEMENT", label: "Background Replacement", bulk: true },
   { id: "LUXURY_ENHANCEMENT", label: "Luxury Enhancement", bulk: true },
   { id: "CUSTOM_PROMPT", label: "Custom Prompt", bulk: true },
-  { id: "BULK_GENERATION", label: "Bulk Generation", bulk: true },
   { id: "RATE_TOOLS", label: "Rate Tools", bulk: false },
+  // Legacy (history / regenerate)
+  { id: "JEWELRY_ON_MODEL", label: "Jewelry On Model", bulk: true },
+  { id: "CUSTOMER_TRY_ON", label: "Customer Try-On", bulk: true },
+  { id: "REFERENCE_STYLE_MATCH", label: "Style from Reference", bulk: true },
+  { id: "BULK_GENERATION", label: "Bulk Generation", bulk: true },
 ] as const;
 
-/** Studio sidebar entries — consolidated UX (no Rates/Bulk pseudo-workflows). */
+/** Studio sidebar — consolidated (no Rates/Bulk/legacy duplicates). */
 export const STUDIO_SIDEBAR_WORKFLOWS = [
   { id: "CATALOG_IMAGE", label: "Catalog Image" },
   { id: "VIRTUAL_TRY_ON", label: "Virtual Try-On" },
   { id: "GEMSTONE_COLOR_CHANGE", label: "Gemstone Color Change" },
-  { id: "REFERENCE_STYLE_MATCH", label: "Style from Reference" },
   { id: "BACKGROUND_REPLACEMENT", label: "Background Replacement" },
   { id: "LUXURY_ENHANCEMENT", label: "Luxury Enhancement" },
   { id: "CUSTOM_PROMPT", label: "Custom Prompt" },
@@ -380,13 +380,26 @@ export const STUDIO_SIDEBAR_WORKFLOWS = [
 export const HISTORY_WORKFLOW_FILTERS = [
   { id: "", label: "All workflows" },
   { id: "CATALOG_IMAGE", label: "Catalog Image" },
-  { id: "JEWELRY_ON_MODEL", label: "Jewelry On Model" },
-  { id: "CUSTOMER_TRY_ON", label: "Customer Try-On" },
+  { id: "VIRTUAL_TRY_ON", label: "Virtual Try-On" },
   { id: "GEMSTONE_COLOR_CHANGE", label: "Gemstone Color Change" },
-  { id: "REFERENCE_STYLE_MATCH", label: "Style from Reference" },
   { id: "BACKGROUND_REPLACEMENT", label: "Background Replacement" },
   { id: "LUXURY_ENHANCEMENT", label: "Luxury Enhancement" },
   { id: "CUSTOM_PROMPT", label: "Custom Prompt" },
+  { id: "JEWELRY_ON_MODEL", label: "Jewelry On Model (legacy)" },
+  { id: "CUSTOMER_TRY_ON", label: "Customer Try-On (legacy)" },
+  { id: "REFERENCE_STYLE_MATCH", label: "Style from Reference (legacy)" },
+] as const;
+
+/** Catalog execution modes (not separate workflows). */
+export const CATALOG_MODES = [
+  { id: "modern", label: "Modern catalog" },
+  { id: "reference_mirror", label: "Match reference environment" },
+  { id: "style_mood", label: "Match lighting / mood only" },
+] as const;
+
+export const TRY_ON_MODES = [
+  { id: "studio", label: "Studio model look" },
+  { id: "customer", label: "Customer photo" },
 ] as const;
 
 export function workflowLabel(id: string, options?: ConfigOptions) {

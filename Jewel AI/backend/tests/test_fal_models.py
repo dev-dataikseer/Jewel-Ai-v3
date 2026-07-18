@@ -18,7 +18,7 @@ def test_jinja_render():
 
 
 def test_fal_models_seed_catalog():
-    assert len(FAL_MODELS) == 24
+    assert len(FAL_MODELS) == 25
     ids = {m["endpoint_id"] for m in FAL_MODELS}
     assert "fal-ai/gemini-3-pro-image-preview/edit" in ids
     assert "fal-ai/nano-banana-pro/edit" in ids
@@ -35,13 +35,14 @@ def test_fal_models_seed_catalog():
 
 def test_image_edit_models_ranked_nano_banana_first():
     image_edit = [m for m in FAL_MODELS if m["category"] == "image_to_image"]
-    assert len(image_edit) == 17
+    assert len(image_edit) == 18
     ranked = sorted(image_edit, key=lambda m: m["sort_order"])
     assert ranked[0]["endpoint_id"] == "fal-ai/nano-banana-pro/edit"
     assert ranked[1]["endpoint_id"] == "fal-ai/gemini-3-pro-image-preview/edit"
     assert ranked[2]["endpoint_id"] == "fal-ai/flux-2-max/edit"
     assert all(m["config"].get("model_info") for m in image_edit)
     assert WORKFLOW_DEFAULTS["CATALOG_IMAGE"] == "fal-ai/nano-banana-pro/edit"
+    assert WORKFLOW_DEFAULTS["VIRTUAL_TRY_ON"] == "fal-ai/nano-banana-pro/edit"
 
 
 def test_all_models_have_output_paths():
@@ -67,7 +68,11 @@ def test_vton_models_restricted_to_try_on_workflows():
     vton = [s for s in FAL_MODELS if s.get("capabilities", {}).get("virtual_try_on")]
     assert len(vton) == 7
     for spec in vton:
-        assert set(spec["workflow_allowlist"]) == {"JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"}
+        assert set(spec["workflow_allowlist"]) == {
+            "VIRTUAL_TRY_ON",
+            "JEWELRY_ON_MODEL",
+            "CUSTOMER_TRY_ON",
+        }
 
 
 def test_workflow_defaults_point_to_seed():
@@ -108,12 +113,15 @@ def test_filter_models_image_edit_only():
     models = filter_models_for_request(FakeDb(), has_input=True, image_count=1, image_edit_only=True)
     vton_ids = {m.endpoint_id for m in models if m.capabilities.get("virtual_try_on")}
     assert len(vton_ids) == 0
-    assert len(models) == 17
+    assert len(models) == 18
 
     vton_models = filter_models_for_request(
         FakeDb(), has_input=True, image_count=2, workflow="CUSTOMER_TRY_ON", image_edit_only=True
     )
-    assert len(vton_models) == 7
+    # I2I + VTON both available for jewelry try-on
+    assert len(vton_models) >= 7
+    assert any(m.capabilities.get("virtual_try_on") for m in vton_models)
+    assert any(m.capabilities.get("image_to_image") and not m.capabilities.get("virtual_try_on") for m in vton_models)
 
 
 def test_filter_without_input_still_lists_catalog_models():
@@ -144,4 +152,5 @@ def test_filter_without_input_still_lists_catalog_models():
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
     models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
-    assert len(models) == 16
+    # flux-2-max is allowlisted away from catalog; expect remaining I2I
+    assert len(models) == 17

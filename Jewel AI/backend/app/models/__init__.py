@@ -195,6 +195,41 @@ class PromptVariantVersion(Base):
     variant: Mapped[PromptVariant] = relationship(back_populates="versions")
 
 
+class PromptFragment(Base):
+    """Shared versioned prompt blocks (fidelity lock, execution modes, branding, attachments)."""
+
+    __tablename__ = "prompt_fragments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    fragment_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    versions: Mapped[list["PromptFragmentVersion"]] = relationship(back_populates="fragment")
+
+
+class PromptFragmentVersion(Base):
+    __tablename__ = "prompt_fragment_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    fragment_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_fragments.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # For ENVIRONMENT_POOL: JSON list of environment sentences (also mirrored in prompt_text as joined lines)
+    content_json: Mapped[Optional[dict | list]] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(32), default="seed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    fragment: Mapped[PromptFragment] = relationship(back_populates="versions")
+
+
 class Provider(Base):
     __tablename__ = "providers"
 

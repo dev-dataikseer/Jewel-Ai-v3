@@ -1,11 +1,13 @@
 # Jewel AI Studio — Prompt Engine Architecture & Tuning Guide
 
 > **Implementation status (Jul 2026):** Catalog Layer 3 execution modes, branding
-> clauses, IMAGE_N attachment maps, and Redis environment rotation live in
-> `backend/app/prompt_engine/execution_mode.py` and
-> `environment_rotation.py`, wired through `build_final_prompt`. Admin DB remains
-> Layer 1 (master) + Layer 2 (subjects). See also `prompt_engine.txt` and
-> `prompt_eval_checklist.md`.
+> clauses, IMAGE_N→`Image N` attachment maps, Redis environment rotation, and
+> **Admin-editable prompt fragments** live under `backend/app/prompt_engine/`
+> (`fragment_defaults.py`, `fragment_store.py`, `execution_mode.py`,
+> `environment_rotation.py`, `workflow_resolve.py`), wired through `build_final_prompt`.
+> Canonical workflows: `CATALOG_IMAGE` (+ `catalogMode`), `VIRTUAL_TRY_ON` (+ `tryOnMode`),
+> gemstone / background / luxury / custom. See `prompt_fragments_spec.md`,
+> `prompt_engine.txt`, and `prompt_eval_checklist.md`.
 
 ## 0. Verdict on the doc you already have
 

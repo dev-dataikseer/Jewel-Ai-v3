@@ -25,13 +25,15 @@ LAYER_COLUMNS = [
 
 SUBJECT_WORKFLOWS = [
     "CATALOG_IMAGE",
-    "JEWELRY_ON_MODEL",
+    "VIRTUAL_TRY_ON",
     "GEMSTONE_COLOR_CHANGE",
-    "CUSTOMER_TRY_ON",
-    "REFERENCE_STYLE_MATCH",
     "BACKGROUND_REPLACEMENT",
     "LUXURY_ENHANCEMENT",
     "CUSTOM_PROMPT",
+    # Legacy — keep subject shells for old Admin rows / history regenerate
+    "JEWELRY_ON_MODEL",
+    "CUSTOMER_TRY_ON",
+    "REFERENCE_STYLE_MATCH",
     "BULK_GENERATION",
 ]
 
@@ -436,3 +438,83 @@ def migrate_generation_job_runtime_columns(engine: Engine) -> None:
             )
         except Exception:
             pass
+
+
+def migrate_prompt_fragments(engine: Engine) -> None:
+    """Create prompt_fragments / prompt_fragment_versions if missing."""
+    inspector = inspect(engine)
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        if not inspector.has_table("prompt_fragments"):
+            if dialect == "sqlite":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE prompt_fragments (
+                            id VARCHAR(36) NOT NULL PRIMARY KEY,
+                            fragment_key VARCHAR(128) NOT NULL UNIQUE,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            is_active BOOLEAN DEFAULT 1,
+                            active_version_id VARCHAR(36),
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS prompt_fragments (
+                            id VARCHAR(36) PRIMARY KEY,
+                            fragment_key VARCHAR(128) NOT NULL UNIQUE,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            is_active BOOLEAN DEFAULT TRUE,
+                            active_version_id VARCHAR(36),
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                        )
+                        """
+                    )
+                )
+        # Re-inspect after possible create
+        inspector = inspect(engine)
+        if not inspector.has_table("prompt_fragment_versions"):
+            if dialect == "sqlite":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE prompt_fragment_versions (
+                            id VARCHAR(36) NOT NULL PRIMARY KEY,
+                            fragment_id VARCHAR(36) NOT NULL,
+                            version INTEGER NOT NULL,
+                            prompt_text TEXT NOT NULL,
+                            content_json JSON,
+                            is_active BOOLEAN DEFAULT 1,
+                            source VARCHAR(32) DEFAULT 'seed',
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY(fragment_id) REFERENCES prompt_fragments(id)
+                        )
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS prompt_fragment_versions (
+                            id VARCHAR(36) PRIMARY KEY,
+                            fragment_id VARCHAR(36) NOT NULL REFERENCES prompt_fragments(id),
+                            version INTEGER NOT NULL,
+                            prompt_text TEXT NOT NULL,
+                            content_json JSON,
+                            is_active BOOLEAN DEFAULT TRUE,
+                            source VARCHAR(32) DEFAULT 'seed',
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                        )
+                        """
+                    )
+                )

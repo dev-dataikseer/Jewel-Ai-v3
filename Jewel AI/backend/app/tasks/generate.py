@@ -90,6 +90,8 @@ async def _process_job_async(job_id: str) -> None:
                 lighting_style=job.lighting_style,
                 style_preset_id=job.style_preset_id,
                 style_preset_addon=preset_addon,
+                catalog_mode=meta.get("catalogMode") or meta.get("catalog_mode"),
+                try_on_mode=meta.get("tryOnMode") or meta.get("try_on_mode"),
             ),
             model_endpoint_id=model_endpoint,
             image_ctx=ImageContext(**packet.to_image_context_kwargs()),

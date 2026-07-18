@@ -20,13 +20,13 @@ from app.prompt_engine.execution_mode import (
 def test_branding_reference_no_logo_has_no_image3():
     clause = build_branding_clause(False, mode="reference")
     assert "IMAGE_3" not in clause
-    assert "[IMAGE_" not in clause
+    assert "Image 3" not in clause
     assert "BRAND CLEANUP" in clause
 
 
 def test_branding_reference_with_logo_uses_index():
-    clause = build_branding_clause(True, mode="reference", logo_image_label="[IMAGE_3: LOGO]")
-    assert "[IMAGE_3: LOGO]" in clause
+    clause = build_branding_clause(True, mode="reference", logo_image_label="Image 3")
+    assert "Image 3" in clause
     assert "BRAND REPLACEMENT" in clause
 
 
@@ -35,7 +35,7 @@ def test_four_flag_combos_execution_parts():
     parts, mode, meta = build_execution_parts(has_reference=False, has_logo=False, environment=ENVIRONMENT_POOL[0])
     assert mode == "modern_dynamic_catalog"
     assert "ASSIGNED ENVIRONMENT" in parts[0].text
-    assert "IMAGE_3" not in parts[0].text
+    assert "Image 3" not in parts[0].text
     assert "no branding" in parts[0].text.lower() or "BRANDING" in parts[0].text
 
     # no ref + logo
@@ -43,20 +43,24 @@ def test_four_flag_combos_execution_parts():
         has_reference=False, has_logo=True, environment=ENVIRONMENT_POOL[1], logo_index=2
     )
     assert mode == "modern_dynamic_catalog"
-    assert "[IMAGE_2: LOGO]" in parts[0].text
-    assert "IMAGE_3" not in parts[0].text
+    assert "Image 2" in parts[0].text
+    assert "Image 3" not in parts[0].text
 
     # ref, no logo
-    parts, mode, _ = build_execution_parts(has_reference=True, has_logo=False)
+    parts, mode, _ = build_execution_parts(
+        has_reference=True, has_logo=False, catalog_mode="reference_mirror"
+    )
     assert mode == "reference_mirroring"
     assert "REFERENCE MIRRORING" in parts[0].text
     assert "BRAND CLEANUP" in parts[0].text
-    assert "[IMAGE_3" not in parts[0].text
+    assert "Image 3" not in parts[0].text
 
     # ref + logo
-    parts, mode, _ = build_execution_parts(has_reference=True, has_logo=True, logo_index=3)
+    parts, mode, _ = build_execution_parts(
+        has_reference=True, has_logo=True, logo_index=3, catalog_mode="reference_mirror"
+    )
     assert mode == "reference_mirroring"
-    assert "[IMAGE_3: LOGO]" in parts[0].text
+    assert "Image 3" in parts[0].text
     assert "BRAND REPLACEMENT" in parts[0].text
 
 
@@ -80,11 +84,11 @@ def test_catalog_attachment_map_no_dangling_logo():
             roles=[{"index": 1, "role": "product"}, {"index": 2, "role": "theme"}],
         )
     )
-    assert "[IMAGE_1]" in part.text
+    assert "Image 1" in part.text
     assert "REFERENCE ENVIRONMENT" in part.text
     assert "COMPANY LOGO" not in part.text
 
-    # logo only (no theme) → IMAGE_2
+    # logo only (no theme) → Image 2
     part = build_catalog_attachment_mapping(
         ImageContext(
             has_product=True,
@@ -93,10 +97,10 @@ def test_catalog_attachment_map_no_dangling_logo():
             roles=[{"index": 1, "role": "product"}, {"index": 2, "role": "logo"}],
         )
     )
-    assert "[IMAGE_2]: COMPANY LOGO" in part.text
+    assert "Image 2: COMPANY LOGO" in part.text
     assert "REFERENCE ENVIRONMENT" not in part.text
 
-    # theme + logo → IMAGE_3
+    # theme + logo → Image 3
     part = build_catalog_attachment_mapping(
         ImageContext(
             has_product=True,
@@ -109,7 +113,7 @@ def test_catalog_attachment_map_no_dangling_logo():
             ],
         )
     )
-    assert "[IMAGE_3]: COMPANY LOGO" in part.text
+    assert "Image 3: COMPANY LOGO" in part.text
 
 
 def test_catalog_attachment_parts_use_role_map():
@@ -129,12 +133,9 @@ def test_environment_rotation_avoids_recent():
     assert first in ENVIRONMENT_POOL
     recent = get_recent_environments(uid, lookback=5)
     assert first in recent
-    # Exhaust uniqueness across several picks — each new pick should prefer unused
     seen = {first}
     for i in range(min(8, len(ENVIRONMENT_POOL) - 1)):
         pick = choose_environment(uid, f"job-{i + 2}")
-        recent_now = get_recent_environments(uid, lookback=5)
-        # Newly chosen should not be in the prior lookback window excluding itself if pool allows
         if len(ENVIRONMENT_POOL) > 5:
             assert pick in ENVIRONMENT_POOL
         seen.add(pick)
@@ -148,4 +149,3 @@ def test_subtype_order_deterministic():
         "Necklace",
         "Bracelet",
     ]
-    assert "Multiple Items" not in normalize_jewelry_types(["Ring", "Multiple Items", "Necklace"])

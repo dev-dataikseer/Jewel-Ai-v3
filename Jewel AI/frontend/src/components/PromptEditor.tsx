@@ -341,7 +341,14 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
               className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
             >
               {workflows
-                .filter((w) => w.id !== "RATE_TOOLS" && w.id !== "BULK_GENERATION")
+                .filter(
+                  (w) =>
+                    w.id !== "RATE_TOOLS" &&
+                    w.id !== "BULK_GENERATION" &&
+                    w.id !== "JEWELRY_ON_MODEL" &&
+                    w.id !== "CUSTOMER_TRY_ON" &&
+                    w.id !== "REFERENCE_STYLE_MATCH",
+                )
                 .map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.label}

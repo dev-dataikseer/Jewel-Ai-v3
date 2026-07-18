@@ -480,3 +480,162 @@ async def test_generate(body: PromptTestRequest, user: RequireAdmin, db: Session
             "variant": composed.variant_version_id,
         },
     }
+
+
+# ── Prompt fragments (shared Admin-editable blocks) ──────────────────────────
+
+
+def _serialize_fragment_version(ver) -> dict:
+    return {
+        "id": ver.id,
+        "version": ver.version,
+        "is_active": ver.is_active,
+        "created_at": ver.created_at.isoformat() if ver.created_at else None,
+        "prompt_text": ver.prompt_text,
+        "content_json": ver.content_json,
+        "source": ver.source,
+    }
+
+
+@router.get("/fragments")
+def list_fragments(user: RequireUser, db: Session = Depends(get_db)):
+    from app.models import PromptFragment, PromptFragmentVersion
+    from app.prompt_engine.fragment_defaults import FRAGMENT_KEYS, FRAGMENT_LABELS
+
+    rows = db.query(PromptFragment).order_by(PromptFragment.fragment_key.asc()).all()
+    by_key = {r.fragment_key: r for r in rows}
+    result = []
+    for key in FRAGMENT_KEYS:
+        t = by_key.get(key)
+        if not t:
+            result.append(
+                {
+                    "id": None,
+                    "fragment_key": key,
+                    "name": FRAGMENT_LABELS.get(key, key),
+                    "is_active": False,
+                    "prompt_text": None,
+                    "content_json": None,
+                    "active_version_id": None,
+                }
+            )
+            continue
+        ver = (
+            db.query(PromptFragmentVersion).filter(PromptFragmentVersion.id == t.active_version_id).first()
+            if t.active_version_id
+            else None
+        )
+        result.append(
+            {
+                "id": t.id,
+                "fragment_key": t.fragment_key,
+                "name": t.name,
+                "description": t.description,
+                "is_active": t.is_active,
+                "prompt_text": ver.prompt_text if ver else None,
+                "content_json": ver.content_json if ver else None,
+                "active_version_id": t.active_version_id,
+            }
+        )
+    return result
+
+
+@router.post("/fragments")
+def upsert_fragment(body: dict, user: RequireAdmin, db: Session = Depends(get_db)):
+    import json
+
+    from app.models import PromptFragment, PromptFragmentVersion
+    from app.prompt_engine.fragment_defaults import ENVIRONMENT_POOL, FRAGMENT_LABELS
+
+    key = body.get("fragment_key") or body.get("key")
+    if not key:
+        raise HTTPException(status_code=400, detail="fragment_key required")
+    prompt_text = body.get("prompt_text")
+    content_json = body.get("content_json")
+    if key == ENVIRONMENT_POOL and content_json is None and prompt_text:
+        try:
+            content_json = json.loads(prompt_text)
+        except json.JSONDecodeError:
+            content_json = [ln.strip() for ln in prompt_text.splitlines() if ln.strip()]
+            prompt_text = json.dumps(content_json, indent=2)
+    if prompt_text is None and content_json is not None:
+        prompt_text = json.dumps(content_json, indent=2) if not isinstance(content_json, str) else content_json
+    if prompt_text is None:
+        raise HTTPException(status_code=400, detail="prompt_text required")
+
+    frag = db.query(PromptFragment).filter(PromptFragment.fragment_key == key).first()
+    if not frag:
+        frag = PromptFragment(
+            fragment_key=key,
+            name=body.get("name") or FRAGMENT_LABELS.get(key, key),
+            description=body.get("description"),
+            is_active=True,
+        )
+        db.add(frag)
+        db.flush()
+
+    last_ver = (
+        db.query(PromptFragmentVersion)
+        .filter(PromptFragmentVersion.fragment_id == frag.id)
+        .order_by(PromptFragmentVersion.version.desc())
+        .first()
+    )
+    version_num = (last_ver.version + 1) if last_ver else 1
+    db.query(PromptFragmentVersion).filter(PromptFragmentVersion.fragment_id == frag.id).update(
+        {"is_active": False}
+    )
+    ver = PromptFragmentVersion(
+        fragment_id=frag.id,
+        version=version_num,
+        prompt_text=prompt_text,
+        content_json=content_json,
+        is_active=True,
+        source="admin",
+    )
+    db.add(ver)
+    db.flush()
+    frag.active_version_id = ver.id
+    frag.name = body.get("name") or frag.name
+    if body.get("description") is not None:
+        frag.description = body.get("description")
+    frag.is_active = body.get("is_active", True)
+    db.commit()
+    return {"id": frag.id, "version_id": ver.id, "version": version_num}
+
+
+@router.get("/fragments/{fragment_id}/versions")
+def list_fragment_versions(fragment_id: str, user: RequireAdmin, db: Session = Depends(get_db)):
+    from app.models import PromptFragmentVersion
+
+    rows = (
+        db.query(PromptFragmentVersion)
+        .filter(PromptFragmentVersion.fragment_id == fragment_id)
+        .order_by(PromptFragmentVersion.version.desc())
+        .all()
+    )
+    return [_serialize_fragment_version(v) for v in rows]
+
+
+@router.post("/fragments/{fragment_id}/activate/{version_id}")
+def activate_fragment_version(
+    fragment_id: str, version_id: str, user: RequireAdmin, db: Session = Depends(get_db)
+):
+    from app.models import PromptFragment, PromptFragmentVersion
+
+    frag = db.query(PromptFragment).filter(PromptFragment.id == fragment_id).first()
+    if not frag:
+        raise HTTPException(status_code=404, detail="Fragment not found")
+    ver = (
+        db.query(PromptFragmentVersion)
+        .filter(PromptFragmentVersion.id == version_id, PromptFragmentVersion.fragment_id == fragment_id)
+        .first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Version not found")
+    db.query(PromptFragmentVersion).filter(PromptFragmentVersion.fragment_id == fragment_id).update(
+        {"is_active": False}
+    )
+    ver.is_active = True
+    frag.active_version_id = ver.id
+    db.commit()
+    return {"id": frag.id, "active_version_id": ver.id}

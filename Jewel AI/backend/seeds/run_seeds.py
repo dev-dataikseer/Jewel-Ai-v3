@@ -164,6 +164,10 @@ def seed_prompts(db: Session) -> None:
     _backfill_layers(db)
     db.commit()
 
+    from app.prompt_engine.fragment_store import seed_prompt_fragments
+
+    seed_prompt_fragments(db)
+
 
 def run_all_seeds(db: Session) -> None:
     seed_admin_user(db)

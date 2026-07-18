@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
         migrate_batch_user_column,
         migrate_provider_admin_key_column,
         migrate_generation_job_runtime_columns,
+        migrate_prompt_fragments,
     )
 
     if not settings.schema_via_alembic:
@@ -45,6 +46,9 @@ async def lifespan(app: FastAPI):
         migrate_tenancy_columns(engine)
         migrate_batch_user_column(engine)
         migrate_generation_job_runtime_columns(engine)
+        migrate_prompt_fragments(engine)
+    else:
+        migrate_prompt_fragments(engine)
     # Always ensure Admin billing column exists (safe IF NOT EXISTS on Postgres).
     migrate_provider_admin_key_column(engine)
     db = SessionLocal()

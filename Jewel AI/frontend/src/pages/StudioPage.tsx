@@ -192,19 +192,19 @@ export function StudioPage() {
     index?: number;
   } | null>(null);
 
-  const apiWorkflow =
-    workflow === "VIRTUAL_TRY_ON"
-      ? tryOnPreset === "customer"
-        ? "CUSTOMER_TRY_ON"
-        : "JEWELRY_ON_MODEL"
-      : workflow;
+  const [catalogMode, setCatalogMode] = useState<"modern" | "reference_mirror" | "style_mood">(
+    "modern",
+  );
+
+  const apiWorkflow = workflow;
   const isCatalog = workflow === "CATALOG_IMAGE";
   const supportsBulk = primaryFiles.length > 1;
   const isBulk = supportsBulk;
   const needsModelReference = workflow === "VIRTUAL_TRY_ON";
-  const needsStyleReference = workflow === "REFERENCE_STYLE_MATCH" || isCatalog;
+  const needsStyleReference =
+    isCatalog && (catalogMode === "reference_mirror" || catalogMode === "style_mood" || Boolean(referenceFile));
   const needsReference =
-    needsModelReference || workflow === "REFERENCE_STYLE_MATCH";
+    needsModelReference || (isCatalog && catalogMode === "style_mood");
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [lockedUrls, setLockedUrls] = useState<{
     input?: string | null;
@@ -421,8 +421,19 @@ export function StudioPage() {
         } else if (job.workflow === "JEWELRY_ON_MODEL") {
           setWorkflow("VIRTUAL_TRY_ON");
           setTryOnPreset("studio");
+        } else if (job.workflow === "REFERENCE_STYLE_MATCH") {
+          setWorkflow("CATALOG_IMAGE");
+          setCatalogMode("style_mood");
+        } else if (job.workflow === "VIRTUAL_TRY_ON") {
+          setWorkflow("VIRTUAL_TRY_ON");
+          const tm = (job.provider_metadata as { tryOnMode?: string } | null)?.tryOnMode;
+          setTryOnPreset(tm === "customer" ? "customer" : "studio");
         } else if (job.workflow) {
           setWorkflow(job.workflow);
+        }
+        const cm = (job.provider_metadata as { catalogMode?: string } | null)?.catalogMode;
+        if (cm === "modern" || cm === "reference_mirror" || cm === "style_mood") {
+          setCatalogMode(cm);
         }
         if (job.jewelry_type) {
           setJewelryTypes(
@@ -659,6 +670,18 @@ export function StudioPage() {
           model_params: modelParams,
           reference_url: needsModelReference ? undefined : referenceUrl,
           model_url: modelUrl,
+          ...(workflow === "VIRTUAL_TRY_ON"
+            ? { try_on_mode: tryOnPreset }
+            : {}),
+          ...(isCatalog
+            ? {
+                catalog_mode: referenceUrl
+                  ? catalogMode === "modern"
+                    ? "reference_mirror"
+                    : catalogMode
+                  : "modern",
+              }
+            : {}),
           ...(lightingStyle ? { lighting_style: lightingStyle } : {}),
           ...((logoAsset || lockedUrls.logoAssetId || lockedUrls.logo)
             ? {
@@ -675,9 +698,6 @@ export function StudioPage() {
             : {}),
           ...(apiWorkflow === "LUXURY_ENHANCEMENT" && selectedVariant
             ? { metal_type: selectedVariant.label }
-            : {}),
-          ...(apiWorkflow === "REFERENCE_STYLE_MATCH" && selectedVariant
-            ? { background_style: selectedVariant.label }
             : {}),
         };
 
@@ -1575,6 +1595,28 @@ export function StudioPage() {
                     <option value="studio">Studio model look</option>
                     <option value="customer">Customer photo</option>
                   </select>
+                </div>
+              )}
+              {isCatalog && (
+                <div>
+                  <label className="ui-label">Catalog Mode</label>
+                  <select
+                    value={catalogMode}
+                    onChange={(e) =>
+                      setCatalogMode(
+                        e.target.value as "modern" | "reference_mirror" | "style_mood",
+                      )
+                    }
+                    className="ui-input"
+                  >
+                    <option value="modern">Modern catalog (auto environment)</option>
+                    <option value="reference_mirror">Match reference environment</option>
+                    <option value="style_mood">Match lighting / mood only</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    Style mood replaces the old Style from Reference workflow. Attach a theme
+                    image when using reference or mood modes.
+                  </p>
                 </div>
               )}
               <MultiSelectDropdown

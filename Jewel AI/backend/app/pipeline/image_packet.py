@@ -13,10 +13,20 @@ from app.config import get_settings
 from app.models import GenerationJob
 from app.providers.model_catalog.spec import ImageContract, ModelSpec
 
+from app.prompt_engine.workflow_resolve import TRY_ON_WORKFLOWS
+
 LogoMode = Literal["model", "compose", "omit"]
 ImageRoleName = Literal["product", "theme", "portrait", "logo"]
 
-TRY_ON_WORKFLOWS = frozenset({"JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"})
+# Re-export for callers that import from image_packet
+__all__ = [
+    "ImageRole",
+    "ImagePacket",
+    "TRY_ON_WORKFLOWS",
+    "build_image_packet",
+    "LogoMode",
+    "ImageRoleName",
+]
 
 
 @dataclass(frozen=True)

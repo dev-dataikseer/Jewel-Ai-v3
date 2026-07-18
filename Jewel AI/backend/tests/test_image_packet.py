@@ -124,7 +124,7 @@ def test_attachment_includes_logo_slot():
     keys = {p.key for p in parts}
     assert "attach_role_map" in keys
     role_map = next(p for p in parts if p.key == "attach_role_map")
-    assert "[IMAGE_3]: COMPANY LOGO" in role_map.text
+    assert "Image 3: COMPANY LOGO" in role_map.text
     assert "REFERENCE ENVIRONMENT" in role_map.text
 
 

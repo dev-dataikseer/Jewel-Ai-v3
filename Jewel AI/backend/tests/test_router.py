@@ -10,6 +10,7 @@ from app.providers.types import GenerationRequest, GenerationResult
 
 
 def test_capability_gating_person_generation():
+    """Jewelry try-on uses I2I compositing — person_generation is not required."""
     prov = Provider(
         name="FAL",
         display_name="fal.ai",
@@ -18,8 +19,11 @@ def test_capability_gating_person_generation():
         is_active=True,
         capabilities={"text_to_image": False, "image_to_image": True, "person_generation": False},
     )
-    req = GenerationRequest(workflow="JEWELRY_ON_MODEL", prompt="test", image_urls=["/uploads/x.jpg"])
-    assert provider_supports_request(prov, req) is False
+    req = GenerationRequest(workflow="VIRTUAL_TRY_ON", prompt="test", image_urls=["/uploads/x.jpg"])
+    assert provider_supports_request(prov, req) is True
+
+    req_legacy = GenerationRequest(workflow="JEWELRY_ON_MODEL", prompt="test", image_urls=["/uploads/x.jpg"])
+    assert provider_supports_request(prov, req_legacy) is True
 
 
 def test_capability_gating_image_required():

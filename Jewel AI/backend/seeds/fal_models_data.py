@@ -773,8 +773,10 @@ FLUX_VTO_PARAMS = {
 WORKFLOW_DEFAULTS: dict[str, str] = {
     "CATALOG_IMAGE": "fal-ai/nano-banana-pro/edit",
     "BULK_GENERATION": "fal-ai/nano-banana-pro/edit",
-    "JEWELRY_ON_MODEL": "fal-ai/fashn/tryon/v1.6",
-    "CUSTOMER_TRY_ON": "fal-ai/image-apps-v2/virtual-try-on",
+    "VIRTUAL_TRY_ON": "fal-ai/nano-banana-pro/edit",
+    # Legacy aliases — jewelry compositing via image-edit, not garment VTON
+    "JEWELRY_ON_MODEL": "fal-ai/nano-banana-pro/edit",
+    "CUSTOMER_TRY_ON": "fal-ai/nano-banana-pro/edit",
     "GEMSTONE_COLOR_CHANGE": "fal-ai/flux-2-max/edit",
     "BACKGROUND_REPLACEMENT": "fal-ai/flux-2-max/edit",
     "LUXURY_ENHANCEMENT": "fal-ai/flux-pro/kontext",
@@ -1154,7 +1156,7 @@ _VTON_MODELS: list[dict] = [
                 "matching its color, material, and fit"
             ),
         },
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "image_url", "product": "reference_image_url"},
@@ -1173,7 +1175,7 @@ _VTON_MODELS: list[dict] = [
         "capabilities": VTON_CAPS,
         "input_schema": FASHN_TRYON_PARAMS,
         "default_params": {"garment_photo_type": "flat-lay", "mode": "balanced", "num_samples": 1},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "model_image", "product": "garment_image"},
@@ -1192,7 +1194,7 @@ _VTON_MODELS: list[dict] = [
         "capabilities": VTON_CAPS,
         "input_schema": IMAGE_APPS_VTON_PARAMS,
         "default_params": {"preserve_pose": True, "aspect_ratio": "3:4"},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "person_image_url", "product": "clothing_image_url"},
@@ -1217,7 +1219,7 @@ _VTON_MODELS: list[dict] = [
             },
         },
         "default_params": {"lora_scale": 1, "num_images": 1},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "image_field": "image_urls",
@@ -1234,7 +1236,7 @@ _VTON_MODELS: list[dict] = [
         "capabilities": VTON_CAPS,
         "input_schema": KOLORS_VTON_PARAMS,
         "default_params": {"sync_mode": False},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "human_image_url", "product": "garment_image_url"},
@@ -1253,7 +1255,7 @@ _VTON_MODELS: list[dict] = [
         "capabilities": VTON_CAPS,
         "input_schema": CAT_VTON_PARAMS,
         "default_params": {"cloth_type": "upper", "image_size": "portrait_4_3", "num_inference_steps": 30, "guidance_scale": 2.5},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "human_image_url", "product": "garment_image_url"},
@@ -1272,7 +1274,7 @@ _VTON_MODELS: list[dict] = [
         "capabilities": VTON_CAPS,
         "input_schema": LEFFA_VTON_PARAMS,
         "default_params": {"garment_type": "upper_body", "num_inference_steps": 30, "guidance_scale": 2.5},
-        "workflow_allowlist": ["JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "human_image_url", "product": "garment_image_url"},

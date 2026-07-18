@@ -99,13 +99,12 @@ def _provider_meta(body: dict) -> dict:
     )
 
 
-def _resolve_bulk_workflow(workflow: str) -> str:
+def _resolve_bulk_workflow(workflow: str, *, try_on_mode: str | None = None) -> str:
     """Map UI aliases to concrete generation workflows."""
-    if workflow in ("BULK_GENERATION", ""):
-        return "CATALOG_IMAGE"
-    if workflow == "VIRTUAL_TRY_ON":
-        return "JEWELRY_ON_MODEL"
-    return workflow
+    from app.prompt_engine.workflow_resolve import resolve_workflow
+
+    resolved = resolve_workflow(workflow, try_on_mode=try_on_mode)
+    return resolved.workflow
 
 
 def _stamp_timing(meta: dict | None, stage: str) -> dict:
@@ -192,6 +191,16 @@ def create_job(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    from app.prompt_engine.workflow_resolve import resolve_workflow
+
+    resolved = resolve_workflow(
+        body.workflow,
+        catalog_mode=getattr(body, "catalog_mode", None),
+        try_on_mode=getattr(body, "try_on_mode", None),
+        has_reference=bool(body.reference_url),
+    )
+    workflow = resolved.workflow
+
     asset = (
         db.query(Asset)
         .filter(Asset.id == body.asset_id, Asset.user_id == user.id)
@@ -204,10 +213,18 @@ def create_job(
 
     _enforce_daily_job_limit(db, user, 1)
 
+    if workflow == "VIRTUAL_TRY_ON" and not (body.model_url or body.reference_url):
+        raise HTTPException(
+            status_code=400,
+            detail="Virtual Try-On requires a model or customer portrait (model_url or reference_url)",
+        )
+    if resolved.catalog_mode == "style_mood" and not body.reference_url:
+        raise HTTPException(status_code=400, detail="Style mood catalog mode requires reference_url")
+
     image_count = 1
     if body.reference_url or body.model_url:
         image_count = 2
-    data = _validate_job_model(db, data, body.workflow, image_count)
+    data = _validate_job_model(db, data, workflow, image_count)
 
     logo_url = getattr(body, "logo_url", None)
     logo_asset_id = getattr(body, "logo_asset_id", None)
@@ -223,7 +240,7 @@ def create_job(
 
     project = Project(
         name=f"Project {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
-        workflow=body.workflow,
+        workflow=workflow,
         user_id=user.id,
     )
     db.add(project)
@@ -234,12 +251,24 @@ def create_job(
         meta["logoUrl"] = logo_url
     if logo_asset_id:
         meta["logoAssetId"] = logo_asset_id
+    if resolved.catalog_mode:
+        meta["catalogMode"] = resolved.catalog_mode
+    if resolved.try_on_mode:
+        meta["tryOnMode"] = resolved.try_on_mode
+    if resolved.legacy_workflow:
+        meta["legacyWorkflow"] = resolved.legacy_workflow
+
+    model_url = body.model_url
+    reference_url = body.reference_url
+    if workflow == "VIRTUAL_TRY_ON":
+        model_url = body.model_url or body.reference_url
+        reference_url = None
 
     job = GenerationJob(
         user_id=user.id,
         project_id=project.id,
         asset_id=body.asset_id,
-        workflow=body.workflow,
+        workflow=workflow,
         status="PENDING",
         prompt_text=body.prompt_text,
         jewelry_type=body.jewelry_type,
@@ -251,8 +280,8 @@ def create_job(
         background_style=body.background_style,
         lighting_style=body.lighting_style,
         style_preset_id=body.style_preset_id,
-        reference_url=body.reference_url,
-        model_url=body.model_url,
+        reference_url=reference_url,
+        model_url=model_url,
         input_url=_asset_input_url(asset),
         provider_metadata=meta,
     )
@@ -269,16 +298,27 @@ def create_bulk_jobs(
     user: RequireUser,
     db: Session = Depends(get_db),
 ):
-    workflow = _resolve_bulk_workflow(body.workflow)
+    workflow = _resolve_bulk_workflow(body.workflow, try_on_mode=getattr(body, "try_on_mode", None))
+    from app.prompt_engine.workflow_resolve import resolve_workflow
+
+    resolved = resolve_workflow(
+        body.workflow,
+        catalog_mode=getattr(body, "catalog_mode", None),
+        try_on_mode=getattr(body, "try_on_mode", None),
+        has_reference=bool(body.reference_url),
+    )
+    workflow = resolved.workflow
     if workflow not in (
         "CATALOG_IMAGE",
-        "JEWELRY_ON_MODEL",
-        "CUSTOMER_TRY_ON",
-        "REFERENCE_STYLE_MATCH",
+        "VIRTUAL_TRY_ON",
         "GEMSTONE_COLOR_CHANGE",
         "BACKGROUND_REPLACEMENT",
         "LUXURY_ENHANCEMENT",
         "CUSTOM_PROMPT",
+        # legacy accepted then remapped above
+        "JEWELRY_ON_MODEL",
+        "CUSTOMER_TRY_ON",
+        "REFERENCE_STYLE_MATCH",
     ):
         raise HTTPException(status_code=400, detail=f"Bulk not supported for workflow: {workflow}")
 
@@ -295,13 +335,13 @@ def create_bulk_jobs(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if workflow in ("JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON") and not (body.model_url or body.reference_url):
+    if workflow == "VIRTUAL_TRY_ON" and not (body.model_url or body.reference_url):
         raise HTTPException(
             status_code=400,
             detail="Bulk try-on requires a shared model/customer portrait (model_url or reference_url)",
         )
-    if workflow == "REFERENCE_STYLE_MATCH" and not body.reference_url:
-        raise HTTPException(status_code=400, detail="Bulk style match requires reference_url")
+    if resolved.catalog_mode == "style_mood" and not body.reference_url:
+        raise HTTPException(status_code=400, detail="Bulk style mood requires reference_url")
 
     image_count = 1
     if body.reference_url or body.model_url:
@@ -340,7 +380,7 @@ def create_bulk_jobs(
     # Shared secondary image: try-on uses model_url; others use reference_url
     shared_model_url = body.model_url
     shared_reference_url = body.reference_url
-    if workflow in ("JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"):
+    if workflow == "VIRTUAL_TRY_ON":
         shared_model_url = body.model_url or body.reference_url
         shared_reference_url = None
 
@@ -366,6 +406,12 @@ def create_bulk_jobs(
     if body.logo_asset_id:
         meta["logoAssetId"] = body.logo_asset_id
     meta["batchShared"] = True
+    if resolved.catalog_mode:
+        meta["catalogMode"] = resolved.catalog_mode
+    if resolved.try_on_mode:
+        meta["tryOnMode"] = resolved.try_on_mode
+    if resolved.legacy_workflow:
+        meta["legacyWorkflow"] = resolved.legacy_workflow
 
     jobs: list[GenerationJob] = []
     for asset in assets:

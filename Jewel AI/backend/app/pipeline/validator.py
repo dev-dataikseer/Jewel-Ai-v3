@@ -40,10 +40,14 @@ JOB_FIELD_WHITELIST = {
     "model_name",
     "model_params",
     "batch_name",
+    "catalog_mode",
+    "catalogMode",
+    "try_on_mode",
+    "tryOnMode",
 }
 
 # Workflows that generate images and must include a product asset
-GENERATION_WORKFLOWS = ALLOWED_WORKFLOWS - {"BULK_GENERATION"}
+GENERATION_WORKFLOWS = ALLOWED_WORKFLOWS - {"BULK_GENERATION", "RATE_TOOLS"}
 
 _INJECTION_PATTERNS = re.compile(
     r"(ignore\s+(all\s+)?previous|forget\s+(all\s+)?instructions|disregard\s+(all\s+)?|override\s+(the\s+)?preservation)",

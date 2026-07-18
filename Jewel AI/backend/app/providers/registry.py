@@ -83,7 +83,7 @@ def resolve_default_endpoint(db: Session, workflow: str, has_input: bool = True)
     return models[0].endpoint_id if models else None
 
 
-VTON_WORKFLOWS = frozenset({"JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"})
+VTON_WORKFLOWS = frozenset({"VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"})
 
 
 def filter_models_for_request(
@@ -130,7 +130,8 @@ def filter_models_for_request(
         if workflow and m.workflow_allowlist is not None and workflow not in m.workflow_allowlist:
             continue
         if workflow in VTON_WORKFLOWS:
-            if not is_vton:
+            # Jewelry try-on defaults to I2I compositing; garment VTON remains optional.
+            if not is_i2i and not is_vton:
                 continue
         elif is_vton:
             continue

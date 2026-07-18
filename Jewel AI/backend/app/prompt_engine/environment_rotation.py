@@ -66,11 +66,21 @@ def record_environment_used(user_id: str, job_id: str | None, choice: str) -> No
     _memory_recent[uid].appendleft(choice)
 
 
-def choose_environment(user_id: str | None, job_id: str | None = None) -> str:
+def choose_environment(
+    user_id: str | None,
+    job_id: str | None = None,
+    db=None,
+    pool: list[str] | None = None,
+) -> str:
     """Pick a concrete environment sentence, avoiding recent choices for this user."""
+    from app.prompt_engine.fragment_store import get_environment_pool
+
     uid = user_id or "default"
+    env_pool = pool if pool is not None else get_environment_pool(db)
+    if not env_pool:
+        env_pool = list(ENVIRONMENT_POOL)
     recent = get_recent_environments(uid)
-    available = [e for e in ENVIRONMENT_POOL if e not in recent] or list(ENVIRONMENT_POOL)
+    available = [e for e in env_pool if e not in recent] or list(env_pool)
     choice = random.choice(available)
     record_environment_used(uid, job_id, choice)
     return choice

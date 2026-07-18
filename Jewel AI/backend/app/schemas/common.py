@@ -55,6 +55,8 @@ class JobCreate(BaseModel):
     model_name: Optional[str] = None  # deprecated — use model_endpoint_id
     model_endpoint_id: Optional[str] = None
     model_params: dict[str, Any] = Field(default_factory=dict)
+    catalog_mode: Optional[str] = None  # modern | reference_mirror | style_mood
+    try_on_mode: Optional[str] = None  # studio | customer
 
 
 class BulkJobCreate(BaseModel):
@@ -81,6 +83,8 @@ class BulkJobCreate(BaseModel):
     gemstone_cut: Optional[str] = None
     gemstone_target_color: Optional[str] = None
     setting_type: Optional[str] = None
+    catalog_mode: Optional[str] = None
+    try_on_mode: Optional[str] = None
 
 
 class BatchOut(BaseModel):

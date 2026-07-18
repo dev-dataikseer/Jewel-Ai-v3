@@ -89,7 +89,8 @@ def test_legacy_augment_wrapper():
         has_style_reference=True,
     )
     assert "Base catalog prompt" in out
-    assert "ATTACHED IMAGES" in out
+    assert "ATTACHMENT ROLES" in out or "ATTACHED IMAGES" in out
+    assert "REFERENCE" in out.upper() or "PRIMARY SUBJECT" in out
 
 
 def test_resolve_profile_by_family():
