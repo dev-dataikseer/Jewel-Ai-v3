@@ -157,16 +157,21 @@ export function jobStatusLabel(job: Job | null | undefined): string {
   if (job.status === "FAILED") return "Failed";
   if (job.status === "COMPLETED") return "Complete";
   const hint = job.provider_metadata?.statusHint;
+  const eta = job.provider_metadata?.etaSeconds;
+  const overdue = Boolean(job.provider_metadata?.etaOverdue);
+  const elapsed = job.provider_metadata?.etaElapsedSeconds;
+  const etaSuffix =
+    typeof eta === "number" && eta > 0
+      ? overdue
+        ? ` (~${eta}s more — still on fal.ai)`
+        : ` (~${eta}s remaining)`
+      : typeof elapsed === "number" && elapsed > 0
+        ? ` (${elapsed}s elapsed)`
+        : "";
   if (typeof hint === "string" && hint) {
-    const eta = job.provider_metadata?.etaSeconds;
-    if (typeof eta === "number" && eta > 0) {
-      return `${hint} (~${eta}s remaining)`;
-    }
-    return hint;
+    return `${hint}${etaSuffix}`;
   }
   const stage = job.provider_metadata?.progressStage;
-  const eta = job.provider_metadata?.etaSeconds;
-  const etaSuffix = typeof eta === "number" && eta > 0 ? ` (~${eta}s)` : "";
   if (stage === "composing_prompt") return `Building prompt…${etaSuffix}`;
   if (stage === "waiting_on_fal") return `Waiting on fal.ai…${etaSuffix}`;
   if (job.provider_metadata?.webhook_pending) return `Waiting on fal.ai…${etaSuffix}`;

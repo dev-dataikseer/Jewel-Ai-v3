@@ -105,24 +105,31 @@ async def fal_webhook(
         job.provider_metadata = meta
         db.commit()
 
-        from app.tasks.generate import finalize_fal_webhook
-        from app.services.queue_dispatch import celery_worker_available
+        import asyncio
+        import threading
 
-        if celery_worker_available():
-            finalize_fal_webhook.delay(job_id, payload if isinstance(payload, dict) else {})
-        else:
-            # Local/dev without worker: run finalize in a daemon thread.
-            import asyncio
-            import threading
-            from app.tasks.generate import _finalize_fal_webhook_async
+        from app.tasks.generate import _finalize_fal_webhook_async, finalize_fal_webhook
 
-            def _run() -> None:
-                try:
-                    asyncio.run(_finalize_fal_webhook_async(job_id, payload if isinstance(payload, dict) else {}))
-                except Exception as exc:
-                    logger.error("Webhook finalize thread failed for %s: %s", job_id, exc)
+        # Always finalize on the API process first. Celery workers have historically
+        # discarded unregistered finalize_fal_webhook tasks, which left jobs stuck
+        # on "Waiting on fal.ai" forever after fal already finished.
+        def _run() -> None:
+            try:
+                asyncio.run(_finalize_fal_webhook_async(job_id, payload if isinstance(payload, dict) else {}))
+            except Exception as exc:
+                logger.error("Webhook finalize thread failed for %s: %s", job_id, exc)
 
-            threading.Thread(target=_run, daemon=True, name=f"webhook-{job_id[:8]}").start()
+        threading.Thread(target=_run, daemon=True, name=f"webhook-{job_id[:8]}").start()
+
+        # Best-effort durable enqueue (ignore if worker hasn't registered the task).
+        try:
+            from app.services.queue_dispatch import celery_worker_available
+
+            if celery_worker_available():
+                finalize_fal_webhook.delay(job_id, payload if isinstance(payload, dict) else {})
+        except Exception as exc:
+            logger.debug("Celery finalize enqueue skipped for %s: %s", job_id, exc)
+
         return {"status": "processing_image"}
 
     if status == "ERROR":

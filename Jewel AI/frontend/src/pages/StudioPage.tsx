@@ -1053,7 +1053,7 @@ export function StudioPage() {
                           {activeJob.provider_metadata?.webhook_pending ||
                           activeJob.provider_metadata?.progressStage ===
                             "waiting_on_fal"
-                            ? "Delay is usually from fal.ai queue time, not Jewel AI."
+                            ? "Fal.ai is generating your image. This usually takes 20–60 seconds."
                             : "Preparing request in Jewel AI…"}
                         </p>
                       </div>

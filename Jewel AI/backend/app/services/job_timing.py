@@ -83,23 +83,31 @@ def attach_eta_fields(job: GenerationJob, meta: dict[str, Any]) -> dict[str, Any
 
     avg = average_duration_seconds(_endpoint_key(job))
     if avg is None:
-        # Conservative defaults until we have samples
-        avg = 90.0 if (out.get("progressStage") == "waiting_on_fal" or out.get("webhook_pending")) else 45.0
+        # Catalog / Nano Banana typically lands ~30–60s end-to-end once fal is warm.
+        avg = 45.0 if (out.get("progressStage") == "waiting_on_fal" or out.get("webhook_pending")) else 25.0
         out["etaSource"] = "default"
     else:
         out["etaSource"] = "rolling_average"
 
-    started = job.processing_started_at
+    started = job.processing_started_at or job.created_at
+    elapsed = 0.0
     if started is not None:
         if started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        remaining = max(5.0, avg - elapsed)
+        elapsed = max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+
+    # Don't clamp to a misleading "~5s" forever after the estimate is exceeded —
+    # show a growing "still working" window instead.
+    remaining = avg - elapsed
+    if remaining <= 0:
+        remaining = min(30.0, max(8.0, avg * 0.25))
+        out["etaOverdue"] = True
     else:
-        remaining = avg
+        out["etaOverdue"] = False
 
     out["etaSeconds"] = int(round(remaining))
     out["etaAverageSeconds"] = int(round(avg))
+    out["etaElapsedSeconds"] = int(round(elapsed))
     return out
 
 

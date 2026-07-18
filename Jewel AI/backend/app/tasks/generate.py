@@ -307,20 +307,44 @@ def sweep_stuck_jobs() -> int:
         now = datetime.now(timezone.utc)
         stuck_cutoff = now - timedelta(minutes=_stuck_cutoff_minutes())
         webhook_cutoff = now - timedelta(minutes=_webhook_timeout_minutes())
+        # Recover finished fal jobs quickly if webhook finalize was dropped by Celery.
+        poll_cutoff = now - timedelta(seconds=45)
         stuck = (
             db.query(GenerationJob)
             .filter(GenerationJob.status == "PROCESSING", GenerationJob.processing_started_at < stuck_cutoff)
             .all()
         )
+        pending_webhook = (
+            db.query(GenerationJob)
+            .filter(
+                GenerationJob.status == "PROCESSING",
+                GenerationJob.processing_started_at < poll_cutoff,
+            )
+            .all()
+        )
         acted = 0
+
+        for job in pending_webhook:
+            meta = dict(job.provider_metadata or {})
+            if meta.get("webhook_completed"):
+                continue
+            if not (meta.get("webhook_pending") or meta.get("webhook_accepted") or meta.get("fal_request_id")):
+                continue
+            if _recover_fal_result(job.id):
+                acted += 1
+
         for job in stuck:
             meta = dict(job.provider_metadata or {})
             started = job.processing_started_at
             webhook_pending = bool(
                 (meta.get("webhook_pending") or meta.get("webhook_accepted"))
-                and (meta.get("usage", {}).get("request_id") or meta.get("webhook_accepted"))
+                and (meta.get("usage", {}).get("request_id") or meta.get("fal_request_id") or meta.get("webhook_accepted"))
             )
             if webhook_pending:
+                # One more recovery attempt before failing.
+                if _recover_fal_result(job.id):
+                    acted += 1
+                    continue
                 # Fail permanently if fal webhook never arrives.
                 if started and started < webhook_cutoff:
                     job.status = "FAILED"
@@ -350,6 +374,75 @@ def sweep_stuck_jobs() -> int:
         return acted
     finally:
         db.close()
+
+
+def _recover_fal_result(job_id: str) -> bool:
+    """Poll fal queue for a completed request and finalize if images are ready."""
+    import httpx
+
+    from app.config import get_settings
+    from app.providers.fal_billing.service import resolve_fal_api_key
+
+    db = SessionLocal()
+    envelope: dict | None = None
+    try:
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if not job or job.status != "PROCESSING":
+            return False
+        if (job.provider_metadata or {}).get("webhook_completed"):
+            return False
+
+        meta = dict(job.provider_metadata or {})
+        request_id = meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id")
+        endpoint = job.provider_model or meta.get("modelEndpointId")
+        if not request_id or not endpoint:
+            return False
+
+        api_key = resolve_fal_api_key(db) or get_settings().fal_key
+        if not api_key:
+            return False
+
+        headers = {"Authorization": f"Key {api_key}", "Accept": "application/json"}
+        status_url = f"https://queue.fal.run/{endpoint}/requests/{request_id}/status"
+        result_url = f"https://queue.fal.run/{endpoint}/requests/{request_id}"
+
+        try:
+            with httpx.Client(timeout=20.0) as client:
+                st = client.get(status_url, headers=headers)
+                if st.status_code >= 400:
+                    return False
+                st_body = st.json() if st.content else {}
+                status = str((st_body or {}).get("status") or "").upper()
+                if status in ("IN_QUEUE", "IN_PROGRESS", "PROCESSING"):
+                    return False
+                resp = client.get(result_url, headers=headers)
+                if resp.status_code >= 400:
+                    return False
+                payload = resp.json()
+        except Exception as exc:
+            logger.debug("fal poll failed for %s: %s", job_id, exc)
+            return False
+
+        if not isinstance(payload, dict):
+            return False
+        # Normalize to webhook-like envelope expected by finalize.
+        envelope = payload if "payload" in payload else {"status": "OK", "payload": payload}
+
+        meta["webhook_accepted"] = True
+        meta["recovered_via_fal_poll"] = True
+        job.provider_metadata = meta
+        db.commit()
+    finally:
+        db.close()
+
+    if not envelope:
+        return False
+    try:
+        asyncio.run(_finalize_fal_webhook_async(job_id, envelope))
+        return True
+    except Exception as exc:
+        logger.warning("fal poll finalize failed for %s: %s", job_id, exc)
+        return False
 
 
 def _acquire_requeue_lease(job_id: str, *, ttl_seconds: int = 120) -> bool:

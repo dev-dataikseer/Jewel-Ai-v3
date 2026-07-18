@@ -9,8 +9,16 @@ celery_app = Celery(
     "jewel_ai",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.tasks.generate", "app.tasks.billing"],
+    include=[
+        "app.tasks.generate",
+        "app.tasks.billing",
+    ],
 )
+
+# Force-import so worker process always registers finalize_fal_webhook + billing.
+# (Variable-only redeploys have left workers on stale images missing these tasks.)
+from app.tasks import billing as _billing_tasks  # noqa: E402,F401
+from app.tasks import generate as _generate_tasks  # noqa: E402,F401
 
 celery_app.conf.update(
     task_serializer="json",
@@ -21,10 +29,11 @@ celery_app.conf.update(
     worker_concurrency=settings.celery_worker_concurrency,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    imports=("app.tasks.generate", "app.tasks.billing"),
     beat_schedule={
         "sweep-stuck-jobs": {
             "task": "app.tasks.generate.sweep_stuck_jobs",
-            "schedule": crontab(minute="*/5"),
+            "schedule": crontab(minute="*/2"),
         },
         "refresh-fal-credits": {
             "task": "app.tasks.billing.refresh_fal_credits",
