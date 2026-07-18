@@ -138,5 +138,12 @@ async def fal_webhook(
             job.status = "FAILED"
             job.error_message = str(error)
             db.commit()
+            if job.batch_id:
+                try:
+                    from app.tasks.generate import _update_batch
+
+                    _update_batch(db, job.batch_id)
+                except Exception as exc:
+                    logger.error("Batch update after webhook ERROR failed for %s: %s", job_id, exc)
 
     return {"status": "ok"}

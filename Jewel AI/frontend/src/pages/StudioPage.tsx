@@ -6,6 +6,8 @@ import {
   BadgeCheck,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Gem,
   Heart,
@@ -21,7 +23,9 @@ import {
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ImageCropModal } from "@/components/studio/ImageCropModal";
+import { BatchProgressPanel } from "@/components/studio/BatchProgressPanel";
 import { ModelSelector } from "@/components/studio/ModelSelector";
+import { ProductUploadGallery } from "@/components/studio/ProductUploadGallery";
 import { UploadZone } from "@/components/studio/UploadZone";
 import { jobStatusLabel, useJobStream } from "@/hooks/useJobStream";
 import { api, mediaUrl } from "@/lib/api";
@@ -38,6 +42,7 @@ import {
 } from "@/lib/studioSession";
 import type {
   Asset,
+  BatchOut,
   ConfigOptions,
   Job,
   JobsListResponse,
@@ -177,6 +182,8 @@ export function StudioPage() {
   >({});
   const [lightingStyle, setLightingStyle] = useState("");
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
+  const [queueModeInline, setQueueModeInline] = useState(false);
+  const [batchForceAllow, setBatchForceAllow] = useState(false);
   const [outputIndex, setOutputIndex] = useState(0);
   const [cropTarget, setCropTarget] = useState<{
     kind: "primary" | "reference" | "logo";
@@ -451,6 +458,29 @@ export function StudioPage() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    const batchId = searchParams.get("batchId");
+    if (!batchId) return;
+    setLastBatchId(batchId);
+    setBatchForceAllow(false);
+    api
+      .get<BatchOut>(`/jobs/batches/${batchId}`)
+      .then((res) => {
+        const jobs = res.data.jobs || [];
+        if (jobs.length) {
+          setSessionJobs((list) => mergeSessionJobs(list, jobs));
+          const first =
+            jobs.find((j) => j.status === "PROCESSING" || j.status === "PENDING") ||
+            jobs[0];
+          if (first) setActiveJobId(first.id);
+        }
+        toast.success("Batch loaded into Studio");
+      })
+      .catch(() => toast.error("Could not load batch"));
+    searchParams.delete("batchId");
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     setWorkflowVariantKey("");
     const first = workflowVariants[0];
     if (first) setWorkflowVariantKey(first.variant_key);
@@ -658,6 +688,7 @@ export function StudioPage() {
             jobIds: string[];
             jobs: Job[];
             batchId: string;
+            queueMode?: string;
           }>("/jobs/bulk", {
             ...payload,
             workflow: apiWorkflow,
@@ -667,6 +698,10 @@ export function StudioPage() {
               : { reference_url: referenceUrl }),
           });
           if (res.data.batchId) setLastBatchId(res.data.batchId);
+          setQueueModeInline(res.data.queueMode === "inline");
+          setBatchForceAllow(false);
+          queryClient.invalidateQueries({ queryKey: ["batch", res.data.batchId] });
+          queryClient.invalidateQueries({ queryKey: ["batches"] });
           return res.data.jobs?.length
             ? res.data.jobs
             : await Promise.all(
@@ -794,10 +829,26 @@ export function StudioPage() {
             ? "Match Focus"
             : null;
 
-  const onPrimaryInput = (files: FileList | null) => {
-    if (!files?.length) return;
-    const list = Array.from(files).slice(0, 30);
-    setPrimaryFiles(list);
+  const onPrimaryAppend = (incoming: File[]) => {
+    if (!incoming.length) return;
+    setPrimaryFiles((prev) => [...prev, ...incoming].slice(0, 30));
+    setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+    setValidationErrors((e) => ({ ...e, productImage: "" }));
+  };
+
+  const onPrimaryReplace = (incoming: File[]) => {
+    setPrimaryFiles(incoming.slice(0, 30));
+    setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+    setValidationErrors((e) => ({ ...e, productImage: "" }));
+  };
+
+  const removePrimaryAt = (index: number) => {
+    setPrimaryFiles((prev) => prev.filter((_, i) => i !== index));
+    setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+  };
+
+  const clearPrimaryFiles = () => {
+    setPrimaryFiles([]);
     setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
   };
 
@@ -866,22 +917,27 @@ export function StudioPage() {
   const { data: batchStatus } = useQuery({
     queryKey: ["batch", lastBatchId],
     queryFn: async () =>
-      (
-        await api.get<{
-          id: string;
-          status: string;
-          total_jobs: number;
-          completed_jobs: number;
-          failed_jobs: number;
-          jobs?: Array<{ id: string; status: string; output_url?: string | null }>;
-        }>(`/jobs/batches/${lastBatchId}`)
-      ).data,
+      (await api.get<BatchOut>(`/jobs/batches/${lastBatchId}`)).data,
     enabled: Boolean(lastBatchId),
     refetchInterval: (q) => {
       const s = q.state.data?.status;
       return s === "PENDING" || s === "PROCESSING" ? 2500 : false;
     },
   });
+
+  useEffect(() => {
+    if (!batchStatus?.jobs?.length) return;
+    setSessionJobs((prev) => mergeSessionJobs(prev, batchStatus.jobs || []));
+  }, [batchStatus?.jobs, batchStatus?.updated_at, batchStatus?.completed_jobs]);
+
+  const batchJobIds = useMemo(
+    () => (batchStatus?.jobs || []).map((j) => j.id),
+    [batchStatus?.jobs],
+  );
+  const batchJobIndex = activeJobId ? batchJobIds.indexOf(activeJobId) : -1;
+  const batchActive =
+    batchStatus?.status === "PENDING" || batchStatus?.status === "PROCESSING";
+  const generateBlockedByBatch = Boolean(batchActive && !batchForceAllow);
 
   const selectWorkflow = (id: string) => {
     setWorkflow(id);
@@ -1047,8 +1103,8 @@ export function StudioPage() {
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
                   {/* Input */}
-                  <div className="p-5 min-h-[360px] flex flex-col">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                  <div className="p-5 min-h-[360px] flex flex-col min-w-0">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3 shrink-0">
                       <span className="ui-label mb-0">Input</span>
                       {activeJob && (
                         <button
@@ -1080,37 +1136,22 @@ export function StudioPage() {
                         )}
                       </div>
                     ) : needsReference ? (
-                      <div className="grid grid-cols-2 gap-3 flex-1">
-                        <UploadZone
+                      <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
+                        <ProductUploadGallery
                           id="studio-product-upload"
                           label="Product (multi for bulk)"
-                          error={validationErrors.productImage}
+                          files={primaryFiles}
                           previews={productPreviewSrcs}
-                          onFiles={(files) => {
-                            setValidationErrors((e) => ({
-                              ...e,
-                              productImage: "",
-                            }));
-                            onPrimaryInput(files);
-                          }}
-                          multiple
-                          compact
-                          fileCount={primaryFiles.length || (lockedUrls.input ? 1 : 0)}
-                          fileName={primaryFiles[0]?.name}
+                          error={validationErrors.productImage}
+                          onAppend={onPrimaryAppend}
+                          onReplace={onPrimaryReplace}
+                          onRemoveAt={removePrimaryAt}
+                          onClearAll={clearPrimaryFiles}
                           onCrop={
                             primaryFiles.length === 1
                               ? () => openCropForPrimary(0)
                               : undefined
                           }
-                          cropLabel="Crop"
-                          onClear={() => {
-                            setPrimaryFiles([]);
-                            setLockedUrls((u) => ({
-                              ...u,
-                              input: null,
-                              assetId: null,
-                            }));
-                          }}
                         />
                         <UploadZone
                           id="studio-reference-upload"
@@ -1133,43 +1174,19 @@ export function StudioPage() {
                         />
                       </div>
                     ) : (
-                      <UploadZone
+                      <ProductUploadGallery
                         id="studio-product-upload"
                         label="Product (multi for bulk)"
-                        error={validationErrors.productImage}
+                        files={primaryFiles}
                         previews={productPreviewSrcs}
-                        onFiles={(files) => {
-                          setValidationErrors((e) => ({
-                            ...e,
-                            productImage: "",
-                          }));
-                          onPrimaryInput(files);
-                        }}
-                        multiple
-                        compact
-                        fileCount={primaryFiles.length || (lockedUrls.input ? 1 : 0)}
-                        fileName={
-                          primaryFiles.length > 1
-                            ? `${primaryFiles.length} files`
-                            : primaryFiles[0]?.name
-                        }
+                        error={validationErrors.productImage}
+                        onAppend={onPrimaryAppend}
+                        onReplace={onPrimaryReplace}
+                        onRemoveAt={removePrimaryAt}
+                        onClearAll={clearPrimaryFiles}
                         onCrop={
                           primaryFiles.length === 1
                             ? () => openCropForPrimary(0)
-                            : undefined
-                        }
-                        cropLabel="Crop"
-                        onClear={() => {
-                          setPrimaryFiles([]);
-                          setLockedUrls((u) => ({
-                            ...u,
-                            input: null,
-                            assetId: null,
-                          }));
-                        }}
-                        hint={
-                          primaryFiles.length > 4
-                            ? `${primaryFiles.length} images selected`
                             : undefined
                         }
                       />
@@ -1179,7 +1196,41 @@ export function StudioPage() {
                   {/* Output */}
                   <div className="p-5 min-h-[360px] flex flex-col bg-slate-50/30">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                      <span className="ui-label mb-0">Output</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="ui-label mb-0">Output</span>
+                        {batchJobIds.length > 1 && batchJobIndex >= 0 && (
+                          <span className="text-[10px] font-semibold tabular-nums text-slate-500">
+                            Job {batchJobIndex + 1}/{batchJobIds.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {batchJobIds.length > 1 && batchJobIndex >= 0 && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={batchJobIndex <= 0}
+                              onClick={() =>
+                                setActiveJobId(batchJobIds[batchJobIndex - 1])
+                              }
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                              aria-label="Previous batch job"
+                            >
+                              <ChevronLeft className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={batchJobIndex >= batchJobIds.length - 1}
+                              onClick={() =>
+                                setActiveJobId(batchJobIds[batchJobIndex + 1])
+                              }
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                              aria-label="Next batch job"
+                            >
+                              <ChevronRight className="size-3.5" />
+                            </button>
+                          </>
+                        )}
                       {activeJob?.status === "COMPLETED" && (
                         <div className="flex gap-1">
                           <button
@@ -1257,6 +1308,7 @@ export function StudioPage() {
                           Cancel
                         </button>
                       )}
+                      </div>
                     </div>
                     {!activeJob ? (
                       <div className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-200 bg-white">
@@ -1369,20 +1421,35 @@ export function StudioPage() {
               <div className="sticky bottom-3 z-20 hidden lg:flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 truncate">
-                    {isBulk
-                      ? `Ready to generate ${primaryFiles.length} images`
-                      : lockedUrls.assetId && !primaryFiles.length
-                        ? "Ready — using loaded product asset"
-                        : "Ready when product is set"}
+                    {generateBlockedByBatch
+                      ? "Batch running — wait or queue another"
+                      : isBulk
+                        ? `Ready to generate ${primaryFiles.length} images`
+                        : lockedUrls.assetId && !primaryFiles.length
+                          ? "Ready — using loaded product asset"
+                          : "Ready when product is set"}
                   </p>
                   {uploadProgress && (
                     <p className="text-[11px] text-slate-500 truncate">{uploadProgress}</p>
+                  )}
+                  {generateBlockedByBatch && (
+                    <button
+                      type="button"
+                      onClick={() => setBatchForceAllow(true)}
+                      className="mt-0.5 text-[11px] font-semibold text-blue-600 hover:underline"
+                    >
+                      Queue another batch anyway
+                    </button>
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending || Boolean(uploadProgress)}
+                  disabled={
+                    generateMutation.isPending ||
+                    Boolean(uploadProgress) ||
+                    generateBlockedByBatch
+                  }
                   className="ui-btn-primary shrink-0"
                 >
                   {generateMutation.isPending || uploadProgress ? (
@@ -1396,64 +1463,17 @@ export function StudioPage() {
                 </button>
               </div>
 
-              {batchStatus && (
-                <div className="ui-card p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="ui-label mb-0 flex items-center gap-1.5">
-                      <Layers3 className="size-3.5" /> Batch progress
-                    </p>
-                    {batchStatus.status === "COMPLETED" && (
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-blue-600 hover:underline"
-                        onClick={async () => {
-                          try {
-                            const res = await api.get(
-                              `/jobs/batches/${batchStatus.id}/zip`,
-                              { responseType: "blob" },
-                            );
-                            const blob = new Blob([res.data], {
-                              type: "application/zip",
-                            });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = `batch-${batchStatus.id.slice(0, 8)}.zip`;
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          } catch {
-                            toast.error("ZIP download failed");
-                          }
-                        }}
-                      >
-                        Download ZIP
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    {batchStatus.completed_jobs}/{batchStatus.total_jobs} done
-                    {batchStatus.failed_jobs
-                      ? ` · ${batchStatus.failed_jobs} failed`
-                      : ""}{" "}
-                    · {batchStatus.status}
-                  </p>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full bg-blue-600 transition-all"
-                      style={{
-                        width: `${
-                          batchStatus.total_jobs
-                            ? Math.round(
-                                (batchStatus.completed_jobs /
-                                  batchStatus.total_jobs) *
-                                  100,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
+              {lastBatchId && (
+                <BatchProgressPanel
+                  batchId={lastBatchId}
+                  activeJobId={activeJobId}
+                  onSelectJob={(id) => {
+                    setActiveJobId(id);
+                    setOutputIndex(0);
+                  }}
+                  onDismiss={() => setLastBatchId(null)}
+                  queueModeWarning={queueModeInline}
+                />
               )}
 
               <input
@@ -1745,7 +1765,11 @@ export function StudioPage() {
             <button
               type="button"
               onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending || Boolean(uploadProgress)}
+              disabled={
+                generateMutation.isPending ||
+                Boolean(uploadProgress) ||
+                generateBlockedByBatch
+              }
               className="ui-btn-primary w-full lg:hidden"
             >
               {generateMutation.isPending || uploadProgress ? (

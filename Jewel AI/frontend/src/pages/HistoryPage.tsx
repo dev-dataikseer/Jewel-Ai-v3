@@ -343,6 +343,15 @@ function JobCard({
       >
         {job.status === "PROCESSING" ? "PENDING" : job.status}
       </span>
+      {job.batch_id && (
+        <Link
+          to={`/?batchId=${job.batch_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-2 left-2 mt-6 z-20 inline-flex rounded-md border border-blue-200 bg-blue-50/95 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-700 backdrop-blur-sm hover:bg-blue-100"
+        >
+          Batch
+        </Link>
+      )}
 
       <button
         type="button"

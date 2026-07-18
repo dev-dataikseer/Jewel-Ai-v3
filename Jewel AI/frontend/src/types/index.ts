@@ -112,6 +112,23 @@ export type Asset = {
   original_url: string;
 };
 
+export type BatchOut = {
+  id: string;
+  name?: string | null;
+  workflow: string;
+  jewelry_type: string;
+  status: string;
+  total_jobs: number;
+  completed_jobs: number;
+  pending_jobs?: number;
+  processing_jobs?: number;
+  failed_jobs?: number;
+  cancelled_jobs?: number;
+  created_at: string;
+  updated_at?: string;
+  jobs?: Job[];
+};
+
 export type StylePreset = {
   id: string;
   name: string;

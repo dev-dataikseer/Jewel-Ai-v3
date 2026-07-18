@@ -25,6 +25,8 @@ Create a project with:
 |---------|------------|--------|
 | **web** | `Dockerfile` | FastAPI + React SPA on `$PORT` |
 | **worker** | `deploy/docker/Dockerfile.worker` | Celery worker **with Beat** for stuck/webhook sweeps |
+
+**Bulk generation:** keep the **worker** service running. Without Celery workers, the API falls back to in-process threads (`queueMode: inline`) — fine for local/dev, but bulk progress is not durable across API restarts. Studio warns when running inline.
 | **PostgreSQL** | Plugin | Auto-injects `DATABASE_URL` — use **one** Postgres only |
 | **Redis** | Plugin | Auto-injects `REDIS_URL` |
 

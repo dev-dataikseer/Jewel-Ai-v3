@@ -308,16 +308,23 @@ def create_bulk_jobs(
         image_count = 2
     data = _validate_job_model(db, data, workflow, image_count)
 
-    # Preserve request order of asset_ids
+    # Dedupe asset_ids (preserve first occurrence order)
+    seen: set[str] = set()
+    ordered_ids: list[str] = []
+    for aid in body.asset_ids:
+        if aid and aid not in seen:
+            seen.add(aid)
+            ordered_ids.append(aid)
+    if not ordered_ids:
+        raise HTTPException(status_code=400, detail="asset_ids required")
+
     assets_by_id = {
         a.id: a
-        for a in db.query(Asset).filter(Asset.id.in_(body.asset_ids), Asset.user_id == user.id).all()
+        for a in db.query(Asset).filter(Asset.id.in_(ordered_ids), Asset.user_id == user.id).all()
     }
-    if len(assets_by_id) != len(set(body.asset_ids)):
+    if len(assets_by_id) != len(ordered_ids):
         raise HTTPException(status_code=404, detail="One or more assets not found")
-    assets = [assets_by_id[aid] for aid in body.asset_ids if aid in assets_by_id]
-    if not assets:
-        raise HTTPException(status_code=400, detail="asset_ids required")
+    assets = [assets_by_id[aid] for aid in ordered_ids]
 
     _enforce_daily_job_limit(db, user, len(assets))
 
@@ -389,11 +396,15 @@ def create_bulk_jobs(
         jobs.append(job)
 
     db.commit()
+    from app.services.queue_dispatch import celery_worker_available
+
+    queue_mode = "celery" if celery_worker_available() else "inline"
     enqueue_image_jobs([j.id for j in jobs], stagger_ms=250)
     return {
         "batchId": batch.id,
         "jobIds": [j.id for j in jobs],
         "total": len(jobs),
+        "queueMode": queue_mode,
         "jobs": [_job_to_out(j, lean=True) for j in jobs],
         "batch": _batch_to_out(db, batch, include_jobs=False).model_dump(mode="json"),
     }
@@ -479,6 +490,24 @@ def list_jobs(
     }
 
 
+@router.get("/batches", response_model=dict)
+def list_batches(
+    user: RequireUser,
+    db: Session = Depends(get_db),
+    limit: int = Query(10, ge=1, le=40),
+):
+    rows = (
+        db.query(Batch)
+        .filter(Batch.user_id == user.id)
+        .order_by(Batch.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [_batch_to_out(db, b, include_jobs=False).model_dump(mode="json") for b in rows],
+    }
+
+
 @router.get("/batches/{batch_id}", response_model=BatchOut)
 def get_batch(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
     batch = db.query(Batch).filter(Batch.id == batch_id, Batch.user_id == user.id).first()
@@ -487,10 +516,57 @@ def get_batch(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
     return _batch_to_out(db, batch)
 
 
+@router.post("/batches/{batch_id}/cancel", response_model=BatchOut)
+def cancel_batch(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
+    batch = db.query(Batch).filter(Batch.id == batch_id, Batch.user_id == user.id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    active = (
+        db.query(GenerationJob)
+        .filter(
+            GenerationJob.batch_id == batch.id,
+            GenerationJob.user_id == user.id,
+            GenerationJob.status.in_(("PENDING", "PROCESSING")),
+        )
+        .all()
+    )
+    for job in active:
+        celery_task_id = job.celery_task_id
+        job.status = "CANCELLED"
+        job.error_message = "Cancelled by user (batch)"
+        job.provider_metadata = _stamp_timing(dict(job.provider_metadata or {}), "cancelled")
+        if celery_task_id:
+            try:
+                from app.tasks.celery_app import celery_app
+
+                celery_app.control.revoke(celery_task_id, terminate=True)
+            except Exception:
+                pass
+        meta = job.provider_metadata or {}
+        req_id = meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id")
+        endpoint = meta.get("modelEndpointId") or meta.get("modelName") or job.provider_model
+        if req_id and endpoint:
+            try:
+                from app.providers.adapters.fal import cancel_fal_request
+
+                cancel_fal_request(str(endpoint), str(req_id))
+            except Exception:
+                pass
+    db.commit()
+
+    from app.tasks.generate import _update_batch
+
+    _update_batch(db, batch.id)
+    db.refresh(batch)
+    return _batch_to_out(db, batch)
+
+
 @router.get("/batches/{batch_id}/zip")
 def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
-    """Stream a ZIP of completed batch output images (and logo-composited variants when present)."""
+    """Stream a ZIP of completed batch output images."""
     import io
+    import logging
     import zipfile
     from urllib.parse import urlparse
 
@@ -501,9 +577,14 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
     from app.storage.local import StorageService
     from app.storage.object_store import parse_upload_path
 
+    log = logging.getLogger(__name__)
+
     batch = db.query(Batch).filter(Batch.id == batch_id, Batch.user_id == user.id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+
+    if batch.status not in ("COMPLETED", "COMPLETED_WITH_ERRORS", "PROCESSING", "CANCELLED"):
+        raise HTTPException(status_code=400, detail=f"Batch not ready for ZIP ({batch.status})")
 
     jobs = (
         db.query(GenerationJob)
@@ -520,6 +601,7 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
 
     storage = StorageService()
     buf = io.BytesIO()
+    written = 0
 
     def _read_image(url: str | None) -> bytes | None:
         if not url:
@@ -539,7 +621,8 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
                     resp = http.get(path)
                     resp.raise_for_status()
                     return resp.content
-        except Exception:
+        except Exception as exc:
+            log.warning("ZIP skip unreadable image %s: %s", path[:80], exc)
             return None
         return None
 
@@ -550,10 +633,6 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
                 urls.extend([u for u in job.output_urls if u])
             elif job.output_url:
                 urls.append(job.output_url)
-            meta = job.provider_metadata or {}
-            logo_out = meta.get("logoCompositedUrl") or meta.get("logo_composited_url")
-            if isinstance(logo_out, str) and logo_out and logo_out not in urls:
-                urls.append(logo_out)
 
             for j, url in enumerate(urls):
                 data = _read_image(url)
@@ -565,6 +644,10 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
                     ext = ".png"
                 suffix = "" if j == 0 else f"-{j + 1}"
                 zf.writestr(f"{idx:03d}-{job.id[:8]}{suffix}{ext}", data)
+                written += 1
+
+    if written == 0:
+        raise HTTPException(status_code=404, detail="No readable output files in this batch")
 
     buf.seek(0)
     filename = f"batch-{batch.id[:8]}.zip"
@@ -754,6 +837,12 @@ def cancel_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
             cancel_fal_request(str(endpoint), str(req_id))
         except Exception:
             pass
+
+    if job.batch_id:
+        from app.tasks.generate import _update_batch
+
+        _update_batch(db, job.batch_id)
+        db.refresh(job)
 
     return _job_to_out(job)
 
