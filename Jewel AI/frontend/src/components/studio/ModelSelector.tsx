@@ -24,6 +24,27 @@ function savePrefs(workflow: string, prefs: ModelPrefs) {
   localStorage.setItem(`${PREFS_KEY}:${workflow}`, JSON.stringify(prefs));
 }
 
+/** Drop stale saved params that no longer match the model schema (avoids 400s after catalog updates). */
+function sanitizeParams(
+  schema: ModelDefinition["input_schema"] | undefined,
+  defaults: Record<string, unknown> | undefined,
+  params: Record<string, unknown>
+): Record<string, unknown> {
+  const props = schema?.properties ?? {};
+  const next: Record<string, unknown> = { ...(defaults ?? {}) };
+  for (const [key, value] of Object.entries(params)) {
+    const prop = props[key];
+    if (!prop) continue;
+    if (value === undefined || value === null || value === "") continue;
+    if (prop.enum && !prop.enum.map(String).includes(String(value))) {
+      next[key] = prop.default ?? defaults?.[key] ?? prop.enum[0];
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
 type Props = {
   workflow: string;
   hasInput: boolean;
@@ -78,9 +99,19 @@ export function ModelSelector({
     const pick = match ?? preferred ?? models[0];
     if (pick && pick.endpoint_id !== selectedEndpointId) {
       onModelChange(pick.endpoint_id, pick);
-      onParamsChange({ ...pick.default_params, ...(saved?.params ?? {}) });
+      onParamsChange(
+        sanitizeParams(pick.input_schema, pick.default_params, {
+          ...pick.default_params,
+          ...(saved?.params ?? {}),
+        })
+      );
     } else if (pick && Object.keys(modelParams).length === 0) {
-      onParamsChange({ ...pick.default_params, ...(saved?.params ?? {}) });
+      onParamsChange(
+        sanitizeParams(pick.input_schema, pick.default_params, {
+          ...pick.default_params,
+          ...(saved?.params ?? {}),
+        })
+      );
     }
   }, [models, workflow, hasInput]);
 
@@ -93,15 +124,36 @@ export function ModelSelector({
     }
   }, [workflow, selectedEndpointId, modelParams]);
 
+  // Repair stale localStorage params after catalog enum changes (e.g. GPT Image 2 sizes).
+  useEffect(() => {
+    const pick =
+      models.find((m) => m.endpoint_id === selectedEndpointId) ?? models[0] ?? null;
+    if (!pick || Object.keys(modelParams).length === 0) return;
+    const props = pick.input_schema?.properties ?? {};
+    const dirty = Object.entries(modelParams).some(([key, value]) => {
+      const prop = props[key];
+      return Boolean(
+        prop?.enum &&
+          value !== undefined &&
+          value !== null &&
+          value !== "" &&
+          !prop.enum.map(String).includes(String(value))
+      );
+    });
+    if (dirty) {
+      onParamsChange(sanitizeParams(pick.input_schema, pick.default_params, modelParams));
+    }
+  }, [models, selectedEndpointId, modelParams, onParamsChange]);
+
   if (isLoading) {
     return <p className="text-xs text-slate-400">Loading models…</p>;
   }
 
   if (isError) {
-    const msg =
-      (error as { friendlyMessage?: string })?.friendlyMessage ||
-      (error as Error)?.message ||
-      "Could not load models";
+    const raw =
+      (error as { friendlyMessage?: unknown })?.friendlyMessage ||
+      (error as Error)?.message;
+    const msg = typeof raw === "string" ? raw : "Could not load models";
     return (
       <p className="text-xs text-rose-600">
         {msg}. Check that the API is running and you are logged in.
@@ -138,7 +190,7 @@ export function ModelSelector({
             const m = models.find((x) => x.endpoint_id === e.target.value);
             if (m) {
               onModelChange(m.endpoint_id, m);
-              onParamsChange({ ...m.default_params });
+              onParamsChange(sanitizeParams(m.input_schema, m.default_params, { ...m.default_params }));
             }
           }}
           className="ui-input text-xs font-semibold"

@@ -71,20 +71,28 @@ def validate_model_params(model_def: ModelDefinition | None, params: dict[str, A
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail={"field": key, "message": f"Invalid value for {key}: {exc}"},
+                detail=f"{key}: Invalid value for {key}: {exc}",
             ) from exc
         enum = prop.get("enum")
         if enum and coerced not in enum:
+            # Drop stale client prefs (e.g. old pixel sizes) instead of hard-failing.
+            default = prop.get("default")
+            if default is not None and default in enum:
+                cleaned[key] = default
+                continue
+            if enum:
+                cleaned[key] = enum[0]
+                continue
             raise HTTPException(
                 status_code=400,
-                detail={"field": key, "message": f"Must be one of: {', '.join(map(str, enum))}"},
+                detail=f"{key}: Must be one of: {', '.join(map(str, enum))}",
             )
         minimum = prop.get("minimum")
         maximum = prop.get("maximum")
         if minimum is not None and coerced < minimum:
-            raise HTTPException(status_code=400, detail={"field": key, "message": f"Minimum is {minimum}"})
+            raise HTTPException(status_code=400, detail=f"{key}: Minimum is {minimum}")
         if maximum is not None and coerced > maximum:
-            raise HTTPException(status_code=400, detail={"field": key, "message": f"Maximum is {maximum}"})
+            raise HTTPException(status_code=400, detail=f"{key}: Maximum is {maximum}")
         cleaned[key] = coerced
 
     return cleaned

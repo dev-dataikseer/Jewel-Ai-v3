@@ -25,15 +25,18 @@ function FieldControl({
   const title = prop.title || name.replace(/_/g, " ");
 
   if (prop.enum) {
+    const options = prop.enum.map(String);
+    const raw = value ?? prop.default ?? options[0] ?? "";
+    const selected = options.includes(String(raw)) ? String(raw) : String(prop.default ?? options[0] ?? "");
     return (
       <div>
         <label className="ui-label">{title}</label>
         <select
-          value={String(value ?? prop.default ?? prop.enum[0] ?? "")}
+          value={selected}
           onChange={(e) => onChange(e.target.value)}
           className="ui-input text-xs"
         >
-          {prop.enum.map((opt) => (
+          {options.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>

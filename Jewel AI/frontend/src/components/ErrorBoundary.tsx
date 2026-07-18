@@ -20,7 +20,11 @@ export class ErrorBoundary extends Component<Props, State> {
         this.props.fallback ?? (
           <div className="mx-auto max-w-lg p-8 text-center">
             <h2 className="text-lg font-semibold text-slate-800">Something went wrong</h2>
-            <p className="mt-2 text-sm text-slate-500">{this.state.error.message}</p>
+            <p className="mt-2 text-sm text-slate-500">
+              {typeof this.state.error.message === "string"
+                ? this.state.error.message
+                : "An unexpected UI error occurred."}
+            </p>
             <button
               type="button"
               className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
