@@ -18,6 +18,7 @@ import { ProviderSettings } from "@/components/ProviderSettings";
 import { PromptEditor } from "@/components/PromptEditor";
 import { PromptSandbox } from "@/components/admin/PromptSandbox";
 import { PromptFragmentsAdmin } from "@/components/admin/PromptFragmentsAdmin";
+import { apiErrorMessage } from "@/lib/apiError";
 import { StylePresetsAdmin } from "@/components/admin/StylePresetsAdmin";
 import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
@@ -50,7 +51,12 @@ export function AdminPage() {
     city: "",
   });
 
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  const {
+    data: metrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+    refetch: refetchMetrics,
+  } = useQuery({
     queryKey: ["admin", "metrics"],
     queryFn: async () => (await api.get<AdminMetrics>("/admin/metrics")).data,
   });
@@ -82,7 +88,7 @@ export function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["rates"] });
       toast.success("Rate saved");
     },
-    onError: () => toast.error("Failed to save rate"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Failed to save rate")),
   });
 
   const deleteRateMutation = useMutation({
@@ -91,7 +97,7 @@ export function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["rates"] });
       toast.success("Rate deleted");
     },
-    onError: () => toast.error("Failed to delete rate"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Failed to delete rate")),
   });
 
   return (
@@ -123,6 +129,18 @@ export function AdminPage() {
           <section className="min-w-0 space-y-6">
             {tab === "overview" && (
               <div className="space-y-6 animate-fadeIn">
+                {metricsError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 flex items-center justify-between gap-3">
+                    <span>Could not load admin metrics. Do not treat zeros as real data.</span>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-bold text-white"
+                      onClick={() => void refetchMetrics()}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
                   {metricsLoading
                     ? Array.from({ length: 6 }).map((_, i) => (
@@ -134,6 +152,8 @@ export function AdminPage() {
                           <div className="mt-3 h-7 w-12 rounded bg-slate-200" />
                         </div>
                       ))
+                    : metricsError
+                      ? null
                     : [
                         ["Total Jobs", metrics?.jobs ?? 0],
                         ["Completed", metrics?.completed ?? 0],

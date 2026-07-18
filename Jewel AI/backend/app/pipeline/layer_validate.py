@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from jinja2 import meta
 
 from app.pipeline.layers import _jinja, sort_layers
+from app.prompt_engine.fragment_defaults import PROMPT_PLACEHOLDERS
 
 KNOWN_VARIABLES = {
     "workflow",
@@ -19,7 +20,7 @@ KNOWN_VARIABLES = {
     "lighting_style",
     "prompt_text",
     "variant_text",
-}
+} | set(PROMPT_PLACEHOLDERS)
 
 INSERT_POINT_TYPES = {"insert_point"}
 

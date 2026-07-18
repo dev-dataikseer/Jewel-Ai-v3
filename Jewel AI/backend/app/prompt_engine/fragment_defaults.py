@@ -123,6 +123,31 @@ FRAGMENT_LABELS: dict[str, str] = {
     ENVIRONMENT_POOL: "Environment Rotation Pool",
 }
 
+# {{KEY}} tokens filled by the prompt engine at compose time (not runtime Jinja).
+# Admin master/subject saves must allow these in stored prompt text.
+PROMPT_PLACEHOLDERS: frozenset[str] = frozenset(
+    {
+        "SUBTYPE_BLOCK",
+        "EXECUTION_BLOCK",
+        "BRANDING_CLAUSE",
+        "CHOSEN_ENVIRONMENT",
+        "PLACEMENT_ANATOMY",
+        "TRYON_MODE_CLAUSE",
+        "USER_CUSTOM_INSTRUCTION",
+        "USER_ADDITION_TEXT",
+        "USER_INSTRUCTION",
+        "LOGO_IMAGE_INDEX",
+        "LOGO_LABEL",
+        "THEME_LINE",
+        "LOGO_LINE",
+        "CUSTOM_PRESERVE",
+        "CUSTOM_REALISM",
+        "BACKGROUND_SOURCE",
+        "TARGET_COLOR",
+        "PRODUCT_INDEX",
+    }
+)
+
 
 def _prompts_dir() -> Path:
     # backend/app/prompt_engine → Jewel AI/docs/Modals/Prompts

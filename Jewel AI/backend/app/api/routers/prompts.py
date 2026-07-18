@@ -469,15 +469,15 @@ async def test_generate(body: PromptTestRequest, user: RequireAdmin, db: Session
     url = storage.save_bytes(result.image_bytes, filename=f"test_{body.workflow}.png")
     return {
         "output_url": url,
-        "prompt": prompt,
+        "prompt": final.text,
         "provider": result.provider,
         "model": result.model,
         "chain": chain,
-        "debug": composed.debug,
+        "debug": final.debug,
         "version_ids": {
-            "master": composed.master_version_id,
-            "subject": composed.subject_version_id,
-            "variant": composed.variant_version_id,
+            "master": final.master_version_id,
+            "subject": final.subject_version_id,
+            "variant": final.variant_version_id,
         },
     }
 

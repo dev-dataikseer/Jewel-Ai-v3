@@ -125,3 +125,14 @@ async def safe_fetch_image_bytes(url: str, timeout: float = 120.0) -> bytes:
         if resp.headers.get("content-type", "").startswith("text/"):
             raise ValueError("Refusing to fetch non-image content")
         return resp.content
+
+
+def safe_fetch_image_bytes_sync(url: str, timeout: float = 120.0) -> bytes:
+    """Synchronous SSRF-safe fetch (no redirects) for sync callers like logo compose."""
+    validate_image_url(url)
+    with httpx.Client(timeout=timeout, follow_redirects=False) as http:
+        resp = http.get(url)
+        resp.raise_for_status()
+        if resp.headers.get("content-type", "").startswith("text/"):
+            raise ValueError("Refusing to fetch non-image content")
+        return resp.content

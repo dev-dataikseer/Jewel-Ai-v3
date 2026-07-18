@@ -41,6 +41,9 @@ def _get_meta(job: GenerationJob) -> dict:
     return job.provider_metadata or {}
 
 
+_TERMINAL_JOB_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
+
+
 async def _process_job_async(job_id: str) -> None:
     db = SessionLocal()
     prompt = ""
@@ -48,18 +51,48 @@ async def _process_job_async(job_id: str) -> None:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
         if not job:
             return
-        if job.status == "CANCELLED":
+        # Idempotent: never re-run finished jobs (Celery acks_late redelivery).
+        if job.status in _TERMINAL_JOB_STATUSES:
+            logger.info(
+                "Skip job in terminal status",
+                extra={"extra_fields": {"job_id": job_id, "status": job.status}},
+            )
+            return
+        # Another worker already owns this job (duplicate delivery while in-flight).
+        if job.status == "PROCESSING":
+            logger.info(
+                "Skip job already PROCESSING",
+                extra={"extra_fields": {"job_id": job_id}},
+            )
+            return
+
+        # Atomic claim: only one worker may move PENDING → PROCESSING.
+        now = datetime.now(timezone.utc)
+        claimed = (
+            db.query(GenerationJob)
+            .filter(GenerationJob.id == job_id, GenerationJob.status == "PENDING")
+            .update(
+                {
+                    GenerationJob.status: "PROCESSING",
+                    GenerationJob.processing_started_at: now,
+                    GenerationJob.error_message: None,
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        if not claimed:
+            return
+
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if not job or job.status != "PROCESSING":
             return
 
         meta = dict(_get_meta(job))
         timing = dict(meta.get("timing") or {})
-        timing["worker_started"] = datetime.now(timezone.utc).isoformat()
+        timing["worker_started"] = now.isoformat()
         meta["timing"] = timing
         meta["progressStage"] = "composing_prompt"
-
-        job.status = "PROCESSING"
-        job.processing_started_at = datetime.now(timezone.utc)
-        job.error_message = None
         job.provider_metadata = meta
         db.commit()
 
@@ -467,6 +500,20 @@ def _acquire_requeue_lease(job_id: str, *, ttl_seconds: int = 120) -> bool:
         return True
 
 
+def _acquire_webhook_finalize_lease(job_id: str, *, ttl_seconds: int = 300) -> bool:
+    """Return True if this process won the webhook finalize lease (prevents double download)."""
+    try:
+        import redis
+        from app.config import get_settings
+
+        client = redis.from_url(get_settings().redis_url, socket_connect_timeout=1)
+        key = f"jewel:webhook-finalize:{job_id}"
+        return bool(client.set(key, "1", nx=True, ex=ttl_seconds))
+    except Exception:
+        # Without Redis, allow finalize once (dev); races possible but rare locally.
+        return True
+
+
 @celery_app.task(name="app.tasks.generate.finalize_fal_webhook")
 def finalize_fal_webhook(job_id: str, payload: dict) -> None:
     """Durable webhook image download/save (survives API process restart)."""
@@ -481,6 +528,13 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
     from app.providers.registry import get_model_definition
     from app.security.url_fetch import safe_fetch_image_bytes
     from app.storage.local import storage
+
+    if not _acquire_webhook_finalize_lease(job_id):
+        logger.info(
+            "Skip webhook finalize — lease held",
+            extra={"extra_fields": {"job_id": job_id}},
+        )
+        return
 
     db = SessionLocal()
     try:

@@ -40,20 +40,20 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
 
           {/* Primary nav + account (right) */}
           <nav className="flex shrink-0 items-center gap-0.5 sm:gap-1" aria-label="Primary">
-            <NavLink to="/" active={location.pathname === "/"}>
+            <NavLink to="/" active={location.pathname === "/"} label="Studio">
               <Sparkles className="size-3.5" />
               <span className="hidden sm:inline">Studio</span>
             </NavLink>
-            <NavLink to="/history" active={location.pathname === "/history"}>
+            <NavLink to="/history" active={location.pathname === "/history"} label="History">
               <History className="size-3.5" />
               <span className="hidden sm:inline">History</span>
             </NavLink>
-            <NavLink to="/rates" active={location.pathname === "/rates"}>
+            <NavLink to="/rates" active={location.pathname === "/rates"} label="Rates">
               <BarChart3 className="size-3.5" />
               <span className="hidden sm:inline">Rates</span>
             </NavLink>
             {isAdmin && (
-              <NavLink to="/admin" active={location.pathname === "/admin"}>
+              <NavLink to="/admin" active={location.pathname === "/admin"} label="Admin">
                 <Settings className="size-3.5" />
                 <span className="hidden sm:inline">Admin</span>
               </NavLink>
@@ -75,7 +75,8 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
                 </span>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => void logout()}
+                  aria-label="Logout"
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-100"
                 >
                   <LogOut className="size-3.5" />
@@ -85,6 +86,7 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
             ) : (
               <Link
                 to="/login"
+                aria-label="Login"
                 className="ml-1 inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-100"
               >
                 <User className="size-3.5" /> Login
@@ -101,15 +103,18 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
 function NavLink({
   to,
   active,
+  label,
   children,
 }: {
   to: string;
   active: boolean;
+  label: string;
   children: React.ReactNode;
 }) {
   return (
     <Link
       to={to}
+      aria-label={label}
       className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors ${
         active
           ? "bg-blue-50 text-blue-700"

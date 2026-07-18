@@ -17,8 +17,9 @@ settings = get_settings()
 def _fernet() -> Fernet:
     key = settings.fernet_key
     if not key:
+        if settings.is_production:
+            raise RuntimeError("FERNET_KEY is required in production to encrypt provider API keys")
         # Stable dev key derived from JWT secret so encrypted provider keys survive restarts
-        import base64
         import hashlib
 
         digest = hashlib.sha256(settings.jwt_secret.encode()).digest()

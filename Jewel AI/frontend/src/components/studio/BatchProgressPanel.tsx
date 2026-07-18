@@ -58,7 +58,8 @@ export function BatchProgressPanel({
     queryFn: async () => (await api.get<BatchOut>(`/jobs/batches/${batchId}`)).data,
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s === "PENDING" || s === "PROCESSING" ? 2500 : false;
+      // Jobs update via useJobStream; poll batch summary less often to cut duplicate traffic.
+      return s === "PENDING" || s === "PROCESSING" ? 8000 : false;
     },
   });
 
@@ -70,7 +71,7 @@ export function BatchProgressPanel({
       queryClient.invalidateQueries({ queryKey: ["recent-jobs"] });
       toast.message("Batch cancelled");
     },
-    onError: () => toast.error("Could not cancel batch"),
+    onError: (err: Error) => toast.error(err.message || "Could not cancel batch"),
   });
 
   const zipMutation = useMutation({

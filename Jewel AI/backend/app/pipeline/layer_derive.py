@@ -238,10 +238,6 @@ def merge_structural_layers(
         append_structural(subject_insert)
         if variant_insert:
             append_structural(variant_insert)
-    elif subject_insert and split_at >= len(text_layers):
-        append_structural(subject_insert)
-        if variant_insert:
-            append_structural(variant_insert)
 
     for layer_def in other_structural:
         append_structural(layer_def)

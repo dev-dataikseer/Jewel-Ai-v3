@@ -94,6 +94,20 @@ def enqueue_image_job(job_id: str) -> None:
 
     # Fall back to in-process thread so Studio keeps working if the worker
     # image is mid-redeploy / unhealthy. Not durable across API restarts.
+    # Production: fail closed — do not silently burn fal credits on a dying API box.
+    allow_inline = settings.effective_allow_inline_jobs
+    if settings.is_production and not allow_inline:
+        msg = (
+            "Celery worker unavailable — generation cannot start. "
+            "Check Redis and the worker service, then retry."
+        )
+        logger.error(
+            "Enqueue failed (no worker; inline disabled in production)",
+            extra={"extra_fields": {"job_id": job_id}},
+        )
+        _fail_job_enqueue(job_id, msg)
+        return
+
     from app.tasks.generate import _process_job_async
 
     reason = "no Redis" if not _redis_available() else "no Celery worker"
@@ -137,6 +151,7 @@ def enqueue_image_jobs(job_ids: list[str], *, stagger_ms: int = 250) -> None:
             )
         return
 
+    # No worker: each job goes through enqueue_image_job (prod fail-closed or inline).
     for i, jid in enumerate(job_ids):
         delay = (i * stagger_ms) / 1000.0
 
@@ -146,3 +161,4 @@ def enqueue_image_jobs(job_ids: list[str], *, stagger_ms: int = 250) -> None:
             enqueue_image_job(job_id)
 
         threading.Thread(target=_later, daemon=True, name=f"bulk-enq-{jid[:8]}").start()
+

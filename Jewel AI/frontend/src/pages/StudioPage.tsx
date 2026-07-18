@@ -29,6 +29,7 @@ import { ProductUploadGallery } from "@/components/studio/ProductUploadGallery";
 import { UploadZone } from "@/components/studio/UploadZone";
 import { jobStatusLabel, useJobStream } from "@/hooks/useJobStream";
 import { api, mediaUrl } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import {
   clearBrandKit,
   loadBrandKit,
@@ -222,7 +223,12 @@ export function StudioPage() {
         ? 1
         : 0;
 
-  const { data: options } = useQuery({
+  const {
+    data: options,
+    isError: optionsError,
+    refetch: refetchOptions,
+    isFetching: optionsFetching,
+  } = useQuery({
     queryKey: ["config", "options"],
     queryFn: async () => (await api.get<ConfigOptions>("/config/options")).data,
     staleTime: 5 * 60_000,
@@ -767,7 +773,7 @@ export function StudioPage() {
           : "Generation started",
       );
     },
-    onError: (err: Error) => toast.error(err.message || "Generation failed"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Generation failed")),
   });
 
   const regenerateMutation = useMutation({
@@ -778,7 +784,7 @@ export function StudioPage() {
       setActiveJobId(job.id);
       toast.success("Regeneration started — same settings, new job");
     },
-    onError: () => toast.error("Regeneration failed"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Regeneration failed")),
   });
 
   const retryMutation = useMutation({
@@ -791,7 +797,7 @@ export function StudioPage() {
       setActiveJobId(job.id);
       toast.success("Retry queued");
     },
-    onError: () => toast.error("Retry failed"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Retry failed")),
   });
 
   const cancelMutation = useMutation({
@@ -803,7 +809,7 @@ export function StudioPage() {
       );
       toast.message("Generation cancelled");
     },
-    onError: () => toast.error("Could not cancel"),
+    onError: (err: Error) => toast.error(apiErrorMessage(err, "Could not cancel")),
   });
 
   const toggleFavorite = useCallback(
@@ -973,9 +979,10 @@ export function StudioPage() {
     queryFn: async () =>
       (await api.get<BatchOut>(`/jobs/batches/${lastBatchId}`)).data,
     enabled: Boolean(lastBatchId),
+    // Jobs already update via SSE/poll in useJobStream — poll batch metadata less often.
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s === "PENDING" || s === "PROCESSING" ? 2500 : false;
+      return s === "PENDING" || s === "PROCESSING" ? 8000 : false;
     },
   });
 
@@ -994,17 +1001,21 @@ export function StudioPage() {
   const generateBlockedByBatch = Boolean(batchActive && !batchForceAllow);
 
   const selectWorkflow = (id: string) => {
+    const hasUploads =
+      primaryFiles.length > 0 ||
+      Boolean(referenceFile) ||
+      Boolean(logoFile) ||
+      Boolean(lockedUrls.input) ||
+      Boolean(lockedUrls.reference) ||
+      Boolean(lockedUrls.logo);
+    if (hasUploads && id !== workflow) {
+      const ok = window.confirm(
+        "Switch workflow? Product uploads will be kept; reference/portrait may need re-check for the new workflow.",
+      );
+      if (!ok) return;
+    }
     setWorkflow(id);
-    setPrimaryFiles([]);
-    setReferenceFile(null);
-    setLogoFile(null);
-    const kit = loadBrandKit();
-    setLockedUrls({
-      reference: kit?.themeUrl || null,
-      logo: kit?.logoUrl || null,
-      logoAssetId: kit?.logoAssetId || null,
-      themeAssetId: kit?.themeAssetId || null,
-    });
+    // Keep product files; reset job selection only
     setActiveJobId(null);
     setValidationErrors({});
   };
@@ -1163,33 +1174,33 @@ export function StudioPage() {
                       {activeJob && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setActiveJobId(null);
-                            setPrimaryFiles([]);
-                            setReferenceFile(null);
-                            setLockedUrls({});
-                          }}
+                          onClick={() => setActiveJobId(null)}
                           className="text-xs font-semibold text-blue-600 hover:underline"
                         >
-                          Clear selection
+                          Edit inputs / New
                         </button>
                       )}
                     </div>
-                    {activeJob ? (
-                      <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-950 p-3 min-h-[240px]">
-                        {activeJob.input_url ? (
-                          <img
-                            src={mediaUrl(activeJob.input_url)}
-                            alt="Input"
-                            className="max-h-full max-w-full object-contain rounded"
-                          />
-                        ) : (
-                          <span className="text-xs text-slate-500">
-                            No input
-                          </span>
-                        )}
+                    {optionsError && (
+                      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        Could not load Studio options.{" "}
+                        <button
+                          type="button"
+                          className="font-bold underline"
+                          onClick={() => void refetchOptions()}
+                          disabled={optionsFetching}
+                        >
+                          Retry
+                        </button>
                       </div>
-                    ) : needsReference ? (
+                    )}
+                    {activeJob && (
+                      <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-900">
+                        Viewing a generation. Click <strong>Edit inputs / New</strong> to change
+                        uploads, or generate again with the current form.
+                      </div>
+                    )}
+                    {needsReference ? (
                       <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
                         <ProductUploadGallery
                           id="studio-product-upload"
@@ -1331,6 +1342,7 @@ export function StudioPage() {
                           )}
                           <button
                             type="button"
+                            aria-label="Copy share link"
                             onClick={async () => {
                               try {
                                 const res = await api.post<{
@@ -1341,8 +1353,8 @@ export function StudioPage() {
                                 const shareUrl = `${window.location.origin}/share/${token}`;
                                 await navigator.clipboard.writeText(shareUrl);
                                 toast.success("Share link copied");
-                              } catch {
-                                toast.error("Could not create share link");
+                              } catch (err) {
+                                toast.error(apiErrorMessage(err, "Could not create share link"));
                               }
                             }}
                             className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"

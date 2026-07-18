@@ -203,6 +203,56 @@ def _resolve_subject_layers(subject_ver: PromptSubjectVersion | None, workflow: 
     return default_subject_scaffold()
 
 
+def _placement_anatomy(db: Session, jewelry_type: str | None) -> str:
+    """Pick placement clause from TRYON_PLACEMENT_ANATOMY fragment for jewelry type."""
+    from app.prompt_engine.fragment_defaults import TRYON_PLACEMENT_ANATOMY
+    from app.prompt_engine.fragment_store import get_fragment_text
+
+    raw = get_fragment_text(db, TRYON_PLACEMENT_ANATOMY) or ""
+    if not jewelry_type or not raw:
+        return ""
+    key = jewelry_type.strip().lower().replace(" ", "_")
+    # Also try first type if comma-separated
+    key = key.split(",")[0].strip()
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "|" not in line:
+            continue
+        left, _, right = line.partition("|")
+        if left.strip().lower().replace(" ", "_") == key:
+            return right.strip()
+    return ""
+
+
+def _compose_engine_placeholders(db: Session, inp: ComposeInput, safe_prompt: str | None) -> dict[str, str]:
+    """Jinja vars for {{KEY}} tokens in imported V2 masters (StrictUndefined-safe)."""
+    from app.prompt_engine.fragment_defaults import (
+        CUSTOM_PRESERVE,
+        CUSTOM_REALISM,
+        PROMPT_PLACEHOLDERS,
+        TRYON_CUSTOMER_PRESERVE,
+    )
+    from app.prompt_engine.fragment_store import get_fragment_text
+
+    vars_: dict[str, str] = {k: "" for k in PROMPT_PLACEHOLDERS}
+    prompt = safe_prompt or ""
+    vars_["USER_CUSTOM_INSTRUCTION"] = prompt
+    vars_["USER_ADDITION_TEXT"] = prompt
+    vars_["USER_INSTRUCTION"] = prompt
+    vars_["TARGET_COLOR"] = inp.gemstone_target_color or inp.gemstone_type or ""
+    vars_["PLACEMENT_ANATOMY"] = _placement_anatomy(db, inp.jewelry_type)
+
+    if (inp.try_on_mode or "").lower() == "customer":
+        vars_["TRYON_MODE_CLAUSE"] = get_fragment_text(db, TRYON_CUSTOMER_PRESERVE) or ""
+
+    # Optional fills when masters still embed these (engine also appends fragments).
+    if inp.workflow == "CUSTOM_PROMPT":
+        vars_["CUSTOM_PRESERVE"] = get_fragment_text(db, CUSTOM_PRESERVE) or ""
+        vars_["CUSTOM_REALISM"] = get_fragment_text(db, CUSTOM_REALISM) or ""
+
+    return vars_
+
+
 def compose_prompt_document(db: Session, inp: ComposeInput) -> ComposedDocument:
     wf = inp.workflow or "CATALOG_IMAGE"
     jewelry_types = normalize_jewelry_types(parse_jewelry_types(inp.jewelry_type))
@@ -252,6 +302,7 @@ def compose_prompt_document(db: Session, inp: ComposeInput) -> ComposedDocument:
     safe_prompt = sanitize_user_prompt(inp.prompt_text)
 
     variables = {
+        **_compose_engine_placeholders(db, inp, safe_prompt),
         "workflow": wf,
         "jewelry_type": jewelry_type_label,
         "metal_type": inp.metal_type or "",

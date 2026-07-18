@@ -618,8 +618,6 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
 
     from fastapi.responses import StreamingResponse
 
-    import httpx
-
     from app.storage.local import StorageService
     from app.storage.object_store import parse_upload_path
 
@@ -663,10 +661,9 @@ def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(g
                 data, _ = storage.read_upload(name)
                 return data
             if path.startswith("http://") or path.startswith("https://"):
-                with httpx.Client(timeout=60.0, follow_redirects=True) as http:
-                    resp = http.get(path)
-                    resp.raise_for_status()
-                    return resp.content
+                from app.security.url_fetch import safe_fetch_image_bytes_sync
+
+                return safe_fetch_image_bytes_sync(path, timeout=60.0)
         except Exception as exc:
             log.warning("ZIP skip unreadable image %s: %s", path[:80], exc)
             return None

@@ -220,7 +220,8 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
       setLoadedSnapshot(editorText);
       toast.success("Prompt saved");
     },
-    onError: () => toast.error("Failed to save prompt"),
+    onError: (err: Error & { friendlyMessage?: string }) =>
+      toast.error(err.friendlyMessage || err.message || "Failed to save prompt"),
   });
 
   const saveStructuralMutation = useMutation({

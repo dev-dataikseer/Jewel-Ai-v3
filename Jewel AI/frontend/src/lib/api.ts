@@ -83,7 +83,16 @@ export function formatApiDetail(detail: unknown): string | undefined {
     return parts.filter(Boolean).join("; ") || undefined;
   }
   if (typeof detail === "object") {
-    const row = detail as { message?: unknown; field?: unknown; error?: unknown; detail?: unknown };
+    const row = detail as {
+      message?: unknown;
+      field?: unknown;
+      error?: unknown;
+      detail?: unknown;
+      layer_errors?: unknown;
+    };
+    if (Array.isArray(row.layer_errors)) {
+      return row.layer_errors.filter((x) => typeof x === "string").join("; ");
+    }
     if (typeof row.message === "string") {
       return typeof row.field === "string" && row.field
         ? `${row.field}: ${row.message}`

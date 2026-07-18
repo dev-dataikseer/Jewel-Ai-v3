@@ -37,7 +37,19 @@ class PreparedImages:
 
 
 def _is_fal_cdn_url(url: str) -> bool:
-    return url.startswith("https://") and ("fal.media" in url or "fal-cdn" in url or "fal.ai" in url)
+    """True only when the URL hostname is an allowlisted fal CDN host (not a substring spoof)."""
+    from urllib.parse import urlparse
+
+    from app.security.url_fetch import ALLOWED_EXACT_HOSTS, ALLOWED_HOST_SUFFIXES
+
+    if not url.startswith("https://"):
+        return False
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    if host in ALLOWED_EXACT_HOSTS:
+        return True
+    return any(host.endswith(suffix) for suffix in ALLOWED_HOST_SUFFIXES)
 
 
 def detect_image_content_type(blob: bytes) -> str | None:

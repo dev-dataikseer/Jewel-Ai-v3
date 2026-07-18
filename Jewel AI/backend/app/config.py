@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     fal_use_webhooks: bool = False
     # When true, always paste logo under the output instead of sending it as a fal reference.
     logo_force_compose: bool = False
+    # Allow in-process job threads when Celery is down (dev). Production defaults false via property.
+    allow_inline_jobs: bool | None = None
     # Recent catalog environments to avoid repeating for the same user (Modern Dynamic Catalog).
     env_rotation_lookback: int = 5
     api_public_url: str = "http://localhost:8000"
@@ -105,6 +107,12 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.node_env == "production"
+
+    @property
+    def effective_allow_inline_jobs(self) -> bool:
+        if self.allow_inline_jobs is not None:
+            return self.allow_inline_jobs
+        return not self.is_production
 
 
 @lru_cache
