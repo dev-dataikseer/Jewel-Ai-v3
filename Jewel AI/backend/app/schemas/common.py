@@ -117,6 +117,7 @@ class JobOut(BaseModel):
     model_url: Optional[str] = None
     output_url: Optional[str] = None
     output_urls: Optional[list[str]] = None
+    asset_id: Optional[str] = None
     error_message: Optional[str] = None
     provider_used: Optional[str] = None
     provider_model: Optional[str] = None

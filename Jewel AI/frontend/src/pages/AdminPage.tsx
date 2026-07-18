@@ -17,6 +17,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { PromptEditor } from "@/components/PromptEditor";
 import { PromptSandbox } from "@/components/admin/PromptSandbox";
+import { StylePresetsAdmin } from "@/components/admin/StylePresetsAdmin";
 import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { api } from "@/lib/api";
@@ -168,7 +169,13 @@ export function AdminPage() {
             {tab === "providers" && <ProviderSettings />}
 
             {tab === "prompts" && (
-              <PromptEditor workflows={options?.workflows ?? []} jewelryTypes={options?.jewelryTypes ?? ["Ring"]} />
+              <div className="space-y-6">
+                <PromptEditor
+                  workflows={options?.workflows ?? []}
+                  jewelryTypes={options?.jewelryTypes ?? ["Ring"]}
+                />
+                <StylePresetsAdmin workflows={options?.workflows ?? []} />
+              </div>
             )}
 
             {tab === "test" && <PromptSandbox options={options} />}

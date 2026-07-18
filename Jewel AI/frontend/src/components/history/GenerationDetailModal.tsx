@@ -1,14 +1,16 @@
-﻿import { useEffect, useRef } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
   Download,
   Heart,
+  Link2,
   RefreshCcw,
   Trash2,
   X,
 } from "lucide-react";
-import { mediaUrl } from "@/lib/api";
+import { toast } from "sonner";
+import { api, mediaUrl } from "@/lib/api";
 import type { Job } from "@/types";
 import { label, workflowLabel } from "@/types";
 
@@ -90,7 +92,17 @@ export function GenerationDetailModal({
   ].filter(Boolean);
 
   const hasExtraInputs = Boolean(job.reference_url || job.model_url);
-  const outputUrl = job.output_url || job.output_urls?.[0];
+  const outputUrls = useMemo(() => {
+    const multi = (job.output_urls || []).filter(Boolean) as string[];
+    if (multi.length) return multi;
+    return job.output_url ? [job.output_url] : [];
+  }, [job.output_url, job.output_urls]);
+  const [outputIndex, setOutputIndex] = useState(0);
+  const outputUrl = outputUrls[outputIndex] || outputUrls[0];
+
+  useEffect(() => {
+    setOutputIndex(0);
+  }, [job.id]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -145,6 +157,24 @@ export function GenerationDetailModal({
               errorMessage={job.error_message}
             />
           </div>
+          {outputUrls.length > 1 && (
+            <div className="mt-3 flex gap-1.5 overflow-x-auto">
+              {outputUrls.map((url, i) => (
+                <button
+                  key={`${url}-${i}`}
+                  type="button"
+                  onClick={() => setOutputIndex(i)}
+                  className={`size-14 shrink-0 overflow-hidden rounded-lg border ${
+                    outputIndex === i
+                      ? "border-blue-600 ring-2 ring-blue-500/20"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <img src={mediaUrl(url)} alt="" className="size-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
           {hasExtraInputs && (
             <div className="mt-5 pt-5 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-5">
               <ComparePanel
@@ -204,6 +234,27 @@ export function GenerationDetailModal({
               <Download className="size-3.5" />
               Download Output
             </a>
+          )}
+          {job.status === "COMPLETED" && (
+            <button
+              type="button"
+              className="ui-btn-secondary"
+              onClick={async () => {
+                try {
+                  const res = await api.post<{ token: string }>("/share-links", {
+                    job_id: job.id,
+                  });
+                  const shareUrl = `${window.location.origin}/share/${res.data.token}`;
+                  await navigator.clipboard.writeText(shareUrl);
+                  toast.success("Share link copied");
+                } catch {
+                  toast.error("Could not create share link");
+                }
+              }}
+            >
+              <Link2 className="size-3.5" />
+              Share
+            </button>
           )}
           {onDelete && (
             <button

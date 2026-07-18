@@ -13,6 +13,9 @@ const RatesPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const SharePage = lazy(() =>
+  import("@/pages/SharePage").then((m) => ({ default: m.SharePage })),
+);
 
 function PageFallback() {
   return (
@@ -91,6 +94,7 @@ export default function App() {
             </AdminGuard>
           }
         />
+        <Route path="/share/:token" element={<SharePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

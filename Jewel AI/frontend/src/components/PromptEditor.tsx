@@ -43,6 +43,8 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
   const [showStructural, setShowStructural] = useState(false);
   const [currentLayers, setCurrentLayers] = useState<PromptLayer[]>([]);
   const [structuralLayers, setStructuralLayers] = useState<StructuralLayerConfig[]>([]);
+  const [newVariantLabel, setNewVariantLabel] = useState("");
+  const [showAddVariant, setShowAddVariant] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["prompts", "editor-data"],
@@ -275,6 +277,37 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
     onError: () => toast.error("Preview failed"),
   });
 
+  const addVariantMutation = useMutation({
+    mutationFn: async () => {
+      const label = newVariantLabel.trim();
+      if (!label) throw new Error("Variant label required");
+      if (!VARIANT_WORKFLOWS.includes(parentWorkflow as (typeof VARIANT_WORKFLOWS)[number])) {
+        throw new Error("This workflow does not support variants");
+      }
+      const variant_key = label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      if (!variant_key) throw new Error("Invalid variant key");
+      await api.post("/prompts/variants", {
+        workflow: parentWorkflow,
+        variant_key,
+        label,
+        prompt_text: editorText || `${label} style guidance.`,
+        is_active: true,
+      });
+      return variant_key;
+    },
+    onSuccess: async (variant_key) => {
+      setNewVariantLabel("");
+      setShowAddVariant(false);
+      await queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      setChildKey(childKeyForVariant(variant_key));
+      toast.success("Variant added");
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to add variant"),
+  });
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 flex items-center justify-between gap-4">
@@ -331,6 +364,48 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
                 </option>
               ))}
             </select>
+            {VARIANT_WORKFLOWS.includes(
+              parentWorkflow as (typeof VARIANT_WORKFLOWS)[number],
+            ) && (
+              <div className="mt-2">
+                {!showAddVariant ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVariant(true)}
+                    className="text-[11px] font-semibold text-blue-600 hover:underline"
+                  >
+                    + Add variant
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={newVariantLabel}
+                      onChange={(e) => setNewVariantLabel(e.target.value)}
+                      placeholder="Variant label (e.g. Emerald)"
+                      className="h-9 flex-1 rounded-lg border border-slate-200 px-2 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addVariantMutation.mutate()}
+                      disabled={addVariantMutation.isPending}
+                      className="rounded-lg bg-blue-600 px-3 text-[11px] font-bold text-white"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddVariant(false);
+                        setNewVariantLabel("");
+                      }}
+                      className="rounded-lg border border-slate-200 px-2 text-[11px] font-semibold text-slate-600"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

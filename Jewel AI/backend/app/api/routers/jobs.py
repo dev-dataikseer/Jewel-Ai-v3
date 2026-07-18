@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -484,6 +485,94 @@ def get_batch(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     return _batch_to_out(db, batch)
+
+
+@router.get("/batches/{batch_id}/zip")
+def download_batch_zip(batch_id: str, user: RequireUser, db: Session = Depends(get_db)):
+    """Stream a ZIP of completed batch output images (and logo-composited variants when present)."""
+    import io
+    import zipfile
+    from urllib.parse import urlparse
+
+    from fastapi.responses import StreamingResponse
+
+    import httpx
+
+    from app.storage.local import StorageService
+    from app.storage.object_store import parse_upload_path
+
+    batch = db.query(Batch).filter(Batch.id == batch_id, Batch.user_id == user.id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    jobs = (
+        db.query(GenerationJob)
+        .filter(
+            GenerationJob.batch_id == batch.id,
+            GenerationJob.user_id == user.id,
+            GenerationJob.status == "COMPLETED",
+        )
+        .order_by(GenerationJob.created_at.asc())
+        .all()
+    )
+    if not jobs:
+        raise HTTPException(status_code=404, detail="No completed outputs in this batch")
+
+    storage = StorageService()
+    buf = io.BytesIO()
+
+    def _read_image(url: str | None) -> bytes | None:
+        if not url:
+            return None
+        path = str(url).split("?", 1)[0]
+        try:
+            upload_name = parse_upload_path(path)
+            if upload_name:
+                data, _ = storage.read_upload(upload_name)
+                return data
+            if path.startswith("/uploads/"):
+                name = path.replace("/uploads/", "", 1)
+                data, _ = storage.read_upload(name)
+                return data
+            if path.startswith("http://") or path.startswith("https://"):
+                with httpx.Client(timeout=60.0, follow_redirects=True) as http:
+                    resp = http.get(path)
+                    resp.raise_for_status()
+                    return resp.content
+        except Exception:
+            return None
+        return None
+
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for idx, job in enumerate(jobs, start=1):
+            urls: list[str] = []
+            if job.output_urls:
+                urls.extend([u for u in job.output_urls if u])
+            elif job.output_url:
+                urls.append(job.output_url)
+            meta = job.provider_metadata or {}
+            logo_out = meta.get("logoCompositedUrl") or meta.get("logo_composited_url")
+            if isinstance(logo_out, str) and logo_out and logo_out not in urls:
+                urls.append(logo_out)
+
+            for j, url in enumerate(urls):
+                data = _read_image(url)
+                if not data:
+                    continue
+                parsed = urlparse(str(url).split("?", 1)[0])
+                ext = Path(parsed.path).suffix.lower() or ".png"
+                if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+                    ext = ".png"
+                suffix = "" if j == 0 else f"-{j + 1}"
+                zf.writestr(f"{idx:03d}-{job.id[:8]}{suffix}{ext}", data)
+
+    buf.seek(0)
+    filename = f"batch-{batch.id[:8]}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/stream-token")

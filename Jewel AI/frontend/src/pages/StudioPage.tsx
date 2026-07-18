@@ -16,14 +16,20 @@ import {
   RefreshCcw,
   Settings,
   Sparkles,
-  UploadCloud,
   Wand2,
   X,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
+import { ImageCropModal } from "@/components/studio/ImageCropModal";
 import { ModelSelector } from "@/components/studio/ModelSelector";
+import { UploadZone } from "@/components/studio/UploadZone";
 import { jobStatusLabel, useJobStream } from "@/hooks/useJobStream";
 import { api, mediaUrl } from "@/lib/api";
+import {
+  clearBrandKit,
+  loadBrandKit,
+  patchBrandKit,
+} from "@/lib/brandKit";
 import {
   clearStudioSession,
   loadStudioSession,
@@ -169,6 +175,15 @@ export function StudioPage() {
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
+  const [lightingStyle, setLightingStyle] = useState("");
+  const [lastBatchId, setLastBatchId] = useState<string | null>(null);
+  const [outputIndex, setOutputIndex] = useState(0);
+  const [cropTarget, setCropTarget] = useState<{
+    kind: "primary" | "reference" | "logo";
+    src: string;
+    name: string;
+    index?: number;
+  } | null>(null);
 
   const apiWorkflow =
     workflow === "VIRTUAL_TRY_ON"
@@ -183,14 +198,22 @@ export function StudioPage() {
   const needsStyleReference = workflow === "REFERENCE_STYLE_MATCH" || isCatalog;
   const needsReference =
     needsModelReference || workflow === "REFERENCE_STYLE_MATCH";
-  const inputImageCount =
-    Math.min(primaryFiles.length, 1) + (needsReference && referenceFile ? 1 : 0);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [lockedUrls, setLockedUrls] = useState<{
     input?: string | null;
     reference?: string | null;
     model?: string | null;
+    logo?: string | null;
+    logoAssetId?: string | null;
+    themeAssetId?: string | null;
+    assetId?: string | null;
   }>({});
+  const inputImageCount =
+    primaryFiles.length > 0
+      ? primaryFiles.length
+      : lockedUrls.input || lockedUrls.assetId
+        ? 1
+        : 0;
 
   const { data: options } = useQuery({
     queryKey: ["config", "options"],
@@ -255,38 +278,53 @@ export function StudioPage() {
     setFavoriteIds(new Set(favoriteIdList));
   }, [favoriteIdList]);
 
-  // Restore session workspace once on mount
+  // Restore session workspace + brand kit once on mount
   useEffect(() => {
     if (sessionHydrated.current) return;
     sessionHydrated.current = true;
     const draft = loadStudioSession();
-    if (!draft) return;
-    setWorkflow(draft.workflow || "CATALOG_IMAGE");
-    if (draft.tryOnPreset === "customer" || draft.tryOnPreset === "studio") {
-      setTryOnPreset(draft.tryOnPreset);
-    }
-    if (draft.jewelryTypes?.length) setJewelryTypes(draft.jewelryTypes);
-    if (draft.aspectRatio) setAspectRatio(draft.aspectRatio);
-    if (draft.personGeneration) setPersonGeneration(draft.personGeneration);
-    if (draft.numberOfImages) setNumberOfImages(draft.numberOfImages);
-    if (draft.modelEndpointId) setModelEndpointId(draft.modelEndpointId);
-    if (draft.modelParams) setModelParams(draft.modelParams);
-    if (draft.workflowVariantKey) setWorkflowVariantKey(draft.workflowVariantKey);
-    if (draft.stylePresetId) setStylePresetId(draft.stylePresetId);
-    if (draft.promptText) setPromptText(draft.promptText);
-    if (draft.activeJobId) setActiveJobId(draft.activeJobId);
-    setLockedUrls({
-      input: draft.lockedInputUrl,
-      reference: draft.lockedReferenceUrl,
-      model: draft.lockedModelUrl,
-    });
-    if (draft.sessionJobIds?.length) {
-      api
-        .get<JobsListResponse>("/jobs", {
-          params: { ids: draft.sessionJobIds.slice(0, 40).join(","), limit: 40 },
-        })
-        .then((res) => setSessionJobs(res.data.items))
-        .catch(() => undefined);
+    const kit = loadBrandKit();
+    if (draft) {
+      setWorkflow(draft.workflow || "CATALOG_IMAGE");
+      if (draft.tryOnPreset === "customer" || draft.tryOnPreset === "studio") {
+        setTryOnPreset(draft.tryOnPreset);
+      }
+      if (draft.jewelryTypes?.length) setJewelryTypes(draft.jewelryTypes);
+      if (draft.aspectRatio) setAspectRatio(draft.aspectRatio);
+      if (draft.personGeneration) setPersonGeneration(draft.personGeneration);
+      if (draft.numberOfImages) setNumberOfImages(draft.numberOfImages);
+      if (draft.modelEndpointId) setModelEndpointId(draft.modelEndpointId);
+      if (draft.modelParams) setModelParams(draft.modelParams);
+      if (draft.workflowVariantKey) setWorkflowVariantKey(draft.workflowVariantKey);
+      if (draft.stylePresetId) setStylePresetId(draft.stylePresetId);
+      if (draft.promptText) setPromptText(draft.promptText);
+      if (draft.lightingStyle) setLightingStyle(draft.lightingStyle);
+      if (draft.activeJobId) setActiveJobId(draft.activeJobId);
+      if (draft.lastBatchId) setLastBatchId(draft.lastBatchId);
+      setLockedUrls({
+        input: draft.lockedInputUrl,
+        reference: draft.lockedReferenceUrl || kit?.themeUrl || null,
+        model: draft.lockedModelUrl,
+        logo: draft.lockedLogoUrl || kit?.logoUrl || null,
+        logoAssetId: draft.lockedLogoAssetId || kit?.logoAssetId || null,
+        themeAssetId: draft.lockedThemeAssetId || kit?.themeAssetId || null,
+      });
+      if (draft.sessionJobIds?.length) {
+        api
+          .get<JobsListResponse>("/jobs", {
+            params: { ids: draft.sessionJobIds.slice(0, 40).join(","), limit: 40 },
+          })
+          .then((res) => setSessionJobs(res.data.items))
+          .catch(() => undefined);
+      }
+    } else if (kit) {
+      setLockedUrls((u) => ({
+        ...u,
+        reference: kit.themeUrl || null,
+        logo: kit.logoUrl || null,
+        logoAssetId: kit.logoAssetId || null,
+        themeAssetId: kit.themeAssetId || null,
+      }));
     }
   }, []);
 
@@ -305,11 +343,17 @@ export function StudioPage() {
       workflowVariantKey,
       stylePresetId,
       promptText,
+      lightingStyle,
+      lastBatchId,
       sessionJobIds: sessionJobs.map((j) => j.id).slice(0, 40),
       activeJobId,
       lockedInputUrl: lockedUrls.input,
       lockedReferenceUrl: lockedUrls.reference,
       lockedModelUrl: lockedUrls.model,
+      lockedThemeUrl: lockedUrls.reference,
+      lockedLogoUrl: lockedUrls.logo,
+      lockedLogoAssetId: lockedUrls.logoAssetId,
+      lockedThemeAssetId: lockedUrls.themeAssetId,
     });
   }, [
     workflow,
@@ -323,6 +367,8 @@ export function StudioPage() {
     workflowVariantKey,
     stylePresetId,
     promptText,
+    lightingStyle,
+    lastBatchId,
     sessionJobs,
     activeJobId,
     lockedUrls,
@@ -392,6 +438,10 @@ export function StudioPage() {
           input: job.input_url,
           reference: job.reference_url,
           model: job.model_url,
+          logo: (job.provider_metadata as { logoUrl?: string } | null)?.logoUrl || null,
+          logoAssetId:
+            (job.provider_metadata as { logoAssetId?: string } | null)?.logoAssetId || null,
+          assetId: job.asset_id || null,
         });
         toast.success("Loaded into Studio — settings restored. Regenerate anytime.");
       })
@@ -431,6 +481,10 @@ export function StudioPage() {
   const activeJobs = sessionJobs.filter(
     (j) => j.status === "PENDING" || j.status === "PROCESSING",
   );
+
+  useEffect(() => {
+    setOutputIndex(0);
+  }, [activeJobId]);
 
   const [primaryPreviews, setPrimaryPreviews] = useState<
     { file: File; url: string }[]
@@ -496,7 +550,7 @@ export function StudioPage() {
   const generateMutation = useMutation({
     mutationFn: async () => {
       const errors: Record<string, string> = {};
-      if (primaryFiles.length === 0 && !lockedUrls.input)
+      if (primaryFiles.length === 0 && !lockedUrls.input && !lockedUrls.assetId)
         errors.productImage = "Upload at least one product image";
       if (needsReference && !referenceFile && !lockedUrls.reference && !lockedUrls.model) {
         errors.referenceImage = needsModelReference
@@ -515,16 +569,45 @@ export function StudioPage() {
 
       try {
         const referenceAsset = referenceFile
-          ? await uploadOne(referenceFile, needsModelReference ? "portrait" : "reference")
+          ? await uploadOne(referenceFile, needsModelReference ? "portrait" : "theme")
           : null;
         const logoAsset = logoFile ? await uploadOne(logoFile, "logo") : null;
-        // Prefer durable /uploads path for logo compose (not fal CDN mirror).
         const logoStorageUrl = logoAsset
           ? String(logoAsset.original_url || "").split("?")[0] || logoAsset.original_url
-          : null;
+          : lockedUrls.logo || null;
         const selectedVariant = workflowVariants.find(
           (v) => v.variant_key === workflowVariantKey,
         );
+
+        if (referenceAsset) {
+          const themeUrl =
+            String(referenceAsset.original_url || "").split("?")[0] ||
+            referenceAsset.original_url;
+          patchBrandKit({
+            themeAssetId: referenceAsset.id,
+            themeUrl,
+            themeName: referenceFile?.name || null,
+          });
+          setLockedUrls((u) => ({
+            ...u,
+            reference: themeUrl,
+            themeAssetId: referenceAsset.id,
+          }));
+        }
+        if (logoAsset) {
+          const url =
+            String(logoAsset.original_url || "").split("?")[0] || logoAsset.original_url;
+          patchBrandKit({
+            logoAssetId: logoAsset.id,
+            logoUrl: url,
+            logoName: logoFile?.name || null,
+          });
+          setLockedUrls((u) => ({
+            ...u,
+            logo: url,
+            logoAssetId: logoAsset.id,
+          }));
+        }
 
         const referenceUrl =
           referenceAsset?.original_url ||
@@ -546,8 +629,12 @@ export function StudioPage() {
           model_params: modelParams,
           reference_url: needsModelReference ? undefined : referenceUrl,
           model_url: modelUrl,
-          ...(logoAsset
-            ? { logo_asset_id: logoAsset.id, logo_url: logoStorageUrl }
+          ...(lightingStyle ? { lighting_style: lightingStyle } : {}),
+          ...((logoAsset || lockedUrls.logoAssetId || lockedUrls.logo)
+            ? {
+                logo_asset_id: logoAsset?.id || lockedUrls.logoAssetId || undefined,
+                logo_url: logoStorageUrl || undefined,
+              }
             : {}),
           ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
           ...(apiWorkflow === "GEMSTONE_COLOR_CHANGE" && selectedVariant
@@ -579,6 +666,7 @@ export function StudioPage() {
               ? { model_url: modelUrl, reference_url: undefined }
               : { reference_url: referenceUrl }),
           });
+          if (res.data.batchId) setLastBatchId(res.data.batchId);
           return res.data.jobs?.length
             ? res.data.jobs
             : await Promise.all(
@@ -593,9 +681,15 @@ export function StudioPage() {
         if (primaryFiles[0]) {
           const asset = await uploadOne(primaryFiles[0], "product");
           assetId = asset.id;
+          setLockedUrls((u) => ({
+            ...u,
+            assetId: asset.id,
+            input: asset.original_url || u.input,
+          }));
+        } else if (lockedUrls.assetId) {
+          assetId = lockedUrls.assetId;
         } else {
-          // Reuse locked history asset by regenerating from that job instead
-          throw new Error("Upload a product image, or use Regenerate on the loaded job");
+          throw new Error("Upload a product image, or open a history job that has an asset");
         }
         const job = (
           await api.post<Job>("/jobs", { ...payload, asset_id: assetId })
@@ -608,6 +702,7 @@ export function StudioPage() {
     onSuccess: (jobs) => {
       setSessionJobs((prev) => mergeSessionJobs(prev, jobs));
       if (jobs[0]) setActiveJobId(jobs[0].id);
+      setOutputIndex(0);
       queryClient.setQueryData<Job[]>(["recent-jobs"], (old) =>
         mergeSessionJobs(old || [], jobs).slice(0, 8),
       );
@@ -701,18 +796,105 @@ export function StudioPage() {
 
   const onPrimaryInput = (files: FileList | null) => {
     if (!files?.length) return;
-    const list = Array.from(files);
-    setPrimaryFiles(list.slice(0, 30));
-    setLockedUrls((u) => ({ ...u, input: null }));
+    const list = Array.from(files).slice(0, 30);
+    setPrimaryFiles(list);
+    setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
   };
+
+  const openCropForPrimary = (index = 0) => {
+    const file = primaryFiles[index];
+    if (!file) return;
+    const src = URL.createObjectURL(file);
+    setCropTarget({ kind: "primary", src, name: file.name, index });
+  };
+
+  const onReferencePick = (files: FileList | null) => {
+    const file = files?.[0] || null;
+    if (!file) return;
+    setValidationErrors((e) => ({ ...e, referenceImage: "" }));
+    setReferenceFile(file);
+    setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+  };
+
+  const onLogoPick = (files: FileList | null) => {
+    const file = files?.[0] || null;
+    if (!file) return;
+    setLogoFile(file);
+    setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+  };
+
+  const onCropConfirm = (file: File) => {
+    if (!cropTarget) return;
+    if (cropTarget.kind === "primary") {
+      const idx = cropTarget.index ?? 0;
+      setPrimaryFiles((prev) => {
+        const next = [...prev];
+        next[idx] = file;
+        return next;
+      });
+      setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+    } else if (cropTarget.kind === "reference") {
+      setReferenceFile(file);
+      setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+    } else {
+      setLogoFile(file);
+      setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+    }
+    URL.revokeObjectURL(cropTarget.src);
+    setCropTarget(null);
+  };
+
+  const themePreviewSrc =
+    referencePreview || (lockedUrls.reference ? mediaUrl(lockedUrls.reference) : "");
+  const logoPreviewSrc =
+    logoPreview || (lockedUrls.logo ? mediaUrl(lockedUrls.logo) : "");
+  const productPreviewSrcs = primaryPreviews.length
+    ? primaryPreviews.map((p) => p.url)
+    : lockedUrls.input
+      ? [mediaUrl(lockedUrls.input)]
+      : [];
+
+  const outputUrls = useMemo(() => {
+    if (!activeJob) return [] as string[];
+    const urls = (activeJob.output_urls || []).filter(Boolean) as string[];
+    if (urls.length) return urls;
+    return activeJob.output_url ? [activeJob.output_url] : [];
+  }, [activeJob]);
+
+  const activeOutputUrl = outputUrls[outputIndex] || outputUrls[0] || null;
+
+  const { data: batchStatus } = useQuery({
+    queryKey: ["batch", lastBatchId],
+    queryFn: async () =>
+      (
+        await api.get<{
+          id: string;
+          status: string;
+          total_jobs: number;
+          completed_jobs: number;
+          failed_jobs: number;
+          jobs?: Array<{ id: string; status: string; output_url?: string | null }>;
+        }>(`/jobs/batches/${lastBatchId}`)
+      ).data,
+    enabled: Boolean(lastBatchId),
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === "PENDING" || s === "PROCESSING" ? 2500 : false;
+    },
+  });
 
   const selectWorkflow = (id: string) => {
     setWorkflow(id);
-    // Keep session job history; only clear uploads for the new workflow
     setPrimaryFiles([]);
     setReferenceFile(null);
     setLogoFile(null);
-    setLockedUrls({});
+    const kit = loadBrandKit();
+    setLockedUrls({
+      reference: kit?.themeUrl || null,
+      logo: kit?.logoUrl || null,
+      logoAssetId: kit?.logoAssetId || null,
+      themeAssetId: kit?.themeAssetId || null,
+    });
     setActiveJobId(null);
     setValidationErrors({});
   };
@@ -724,8 +906,23 @@ export function StudioPage() {
     setLogoFile(null);
     setLockedUrls({});
     setSessionJobs([]);
+    setLastBatchId(null);
     clearStudioSession();
     toast.message("Workspace cleared");
+  };
+
+  const clearBrandAssets = () => {
+    clearBrandKit();
+    setReferenceFile(null);
+    setLogoFile(null);
+    setLockedUrls((u) => ({
+      ...u,
+      reference: null,
+      logo: null,
+      logoAssetId: null,
+      themeAssetId: null,
+    }));
+    toast.message("Brand kit cleared");
   };
 
   const is4kSelected = useMemo(() => {
@@ -827,8 +1024,9 @@ export function StudioPage() {
               </h2>
               {isCatalog && (
                 <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-relaxed">
-                  Multi-upload for bulk catalog. Add a theme reference and logo for batch
-                  consistency. Crop watermarks from raw images before upload when possible.
+                  Multi-upload for bulk catalog. Theme is required for bulk; optional for
+                  single. Upload full-size images as-is — theme and logo stay in your brand
+                  kit across visits.
                 </p>
               )}
               {!isCatalog && (
@@ -887,7 +1085,7 @@ export function StudioPage() {
                           id="studio-product-upload"
                           label="Product (multi for bulk)"
                           error={validationErrors.productImage}
-                          previews={primaryPreviews.map((p) => p.url)}
+                          previews={productPreviewSrcs}
                           onFiles={(files) => {
                             setValidationErrors((e) => ({
                               ...e,
@@ -896,28 +1094,50 @@ export function StudioPage() {
                             onPrimaryInput(files);
                           }}
                           multiple
+                          compact
+                          fileCount={primaryFiles.length || (lockedUrls.input ? 1 : 0)}
+                          fileName={primaryFiles[0]?.name}
+                          onCrop={
+                            primaryFiles.length === 1
+                              ? () => openCropForPrimary(0)
+                              : undefined
+                          }
+                          cropLabel="Crop"
+                          onClear={() => {
+                            setPrimaryFiles([]);
+                            setLockedUrls((u) => ({
+                              ...u,
+                              input: null,
+                              assetId: null,
+                            }));
+                          }}
                         />
                         <UploadZone
                           id="studio-reference-upload"
                           label={needsStyleReference ? "Reference" : "Portrait"}
                           error={validationErrors.referenceImage}
-                          previews={referencePreview ? [referencePreview] : []}
-                          onFiles={(files) => {
-                            setValidationErrors((e) => ({
-                              ...e,
-                              referenceImage: "",
-                            }));
-                            setReferenceFile(files?.[0] || null);
-                          }}
+                          previews={themePreviewSrc ? [themePreviewSrc] : []}
+                          onFiles={onReferencePick}
                           single
+                          compact
+                          fileName={referenceFile?.name || "Saved"}
+                          onClear={() => {
+                            setReferenceFile(null);
+                            setLockedUrls((u) => ({
+                              ...u,
+                              reference: null,
+                              model: null,
+                              themeAssetId: null,
+                            }));
+                          }}
                         />
                       </div>
                     ) : (
                       <UploadZone
                         id="studio-product-upload"
-                        label={`Product (multi for bulk)`}
+                        label="Product (multi for bulk)"
                         error={validationErrors.productImage}
-                        previews={primaryPreviews.map((p) => p.url)}
+                        previews={productPreviewSrcs}
                         onFiles={(files) => {
                           setValidationErrors((e) => ({
                             ...e,
@@ -926,6 +1146,32 @@ export function StudioPage() {
                           onPrimaryInput(files);
                         }}
                         multiple
+                        compact
+                        fileCount={primaryFiles.length || (lockedUrls.input ? 1 : 0)}
+                        fileName={
+                          primaryFiles.length > 1
+                            ? `${primaryFiles.length} files`
+                            : primaryFiles[0]?.name
+                        }
+                        onCrop={
+                          primaryFiles.length === 1
+                            ? () => openCropForPrimary(0)
+                            : undefined
+                        }
+                        cropLabel="Crop"
+                        onClear={() => {
+                          setPrimaryFiles([]);
+                          setLockedUrls((u) => ({
+                            ...u,
+                            input: null,
+                            assetId: null,
+                          }));
+                        }}
+                        hint={
+                          primaryFiles.length > 4
+                            ? `${primaryFiles.length} images selected`
+                            : undefined
+                        }
                       />
                     )}
                   </div>
@@ -965,9 +1211,9 @@ export function StudioPage() {
                             />
                             Save
                           </button>
-                          {activeJob.output_url && (
+                          {activeOutputUrl && (
                             <a
-                              href={mediaUrl(activeJob.output_url)}
+                              href={mediaUrl(activeOutputUrl)}
                               download
                               target="_blank"
                               rel="noreferrer"
@@ -978,6 +1224,26 @@ export function StudioPage() {
                               Download
                             </a>
                           )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await api.post<{
+                                  token: string;
+                                  url?: string;
+                                }>("/share-links", { job_id: activeJob.id });
+                                const token = res.data.token;
+                                const shareUrl = `${window.location.origin}/share/${token}`;
+                                await navigator.clipboard.writeText(shareUrl);
+                                toast.success("Share link copied");
+                              } catch {
+                                toast.error("Could not create share link");
+                              }
+                            }}
+                            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
+                          >
+                            Share
+                          </button>
                         </div>
                       )}
                       {(activeJob?.status === "PENDING" ||
@@ -1042,15 +1308,39 @@ export function StudioPage() {
                         </div>
                       </div>
                     ) : activeJob.status === "COMPLETED" ? (
-                      <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-950 p-3 min-h-[240px]">
-                        {activeJob.output_url ? (
-                          <img
-                            src={mediaUrl(activeJob.output_url)}
-                            alt="Output"
-                            className="max-h-full max-w-full object-contain rounded"
-                          />
-                        ) : (
-                          <span className="text-xs text-slate-500">No output</span>
+                      <div className="flex-1 flex flex-col gap-2 min-h-[240px]">
+                        <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-950 p-3">
+                          {activeOutputUrl ? (
+                            <img
+                              src={mediaUrl(activeOutputUrl)}
+                              alt="Output"
+                              className="max-h-full max-w-full object-contain rounded"
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-500">No output</span>
+                          )}
+                        </div>
+                        {outputUrls.length > 1 && (
+                          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                            {outputUrls.map((url, i) => (
+                              <button
+                                key={`${url}-${i}`}
+                                type="button"
+                                onClick={() => setOutputIndex(i)}
+                                className={`size-12 shrink-0 overflow-hidden rounded-lg border ${
+                                  outputIndex === i
+                                    ? "border-blue-600 ring-2 ring-blue-500/20"
+                                    : "border-slate-200"
+                                }`}
+                              >
+                                <img
+                                  src={mediaUrl(url)}
+                                  alt=""
+                                  className="size-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -1074,6 +1364,97 @@ export function StudioPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Sticky generate under canvas */}
+              <div className="sticky bottom-3 z-20 hidden lg:flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    {isBulk
+                      ? `Ready to generate ${primaryFiles.length} images`
+                      : lockedUrls.assetId && !primaryFiles.length
+                        ? "Ready — using loaded product asset"
+                        : "Ready when product is set"}
+                  </p>
+                  {uploadProgress && (
+                    <p className="text-[11px] text-slate-500 truncate">{uploadProgress}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending || Boolean(uploadProgress)}
+                  className="ui-btn-primary shrink-0"
+                >
+                  {generateMutation.isPending || uploadProgress ? (
+                    <RefreshCcw className="size-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="size-4" />
+                  )}
+                  {isBulk
+                    ? `Generate Bulk (${primaryFiles.length})`
+                    : "Generate"}
+                </button>
+              </div>
+
+              {batchStatus && (
+                <div className="ui-card p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="ui-label mb-0 flex items-center gap-1.5">
+                      <Layers3 className="size-3.5" /> Batch progress
+                    </p>
+                    {batchStatus.status === "COMPLETED" && (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-blue-600 hover:underline"
+                        onClick={async () => {
+                          try {
+                            const res = await api.get(
+                              `/jobs/batches/${batchStatus.id}/zip`,
+                              { responseType: "blob" },
+                            );
+                            const blob = new Blob([res.data], {
+                              type: "application/zip",
+                            });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `batch-${batchStatus.id.slice(0, 8)}.zip`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          } catch {
+                            toast.error("ZIP download failed");
+                          }
+                        }}
+                      >
+                        Download ZIP
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {batchStatus.completed_jobs}/{batchStatus.total_jobs} done
+                    {batchStatus.failed_jobs
+                      ? ` · ${batchStatus.failed_jobs} failed`
+                      : ""}{" "}
+                    · {batchStatus.status}
+                  </p>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full bg-blue-600 transition-all"
+                      style={{
+                        width: `${
+                          batchStatus.total_jobs
+                            ? Math.round(
+                                (batchStatus.completed_jobs /
+                                  batchStatus.total_jobs) *
+                                  100,
+                              )
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <input
                 type="text"
@@ -1150,42 +1531,122 @@ export function StudioPage() {
               />
               {isCatalog && (
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="ui-label mb-0">Brand kit</p>
+                    {(lockedUrls.reference ||
+                      lockedUrls.logo ||
+                      referenceFile ||
+                      logoFile) && (
+                      <button
+                        type="button"
+                        onClick={clearBrandAssets}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-slate-800"
+                      >
+                        Clear saved
+                      </button>
+                    )}
+                  </div>
+                  {(lockedUrls.reference || lockedUrls.logo) &&
+                    !referenceFile &&
+                    !logoFile && (
+                      <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1.5">
+                        Using saved theme/logo — Change anytime below.
+                      </p>
+                    )}
                   <UploadZone
                     id="studio-theme-ref"
-                    label="Theme / style reference (required for bulk)"
+                    label={
+                      isBulk
+                        ? "Theme / style (required for bulk)"
+                        : "Theme / style (optional)"
+                    }
                     error={validationErrors.referenceImage}
-                    previews={referencePreview ? [referencePreview] : []}
-                    onFiles={(files) => {
-                      setValidationErrors((e) => ({
-                        ...e,
-                        referenceImage: "",
-                      }));
-                      setReferenceFile(files?.[0] || null);
-                    }}
+                    previews={themePreviewSrc ? [themePreviewSrc] : []}
+                    onFiles={onReferencePick}
                     single
+                    compact
+                    fileName={referenceFile?.name || "Saved theme"}
+                    hint={isBulk ? "Required for bulk" : "Optional · full size OK"}
+                    onClear={() => {
+                      setReferenceFile(null);
+                      patchBrandKit({
+                        themeAssetId: null,
+                        themeUrl: null,
+                        themeName: null,
+                      });
+                      setLockedUrls((u) => ({
+                        ...u,
+                        reference: null,
+                        themeAssetId: null,
+                      }));
+                    }}
                   />
                   <UploadZone
                     id="studio-logo-upload"
-                    label="Shop logo (placed under output)"
-                    previews={logoPreview ? [logoPreview] : []}
-                    onFiles={(files) => setLogoFile(files?.[0] || null)}
+                    label="Shop logo (under output)"
+                    previews={logoPreviewSrc ? [logoPreviewSrc] : []}
+                    onFiles={onLogoPick}
                     single
+                    compact
+                    fileName={logoFile?.name || "Saved logo"}
+                    hint="Full size OK"
+                    onClear={() => {
+                      setLogoFile(null);
+                      patchBrandKit({
+                        logoAssetId: null,
+                        logoUrl: null,
+                        logoName: null,
+                      });
+                      setLockedUrls((u) => ({
+                        ...u,
+                        logo: null,
+                        logoAssetId: null,
+                      }));
+                    }}
                   />
-                  {logoFile && (
-                    <p className="text-[11px] text-slate-500 truncate">
-                      Logo: {logoFile.name}
-                    </p>
-                  )}
                 </div>
               )}
               {!isCatalog && (
                 <UploadZone
                   id="studio-logo-upload-single"
                   label="Shop logo (optional)"
-                  previews={logoPreview ? [logoPreview] : []}
-                  onFiles={(files) => setLogoFile(files?.[0] || null)}
+                  previews={logoPreviewSrc ? [logoPreviewSrc] : []}
+                  onFiles={onLogoPick}
                   single
+                  compact
+                  fileName={logoFile?.name || "Saved logo"}
+                  hint="Full size OK"
+                  onClear={() => {
+                    setLogoFile(null);
+                    patchBrandKit({
+                      logoAssetId: null,
+                      logoUrl: null,
+                      logoName: null,
+                    });
+                    setLockedUrls((u) => ({
+                      ...u,
+                      logo: null,
+                      logoAssetId: null,
+                    }));
+                  }}
                 />
+              )}
+              {(options?.lightingStyles?.length ?? 0) > 0 && (
+                <div>
+                  <label className="ui-label">Lighting style</label>
+                  <select
+                    value={lightingStyle}
+                    onChange={(e) => setLightingStyle(e.target.value)}
+                    className="ui-input"
+                  >
+                    <option value="">Default</option>
+                    {options!.lightingStyles!.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
               {workflowVariantLabel && workflowVariants.length > 0 && (
                 <div>
@@ -1285,7 +1746,7 @@ export function StudioPage() {
               type="button"
               onClick={() => generateMutation.mutate()}
               disabled={generateMutation.isPending || Boolean(uploadProgress)}
-              className="ui-btn-primary w-full"
+              className="ui-btn-primary w-full lg:hidden"
             >
               {generateMutation.isPending || uploadProgress ? (
                 <RefreshCcw className="size-4 animate-spin" />
@@ -1308,73 +1769,25 @@ export function StudioPage() {
           </aside>
         </div>
       </main>
-    </AppLayout>
-  );
-}
-
-function UploadZone({
-  id,
-  label,
-  previews,
-  onFiles,
-  single,
-  multiple,
-  error,
-}: {
-  id: string;
-  label: string;
-  previews: string[];
-  onFiles: (files: FileList | null) => void;
-  single?: boolean;
-  multiple?: boolean;
-  error?: string;
-}) {
-  const inputId = `${id}-input`;
-  const helpId = `${id}-help`;
-  return (
-    <div className="flex flex-col flex-1">
-      <label htmlFor={inputId} className="ui-label">
-        {label}
-      </label>
-      <label
-        htmlFor={inputId}
-        className={`flex-1 min-h-[140px] cursor-pointer rounded-xl border-2 border-dashed bg-slate-50/50 p-4 flex flex-col items-center justify-center hover:border-blue-400 hover:bg-blue-50/30 transition-colors ${
-          error ? "border-red-400" : "border-slate-200"
-        }`}
-      >
-        <UploadCloud className="size-6 text-blue-600 mb-2" aria-hidden="true" />
-        <span className="text-xs font-semibold text-slate-700">
-          Click to upload
-        </span>
-        <input
-          id={inputId}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          aria-describedby={helpId}
-          multiple={multiple && !single}
-          onChange={(e) => {
-            onFiles(e.target.files);
-            e.target.value = "";
+      {cropTarget && (
+        <ImageCropModal
+          open
+          imageSrc={cropTarget.src}
+          fileName={cropTarget.name}
+          title={
+            cropTarget.kind === "logo"
+              ? "Crop logo"
+              : cropTarget.kind === "reference"
+                ? "Crop theme"
+                : "Crop product"
+          }
+          onCancel={() => {
+            URL.revokeObjectURL(cropTarget.src);
+            setCropTarget(null);
           }}
+          onConfirm={onCropConfirm}
         />
-      </label>
-      <p id={helpId} className="sr-only">
-        Upload {label.toLowerCase()} image as JPEG, PNG, or WebP
-      </p>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      {previews.length > 0 && (
-        <div className="mt-2 flex gap-1 flex-wrap">
-          {previews.slice(0, 4).map((url) => (
-            <img
-              key={url}
-              src={url}
-              alt=""
-              className="size-12 rounded border object-cover"
-            />
-          ))}
-        </div>
       )}
-    </div>
+    </AppLayout>
   );
 }

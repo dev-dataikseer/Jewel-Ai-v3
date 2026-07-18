@@ -16,7 +16,12 @@ _redis_client: redis.Redis | None = None
 def init_circuit_breaker() -> None:
     global _redis_client
     try:
-        _redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        _redis_client = redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
         _redis_client.ping()
     except Exception:
         _redis_client = None

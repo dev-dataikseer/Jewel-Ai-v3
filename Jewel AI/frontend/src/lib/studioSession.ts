@@ -14,12 +14,18 @@ export type StudioSessionDraft = {
   workflowVariantKey: string;
   stylePresetId: string;
   promptText: string;
+  lightingStyle?: string;
   sessionJobIds: string[];
   activeJobId: string | null;
+  lastBatchId?: string | null;
   /** Locked asset URLs from a loaded history job (no File objects). */
   lockedInputUrl?: string | null;
   lockedReferenceUrl?: string | null;
   lockedModelUrl?: string | null;
+  lockedThemeUrl?: string | null;
+  lockedLogoUrl?: string | null;
+  lockedLogoAssetId?: string | null;
+  lockedThemeAssetId?: string | null;
 };
 
 export function loadStudioSession(): StudioSessionDraft | null {

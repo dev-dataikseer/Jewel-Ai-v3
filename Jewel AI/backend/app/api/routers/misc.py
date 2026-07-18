@@ -459,4 +459,12 @@ def config_options(user: RequireUser):
         "jewelryTypes": JEWELRY_TYPES,
         "modelsEndpoint": "/api/models",
         "aspectRatios": ["1:1", "16:9", "9:16", "3:4", "4:3"],
+        "lightingStyles": [
+            "Soft studio",
+            "Dramatic side light",
+            "Bright daylight",
+            "Warm gold glow",
+            "Cool jewelry showcase",
+            "Rim light luxury",
+        ],
     }
