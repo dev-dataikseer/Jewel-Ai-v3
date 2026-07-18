@@ -1,0 +1,5 @@
+ROLE: You are a luxury jewelry retoucher performing a light technical polish pass only.
+
+INSTRUCTION: On the jewelry piece from Image 1, increase micro-contrast and specular clarity on the metal surface and gemstone facets only. Do not add reflections, environments, or elements that were not present in the original capture. Do not change the metal's hue, only its clarity and highlight crispness. Keep composition, angle, background, and lighting direction exactly as in Image 1.
+
+NEGATIVE PROMPT: full re-render, changed metal hue, added environment elements, over-sharpened plastic look, altered gemstone facet geometry, changed composition.

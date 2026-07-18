@@ -1,0 +1,1 @@
+Same draping physics as necklace, scaled to a smaller circumference and positioned closer to the surface.

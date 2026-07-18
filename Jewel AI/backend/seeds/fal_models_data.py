@@ -289,7 +289,7 @@ FLUX_KONTEXT_PARAMS = {
             "enum": ["1", "2", "3", "4", "5", "6"],
             "default": "2",
         },
-        "enhance_prompt": {"type": "boolean", "title": "Enhance prompt", "default": True},
+        "enhance_prompt": {"type": "boolean", "title": "Enhance prompt", "default": False},
         "aspect_ratio": {
             "type": "string",
             "title": "Aspect ratio",
@@ -478,6 +478,12 @@ SEEDREAM_V5_PRO_EDIT_PARAMS = {
 FASHN_TRYON_PARAMS = {
     "type": "object",
     "properties": {
+        "category": {
+            "type": "string",
+            "title": "Garment category",
+            "enum": ["auto", "tops", "bottoms", "one-pieces"],
+            "default": "auto",
+        },
         "garment_photo_type": {
             "type": "string",
             "title": "Garment photo type",
@@ -546,7 +552,7 @@ FLUX_2_EDIT_PARAMS = {
 FLUX_DEV_I2I_PARAMS = {
     "type": "object",
     "properties": {
-        "strength": {"type": "number", "title": "Strength", "minimum": 0.01, "maximum": 1, "default": 0.95},
+        "strength": {"type": "number", "title": "Strength", "minimum": 0.01, "maximum": 1, "default": 0.85},
         "image_size": {"type": "string", "title": "Image size", "enum": IMAGE_SIZE_ENUM, "default": "square_hd"},
         "guidance_scale": {"type": "number", "title": "Guidance scale", "minimum": 1, "maximum": 20, "default": 3.5},
         "num_inference_steps": {"type": "integer", "title": "Inference steps", "minimum": 10, "maximum": 50, "default": 40},
@@ -864,6 +870,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "workflow_allowlist": None,
         "config": {
             "image_field": "image_urls",
+            "max_reference_images": 16,
             "recommended_max_prompt_chars": 12_000,
             "official_max_prompt_chars": 32_000,
             "official_prompt_status": "documented",
@@ -900,11 +907,12 @@ _IMAGE_EDIT_MODELS: list[dict] = [
             "guidance_scale": 3.5,
             "num_images": 1,
             "output_format": "jpeg",
-            "enhance_prompt": True,
+            "enhance_prompt": False,
+            "safety_tolerance": "2",
             "aspect_ratio": "1:1",
         },
         "workflow_allowlist": None,
-        "config": {"image_field": "image_url"},
+        "config": {"image_field": "image_url", "max_reference_images": 1},
         "sort_order": 6,
         "cost_per_call": 0.04,
     },
@@ -1128,7 +1136,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "capabilities": {**IMAGE_EDIT_CAPS, "person_generation": False},
         "input_schema": FLUX_DEV_I2I_PARAMS,
         "default_params": {
-            "strength": 0.95,
+            "strength": 0.85,
             "image_size": "square_hd",
             "guidance_scale": 3.5,
             "num_inference_steps": 40,
@@ -1136,8 +1144,8 @@ _IMAGE_EDIT_MODELS: list[dict] = [
             "num_images": 1,
             "output_format": "jpeg",
         },
-        "workflow_allowlist": None,
-        "config": {"image_field": "image_url"},
+        "workflow_allowlist": ["LUXURY_ENHANCEMENT"],
+        "config": {"image_field": "image_url", "max_reference_images": 1},
         "sort_order": 18,
         "cost_per_call": 0.025,
     },
@@ -1146,9 +1154,9 @@ _IMAGE_EDIT_MODELS: list[dict] = [
 _VTON_MODELS: list[dict] = [
     {
         "endpoint_id": "decart/lucy2-vton/realtime",
-        "display_name": "Lucy 2.1 Realtime VTON",
+        "display_name": "Lucy 2.1 Realtime VTON (WebRTC only)",
         "category": "virtual_try_on",
-        "capabilities": {**VTON_CAPS, "realtime": True},
+        "capabilities": {**VTON_CAPS, "realtime": True, "queue_compatible": False},
         "input_schema": LUCY2_VTON_PARAMS,
         "default_params": {
             "prompt": (
@@ -1156,7 +1164,8 @@ _VTON_MODELS: list[dict] = [
                 "matching its color, material, and fit"
             ),
         },
-        "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
+        # Not used by async jobs.py — WebRTC realtime only. Hidden from Studio selectors.
+        "workflow_allowlist": [],
         "config": {
             "input_mode": "try_on",
             "try_on_fields": {"person": "image_url", "product": "reference_image_url"},
@@ -1164,9 +1173,11 @@ _VTON_MODELS: list[dict] = [
             "person_image_index": 1,
             "min_images": 2,
             "realtime": True,
+            "queue_compatible": False,
         },
-        "sort_order": 39,
+        "sort_order": 99,
         "cost_per_call": 0.02,
+        "is_active": False,
     },
     {
         "endpoint_id": "fal-ai/fashn/tryon/v1.6",
@@ -1174,7 +1185,12 @@ _VTON_MODELS: list[dict] = [
         "category": "virtual_try_on",
         "capabilities": VTON_CAPS,
         "input_schema": FASHN_TRYON_PARAMS,
-        "default_params": {"garment_photo_type": "flat-lay", "mode": "balanced", "num_samples": 1},
+        "default_params": {
+            "category": "auto",
+            "garment_photo_type": "flat-lay",
+            "mode": "balanced",
+            "num_samples": 1,
+        },
         "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
@@ -1183,6 +1199,8 @@ _VTON_MODELS: list[dict] = [
             "person_image_index": 1,
             "min_images": 2,
             "omit_prompt": True,
+            "garment_only": True,
+            "jewelry_warning": "FASHN does not support jewelry accessories — use Nano Banana Pro / GPT Image 2 for jewelry try-on.",
         },
         "sort_order": 40,
         "cost_per_call": 0.05,
@@ -1215,16 +1233,26 @@ _VTON_MODELS: list[dict] = [
             "type": "object",
             "properties": {
                 "lora_scale": {"type": "number", "title": "LoRA scale", "minimum": 0, "maximum": 2, "default": 1},
+                "acceleration": {
+                    "type": "string",
+                    "title": "Acceleration",
+                    "enum": ["none", "regular", "high"],
+                    "default": "none",
+                },
                 "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
             },
         },
-        "default_params": {"lora_scale": 1, "num_images": 1},
+        "default_params": {"lora_scale": 1, "acceleration": "none", "num_images": 1},
         "workflow_allowlist": ["VIRTUAL_TRY_ON", "JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON"],
         "config": {
             "input_mode": "try_on",
             "image_field": "image_urls",
             "try_on_image_order": ["person", "product"],
+            "product_image_index": 0,
+            "person_image_index": 1,
             "min_images": 2,
+            "max_reference_images": 4,
+            "garment_only": True,
         },
         "sort_order": 42,
         "cost_per_call": 0.05,

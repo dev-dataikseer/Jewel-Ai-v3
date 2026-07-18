@@ -168,6 +168,24 @@ def seed_prompts(db: Session) -> None:
 
     seed_prompt_fragments(db)
 
+    # Load production copy from docs/Modals/Prompts into DB (skips unchanged text)
+    try:
+        from seeds.import_prompts_folder import import_prompts_folder
+
+        stats = import_prompts_folder(db, force=False)
+        import logging
+
+        logging.getLogger(__name__).info(
+            "prompts folder import: fragments=%s masters=%s subjects=%s",
+            stats.get("fragments"),
+            stats.get("masters"),
+            stats.get("subjects"),
+        )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("prompts folder import skipped")
+
 
 def run_all_seeds(db: Session) -> None:
     seed_admin_user(db)

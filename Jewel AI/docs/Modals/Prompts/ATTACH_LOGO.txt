@@ -1,0 +1,1 @@
+- Image {{LOGO_IMAGE_INDEX}}: LOGO. Brand mark to apply as a small watermark. Never a subject or environment reference.

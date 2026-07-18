@@ -48,28 +48,52 @@ def build_catalog_attachment_mapping(
     db: "Session | None" = None,
 ) -> PromptPart:
     """Layer 4 — Image N lines only for slots that are actually attached."""
+    from app.prompt_engine.fragment_defaults import (
+        ATTACH_ENVIRONMENT_REFERENCE,
+        ATTACH_LOGO,
+        ATTACH_PRIMARY_SUBJECT,
+    )
+
+    primary = get_fragment_text(db, ATTACH_PRIMARY_SUBJECT) or get_fragment_text(
+        db, ATTACH_CATALOG_ROLE_MAP
+    )
     theme_line = ""
     logo_line = ""
     if ctx.has_style_reference:
         idx = role_index(ctx, "theme") or 2
-        theme_line = (
-            f"\n- Image {idx}: REFERENCE ENVIRONMENT. Use ONLY for background, lighting, "
-            "and style replication. Ignore any jewelry shown in this image."
-        )
+        theme_tpl = get_fragment_text(db, ATTACH_ENVIRONMENT_REFERENCE)
+        if theme_tpl:
+            # Rewrite Image 2 → actual index if needed
+            theme_line = "\n" + theme_tpl.replace("Image 2", f"Image {idx}")
+        else:
+            theme_line = (
+                f"\n- Image {idx}: ENVIRONMENT REFERENCE. Background, lighting, "
+                "and material style source only. Not a subject reference."
+            )
     if ctx.has_logo:
         idx = role_index(ctx, "logo")
         if idx is None:
             idx = 3 if ctx.has_style_reference else 2
-        logo_line = (
-            f"\n- Image {idx}: COMPANY LOGO. Use solely as a clean, secondary watermark "
-            "or brand overlay (bottom-right or top-center). Never invent a different mark "
-            "and never overlap the jewelry subject."
-        )
+        logo_tpl = get_fragment_text(db, ATTACH_LOGO, {"LOGO_IMAGE_INDEX": idx, "LOGO_LABEL": f"Image {idx}"})
+        if logo_tpl:
+            logo_line = "\n" + logo_tpl
+        else:
+            logo_line = (
+                f"\n- Image {idx}: LOGO. Brand mark to apply as a small watermark. "
+                "Never a subject or environment reference."
+            )
+
+    # Prefer composed catalog map if present
     text = get_fragment_text(
         db,
         ATTACH_CATALOG_ROLE_MAP,
         {"THEME_LINE": theme_line, "LOGO_LINE": logo_line},
     )
+    if not text or "PRIMARY" not in text.upper():
+        header = "ATTACHMENT ROLES & INSTRUCTIONS:"
+        body = primary if primary.startswith("-") or primary.startswith("Image") else primary
+        text = f"{header}\n{body}{theme_line}{logo_line}".strip()
+
     return PromptPart(
         key="attach_role_map",
         text=text,

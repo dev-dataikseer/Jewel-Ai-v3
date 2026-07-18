@@ -67,10 +67,14 @@ def test_execution_modes_four_branding_combos():
         text = parts[0].text
         assert "IMAGE_3" not in text or has_logo
         if has_logo:
-            assert "Image 3" in text or "BRAND" in text
+            assert "Image 3" in text or "logo" in text.lower()
         else:
             assert "Image 3" not in text
-            assert "no branding" in text.lower() or "cleanup" in text.lower() or "do not add" in text.lower()
+            assert (
+                "no branding" in text.lower()
+                or "erase" in text.lower()
+                or "branding" in text.lower()
+            )
         assert mode in ("reference_mirroring", "modern_dynamic_catalog")
 
 

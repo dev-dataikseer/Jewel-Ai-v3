@@ -639,3 +639,17 @@ def activate_fragment_version(
     frag.active_version_id = ver.id
     db.commit()
     return {"id": frag.id, "active_version_id": ver.id}
+
+
+@router.post("/import-from-files")
+def import_prompts_from_files(user: RequireAdmin, db: Session = Depends(get_db), force: bool = True):
+    """Re-import docs/Modals/Prompts/*.txt into DB (masters, subjects, fragments)."""
+    from seeds.import_prompts_folder import import_prompts_folder
+
+    try:
+        stats = import_prompts_folder(db, force=force)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Import failed: {exc}") from exc
+    return {"ok": True, **stats}

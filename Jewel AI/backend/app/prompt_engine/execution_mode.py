@@ -66,6 +66,15 @@ def resolve_catalog_mode(
     return "reference_mirror" if has_reference else "modern"
 
 
+def _with_branding(template: str, branding: str, extra: dict[str, Any] | None = None) -> str:
+    """Substitute placeholders; if template has no {{BRANDING_CLAUSE}}, append branding."""
+    vars_ = {"BRANDING_CLAUSE": branding, **(extra or {})}
+    text = substitute(template, vars_)
+    if branding and branding.strip() and branding.strip() not in text:
+        text = f"{text.rstrip()}\n{branding.strip()}"
+    return text
+
+
 def build_execution_parts(
     *,
     has_reference: bool,
@@ -92,7 +101,7 @@ def build_execution_parts(
     if mode == "style_mood":
         meta = get_fragment_meta(db, EXEC_STYLE_MOOD)
         fragment_versions[EXEC_STYLE_MOOD] = meta.get("version_id")
-        text = substitute(meta["text"], {"BRANDING_CLAUSE": branding})
+        text = _with_branding(meta["text"], branding)
         parts = [
             PromptPart(
                 key="exec_style_mood",
@@ -106,7 +115,7 @@ def build_execution_parts(
     if mode == "reference_mirror":
         meta = get_fragment_meta(db, EXEC_REFERENCE_MIRROR)
         fragment_versions[EXEC_REFERENCE_MIRROR] = meta.get("version_id")
-        text = substitute(meta["text"], {"BRANDING_CLAUSE": branding})
+        text = _with_branding(meta["text"], branding)
         parts = [
             PromptPart(
                 key="exec_reference_mirror",
@@ -122,13 +131,9 @@ def build_execution_parts(
 
     pool = get_environment_pool(db)
     chosen = environment or (pool[0] if pool else DEFAULT_ENVIRONMENT_POOL[0])
-    branding_catalog = branding.replace("3. BRAND", "4. BRAND", 1)
     meta = get_fragment_meta(db, EXEC_MODERN_CATALOG)
     fragment_versions[EXEC_MODERN_CATALOG] = meta.get("version_id")
-    text = substitute(
-        meta["text"],
-        {"CHOSEN_ENVIRONMENT": chosen, "BRANDING_CLAUSE": branding_catalog},
-    )
+    text = _with_branding(meta["text"], branding, {"CHOSEN_ENVIRONMENT": chosen})
     parts = [
         PromptPart(
             key="exec_modern_catalog",

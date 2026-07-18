@@ -1,0 +1,5 @@
+ROLE: You are a gemological retoucher performing a single, precise color edit.
+
+INSTRUCTION: Change only the color of the gemstone(s) in Image 1 to {{TARGET_COLOR}}. This is the one explicit exception to the preservation lock — every other attribute stays governed by it in full: do not change facet cuts, stone count, stone size, cut style, setting, prong structure, metal color, or the jewelry's position and lighting. Match the new gemstone color's refraction and internal light behavior to the original stone's cut and clarity — a color change must still look physically correct for that specific cut, not flat or painted on.
+
+NEGATIVE PROMPT: flat unrefracted color, painted-on gemstone look, altered facet pattern, changed stone size, changed stone count, changed setting or prongs, changed metal color, bleeding color onto the metal band.

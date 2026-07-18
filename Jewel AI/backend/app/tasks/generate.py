@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -8,9 +7,11 @@ from app.database import SessionLocal
 from app.logging_config import get_logger
 from app.models import Batch, GenerationJob, StylePreset
 from app.pipeline.composer import ComposeInput
-from app.pipeline.image_packet import apply_logo_compose_if_needed, build_image_packet
+from app.pipeline.image_packet import apply_logo_compose_if_needed
+from app.pipeline.image_prep import build_model_image_plan
 from app.prompt_engine import build_final_prompt
 from app.prompt_engine.attachments import ImageContext
+from app.providers.model_catalog.registry import get_spec
 from app.providers.router import route_generation
 from app.providers.types import GenerationRequest
 from app.storage.local import storage
@@ -71,9 +72,18 @@ async def _process_job_async(job_id: str) -> None:
         model_endpoint = meta.get("modelEndpointId") or meta.get("modelName")
         model_params = meta.get("modelParams") or {}
 
-        packet = build_image_packet(job, model_endpoint_id=model_endpoint)
+        model_spec = get_spec(model_endpoint) if model_endpoint else None
+        plan = build_model_image_plan(
+            job,
+            model_spec=model_spec,
+            model_endpoint_id=model_endpoint,
+        )
+        packet = plan.packet
         image_urls = packet.image_urls
         meta.update(packet.to_meta())
+        if plan.warnings:
+            meta["imagePrepWarnings"] = plan.warnings
+        meta["imageFieldMap"] = plan.field_map
         job.provider_metadata = meta
         db.commit()
 

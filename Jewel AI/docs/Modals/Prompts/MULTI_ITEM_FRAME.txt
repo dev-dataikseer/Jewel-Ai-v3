@@ -1,0 +1,1 @@
+This job places multiple distinct jewelry types from Image 1 into a single composition. Apply each type's own subtype grounding rule below independently to its corresponding piece, and preserve each piece's scale relative to the others exactly as photographed. No piece may overlap or obscure another.

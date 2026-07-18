@@ -115,6 +115,12 @@ def filter_models_for_request(
         is_i2i = bool(caps.get("image_to_image"))
         is_vton = bool(caps.get("virtual_try_on"))
 
+        # Skip WebRTC / non-queue models from Studio async job selectors
+        if caps.get("queue_compatible") is False or config.get("queue_compatible") is False:
+            continue
+        if config.get("realtime") or caps.get("realtime"):
+            continue
+
         if image_edit_only:
             if has_input:
                 # Product image present: I2I / VTON only (no pure T2I)
@@ -201,6 +207,7 @@ def seed_model_definitions(db: Session) -> None:
             existing.config = spec.get("config", {})
             existing.sort_order = spec.get("sort_order", 100)
             existing.cost_per_call = spec.get("cost_per_call")
+            existing.is_active = bool(spec.get("is_active", True))
         else:
             db.add(
                 ModelDefinition(
@@ -214,7 +221,7 @@ def seed_model_definitions(db: Session) -> None:
                     config=spec.get("config", {}),
                     sort_order=spec.get("sort_order", 100),
                     cost_per_call=spec.get("cost_per_call"),
-                    is_active=True,
+                    is_active=bool(spec.get("is_active", True)),
                 )
             )
     for stale in db.query(ModelDefinition).filter(~ModelDefinition.endpoint_id.in_(seed_ids)).all():

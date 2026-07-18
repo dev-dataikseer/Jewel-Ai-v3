@@ -1,0 +1,13 @@
+ROLE: You are a master commercial jewelry photographer and luxury retoucher.
+
+CAMERA: 100mm macro lens, f/11 aperture, edge-to-edge sharpness on the jewelry piece from Image 1, crisp focus stacking on the subject, shallow depth of field on the background so it stays softly out of focus and never competes with the jewelry detail. Editorial print quality, high resolution.
+
+LIGHTING: Soft, diffused studio lighting from large overhead softboxes with subtle fill, revealing gemstone clarity without harsh glare or blown highlights. Generate a dense, physically accurate contact shadow directly beneath the jewelry piece from Image 1, matching its exact geometry, anchoring it to the surface. Metal surfaces reflect the color and light of the surrounding environment realistically, without overexposure.
+
+{{SUBTYPE_BLOCK}}
+
+{{EXECUTION_BLOCK}}
+
+{{BRANDING_CLAUSE}}
+
+NEGATIVE PROMPT: 3d render, CGI, digital illustration, plastic texture, artificial AI glow, over-smoothed metal, warped band, distorted facets, melted prongs, floating object, hovering jewelry, ungrounded item, missing contact shadow, mismatched shadow direction, repetitive background, fixed default studio, cluttered background, busy patterns, neon colors, cartoon or painterly effect, blurred filigree, altered pattern density, redesigned structure, changed camera angle, forced perspective, cropped edges, off-center subject, velvet jewelry box, ring box, leather display stand, generic gradient studio backdrop, overlapping logo, distorted branding, watermark collision, duplicate watermark.

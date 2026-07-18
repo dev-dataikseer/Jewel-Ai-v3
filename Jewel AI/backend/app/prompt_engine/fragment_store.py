@@ -94,14 +94,19 @@ def _load_raw(db: Session | None, key: str) -> str:
 def seed_prompt_fragments(db: Session, *, force: bool = False) -> int:
     """Upsert fragment shells with seed text. Returns number of fragments ensured."""
     from app.models import PromptFragment, PromptFragmentVersion
+    from app.prompt_engine.fragment_defaults import FRAGMENT_KEYS
 
     count = 0
-    for key, text in DEFAULT_FRAGMENTS.items():
+    for key in FRAGMENT_KEYS:
+        text = DEFAULT_FRAGMENTS.get(key, "")
         content_json = None
         prompt_text = text
         if key == ENVIRONMENT_POOL:
             content_json = list(DEFAULT_ENVIRONMENT_POOL)
             prompt_text = json.dumps(content_json, indent=2)
+        if not prompt_text and key != ENVIRONMENT_POOL:
+            # Still create empty shell so Admin lists the key
+            prompt_text = ""
 
         frag = db.query(PromptFragment).filter(PromptFragment.fragment_key == key).first()
         if not frag:

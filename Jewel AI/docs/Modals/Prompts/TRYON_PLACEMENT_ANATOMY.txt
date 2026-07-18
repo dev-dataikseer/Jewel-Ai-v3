@@ -1,0 +1,17 @@
+# Lookup table — code selects the matching line for {{PLACEMENT_ANATOMY}} by jewelry type.
+# Format: jewelry_type | placement clause text
+
+ring | at the correct finger, sized to the finger's true width
+necklace | at the neck and collarbone, following natural drape
+pendant | at the neck, centered on the collarbone with the bail sitting naturally
+earring_stud | on the earlobe, flush against the skin
+earring_drop | on the earlobe, hanging with natural vertical gravity
+earring_hoop | through the earlobe, with correct diameter relative to the ear
+bracelet | on the wrist, following the wrist's natural curve
+bangle | on the wrist, resting at its true circular cross-section
+kara | on the wrist, resting rigid and true to its thick profile
+watch | on the wrist, face oriented outward and readable
+anklet | on the ankle, following its natural curve
+brooch | on the lapel or chest of the garment
+cufflinks | on the shirt cuff, front face outward, both matching
+multiple_items | at each item's own correct anatomical position, arranged so no piece overlaps another

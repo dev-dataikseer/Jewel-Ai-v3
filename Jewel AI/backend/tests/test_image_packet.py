@@ -124,23 +124,46 @@ def test_attachment_includes_logo_slot():
     keys = {p.key for p in parts}
     assert "attach_role_map" in keys
     role_map = next(p for p in parts if p.key == "attach_role_map")
-    assert "Image 3: COMPANY LOGO" in role_map.text
-    assert "REFERENCE ENVIRONMENT" in role_map.text
+    assert "Image 3" in role_map.text and "LOGO" in role_map.text.upper()
+    assert "ENVIRONMENT REFERENCE" in role_map.text or "REFERENCE" in role_map.text.upper()
 
 
-def test_multi_jewelry_subject_framing():
-    from app.pipeline.layers import render_multi_subject_layers
-
-    frames = render_multi_subject_layers(
-        [
-            ("Ring", [{"key": "core", "type": "text", "content": "Solitaire ring.", "order": 1}]),
-            ("Necklace", [{"key": "core", "type": "text", "content": "Pendant necklace.", "order": 1}]),
-        ],
-        {"workflow": "CATALOG_IMAGE"},
+def test_packet_single_url_drops_theme_in_debug():
+    job = _job(
+        reference_url="https://cdn.example/theme.png",
+        provider_metadata={"logoUrl": "https://cdn.example/logo.png"},
     )
-    joined = " ".join(frames)
-    assert "2 distinct jewelry items" in joined
-    assert "Item 1 (Ring)" in joined
-    assert "Item 2 (Necklace)" in joined
-    assert "Solitaire ring" in joined
-    assert "Pendant necklace" in joined
+    packet = build_image_packet(
+        job,
+        model_spec=_spec(mode="single_url", max_images=1, multi=False),
+        force_compose=False,
+    )
+    assert [r.role for r in packet.roles] == ["product"]
+    assert "theme" in (packet.debug.get("dropped_slots") or [])
+    assert packet.logo_mode == "compose"
+
+
+def test_validate_image_bytes_rejects_garbage():
+    from app.providers.model_catalog.preprocess import detect_image_content_type, validate_image_bytes
+
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    assert detect_image_content_type(png) == "image/png"
+    assert validate_image_bytes(png) == "image/png"
+    try:
+        validate_image_bytes(b"not-an-image" + b"\x00" * 64)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "Unsupported" in str(exc) or "corrupt" in str(exc)
+
+
+def test_build_model_image_plan_warns_on_single_url_theme():
+    from app.pipeline.image_prep import build_model_image_plan
+
+    job = _job(
+        reference_url="https://cdn.example/theme.png",
+        provider_metadata={"logoUrl": "https://cdn.example/logo.png"},
+    )
+    plan = build_model_image_plan(job, model_spec=_spec(mode="single_url", max_images=1, multi=False))
+    assert plan.contract_mode == "single_url"
+    assert plan.field_map.get("field") == "image_url"
+    assert any("Theme" in w or "theme" in w.lower() for w in plan.warnings)

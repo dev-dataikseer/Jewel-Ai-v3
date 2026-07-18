@@ -1,0 +1,1 @@
+Erase any existing watermark, logo, or text overlay found in Image 2 completely. The final image must contain no branding of any kind.

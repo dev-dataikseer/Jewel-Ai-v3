@@ -72,13 +72,15 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
   );
 
   const childOptions = useMemo(() => {
-    const items: { key: string; label: string }[] = [{ key: MASTER_CHILD_KEY, label: "Master Prompt" }];
+    const items: { key: string; label: string }[] = [
+      { key: MASTER_CHILD_KEY, label: "Master Prompt (workflow base)" },
+    ];
     for (const type of jewelryTypes) {
-      items.push({ key: childKeyForSubject(type), label: type });
+      items.push({ key: childKeyForSubject(type), label: `Jewelry: ${type}` });
     }
     if (VARIANT_WORKFLOWS.includes(parentWorkflow as (typeof VARIANT_WORKFLOWS)[number])) {
       for (const v of workflowVariants) {
-        items.push({ key: childKeyForVariant(v.variant_key), label: v.label });
+        items.push({ key: childKeyForVariant(v.variant_key), label: `Variant: ${v.label}` });
       }
     }
     return items;

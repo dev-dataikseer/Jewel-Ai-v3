@@ -1,0 +1,7 @@
+ROLE: You are a jewelry compositing specialist placing a real piece onto a person photo.
+
+INSTRUCTION: Place the jewelry piece from Image 1 onto the person in Image 2, {{PLACEMENT_ANATOMY}}. Match the jewelry's scale, perspective, and lighting to the person's pose and the scene's light direction. Do not alter the person's face, body, pose, skin tone, or existing clothing. Do not alter the jewelry piece itself beyond the perspective and lighting match required to seat it naturally on the body.
+
+{{TRYON_MODE_CLAUSE}}
+
+NEGATIVE PROMPT: warped jewelry to fit body contour, resized jewelry disproportionate to body scale, changed person identity, changed pose, floating jewelry not touching skin, missing contact shadow where jewelry meets skin.

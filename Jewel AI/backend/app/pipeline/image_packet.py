@@ -164,18 +164,35 @@ def build_image_packet(
         seen_urls.add(url)
         deduped_slots.append((role, url))
 
+    dropped_slots: list[str] = []
     if max_images > 0 and len(deduped_slots) > max_images:
         truncated = deduped_slots[max_images:]
+        dropped_slots = [r for r, _ in truncated]
         deduped_slots = deduped_slots[:max_images]
         if logo and any(r == "logo" for r, _ in truncated):
             logo_mode = "compose"
             deduped_slots = [(r, u) for r, u in deduped_slots if r != "logo"]
+
+    # single_url: only product (or first slot) reaches the model; note dropped refs
+    if contract and contract.mode == "single_url" and not contract.reference_image_field:
+        if theme_url and not any(r == "theme" for r, _ in deduped_slots):
+            dropped_slots.append("theme")
+        if portrait_url and not any(r == "portrait" for r, _ in deduped_slots):
+            dropped_slots.append("portrait")
 
     roles = [ImageRole(index=i + 1, role=role, url=url) for i, (role, url) in enumerate(deduped_slots)]
     urls = [r.url for r in roles]
     has_logo_in_model = any(r.role == "logo" for r in roles)
     if logo and logo_mode == "model" and not has_logo_in_model:
         logo_mode = "compose"
+
+    # Deduplicate dropped role names while preserving order
+    seen_drop: set[str] = set()
+    dropped_unique: list[str] = []
+    for name in dropped_slots:
+        if name not in seen_drop:
+            seen_drop.add(name)
+            dropped_unique.append(name)
 
     return ImagePacket(
         image_urls=urls,
@@ -193,6 +210,7 @@ def build_image_packet(
             "max_images": max_images,
             "force_compose": force_compose,
             "workflow": job.workflow,
+            "dropped_slots": dropped_unique,
         },
     )
 

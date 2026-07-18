@@ -65,14 +65,27 @@ def test_no_mask_required_models():
 
 
 def test_vton_models_restricted_to_try_on_workflows():
-    vton = [s for s in FAL_MODELS if s.get("capabilities", {}).get("virtual_try_on")]
-    assert len(vton) == 7
+    vton = [
+        s
+        for s in FAL_MODELS
+        if s.get("capabilities", {}).get("virtual_try_on")
+        and s.get("is_active", True)
+        and s.get("config", {}).get("queue_compatible", True) is not False
+    ]
+    assert len(vton) == 6
     for spec in vton:
         assert set(spec["workflow_allowlist"]) == {
             "VIRTUAL_TRY_ON",
             "JEWELRY_ON_MODEL",
             "CUSTOMER_TRY_ON",
         }
+
+
+def test_lucy_realtime_disabled_for_async():
+    lucy = next(m for m in FAL_MODELS if m["endpoint_id"] == "decart/lucy2-vton/realtime")
+    assert lucy.get("is_active") is False
+    assert lucy["config"].get("queue_compatible") is False
+    assert lucy["workflow_allowlist"] == []
 
 
 def test_workflow_defaults_point_to_seed():
@@ -90,7 +103,7 @@ def test_filter_models_image_edit_only():
             self.capabilities = spec["capabilities"]
             self.workflow_allowlist = spec.get("workflow_allowlist")
             self.config = spec.get("config", {})
-            self.is_active = True
+            self.is_active = bool(spec.get("is_active", True))
             self.sort_order = spec.get("sort_order", 0)
 
     class FakeQuery:
@@ -104,7 +117,7 @@ def test_filter_models_image_edit_only():
             return self
 
         def all(self):
-            return self._models
+            return [m for m in self._models if m.is_active]
 
     class FakeDb:
         def query(self, model):
@@ -118,9 +131,10 @@ def test_filter_models_image_edit_only():
     vton_models = filter_models_for_request(
         FakeDb(), has_input=True, image_count=2, workflow="CUSTOMER_TRY_ON", image_edit_only=True
     )
-    # I2I + VTON both available for jewelry try-on
-    assert len(vton_models) >= 7
-    assert any(m.capabilities.get("virtual_try_on") for m in vton_models)
+    # I2I + queue-compatible VTON (Lucy realtime excluded)
+    queue_vton = [m for m in vton_models if m.capabilities.get("virtual_try_on")]
+    assert len(queue_vton) == 6
+    assert "decart/lucy2-vton/realtime" not in {m.endpoint_id for m in vton_models}
     assert any(m.capabilities.get("image_to_image") and not m.capabilities.get("virtual_try_on") for m in vton_models)
 
 
@@ -131,7 +145,7 @@ def test_filter_without_input_still_lists_catalog_models():
             self.capabilities = spec["capabilities"]
             self.workflow_allowlist = spec.get("workflow_allowlist")
             self.config = spec.get("config", {})
-            self.is_active = True
+            self.is_active = bool(spec.get("is_active", True))
             self.sort_order = spec.get("sort_order", 0)
 
     class FakeQuery:
@@ -145,12 +159,32 @@ def test_filter_without_input_still_lists_catalog_models():
             return self
 
         def all(self):
-            return self._models
+            return [m for m in self._models if m.is_active]
 
     class FakeDb:
         def query(self, model):
             return FakeQuery([FakeModel(s) for s in FAL_MODELS])
 
     models = filter_models_for_request(FakeDb(), has_input=False, workflow="CATALOG_IMAGE")
-    # flux-2-max is allowlisted away from catalog; expect remaining I2I
-    assert len(models) == 17
+    # flux-2-max + flux/dev I2I are allowlisted away from catalog
+    assert len(models) == 16
+    assert all(m.endpoint_id != "fal-ai/flux/dev/image-to-image" for m in models)
+
+
+def test_kontext_and_flux_dev_single_url_defaults():
+    kontext = next(m for m in FAL_MODELS if m["endpoint_id"] == "fal-ai/flux-pro/kontext")
+    assert kontext["default_params"].get("enhance_prompt") is False
+    assert kontext["config"].get("max_reference_images") == 1
+    assert kontext["config"].get("image_field") == "image_url"
+
+    flux_dev = next(m for m in FAL_MODELS if m["endpoint_id"] == "fal-ai/flux/dev/image-to-image")
+    assert flux_dev["default_params"].get("strength") == 0.85
+    assert flux_dev["workflow_allowlist"] == ["LUXURY_ENHANCEMENT"]
+    assert flux_dev["config"].get("max_reference_images") == 1
+
+
+def test_fashn_has_category_param():
+    fashn = next(m for m in FAL_MODELS if m["endpoint_id"] == "fal-ai/fashn/tryon/v1.6")
+    props = fashn["input_schema"]["properties"]
+    assert "category" in props
+    assert fashn["default_params"].get("category") == "auto"

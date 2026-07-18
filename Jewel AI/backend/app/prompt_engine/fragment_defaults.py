@@ -1,14 +1,16 @@
-"""Default prompt fragment copy — seeded into DB; runtime prefers active DB versions.
+"""Load default fragment text from docs/Modals/Prompts when present.
 
-After seed, Admin edits are the source of truth. These defaults exist only for
-bootstrap / empty-DB fallback (tests). Do not add new creative prose elsewhere.
+Runtime prefers active DB versions (Admin). These defaults bootstrap empty DBs
+and tests. Prefer editing Admin UI or the .txt files + re-import — not this file.
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
-# --- Fragment keys (frozen vocabulary) ---
+# --- Fragment keys (frozen vocabulary — must match assembler) ---
 
 FIDELITY_LOCK = "RAW_JEWELRY_FIDELITY_LOCK"
 EXEC_REFERENCE_MIRROR = "EXEC_REFERENCE_MIRROR"
@@ -18,6 +20,8 @@ BRAND_REF_WITH_LOGO = "BRAND_REF_WITH_LOGO"
 BRAND_REF_NO_LOGO = "BRAND_REF_NO_LOGO"
 BRAND_CATALOG_WITH_LOGO = "BRAND_CATALOG_WITH_LOGO"
 BRAND_CATALOG_NO_LOGO = "BRAND_CATALOG_NO_LOGO"
+ATTACH_PRIMARY_SUBJECT = "ATTACH_PRIMARY_SUBJECT"
+ATTACH_ENVIRONMENT_REFERENCE = "ATTACH_ENVIRONMENT_REFERENCE"
 ATTACH_CATALOG_ROLE_MAP = "ATTACH_CATALOG_ROLE_MAP"
 ATTACH_ARTIFACT_SCRUB = "ATTACH_ARTIFACT_SCRUB"
 ATTACH_TRY_ON = "ATTACH_TRY_ON"
@@ -27,11 +31,39 @@ BACKGROUND_SOURCE_REF = "BACKGROUND_SOURCE_REF"
 BACKGROUND_SOURCE_GENERATED = "BACKGROUND_SOURCE_GENERATED"
 CUSTOM_PRESERVE = "CUSTOM_PRESERVE"
 CUSTOM_REALISM = "CUSTOM_REALISM"
+CUSTOM_ALTER_GUARD = "CUSTOM_ALTER_GUARD"
 TRYON_CUSTOMER_PRESERVE = "TRYON_CUSTOMER_PRESERVE"
+TRYON_PLACEMENT_ANATOMY = "TRYON_PLACEMENT_ANATOMY"
 MULTI_ITEM_FRAME = "MULTI_ITEM_FRAME"
 MULTI_ITEM_BLEND_GUARD = "MULTI_ITEM_BLEND_GUARD"
 USER_ADDITION_WRAP = "USER_ADDITION_WRAP"
 ENVIRONMENT_POOL = "ENVIRONMENT_POOL"
+
+# File stem in docs/Modals/Prompts → fragment key
+_FILE_TO_KEY: dict[str, str] = {
+    "RAW_JEWELRY_FIDELITY_LOCK": FIDELITY_LOCK,
+    "EXEC_REFERENCE_MIRROR": EXEC_REFERENCE_MIRROR,
+    "EXEC_MODERN_CATALOG": EXEC_MODERN_CATALOG,
+    "EXEC_STYLE_MOOD": EXEC_STYLE_MOOD,
+    "BRAND_REF_LOGO": BRAND_REF_WITH_LOGO,
+    "BRAND_REF_NOLOGO": BRAND_REF_NO_LOGO,
+    "BRAND_NOREF_LOGO": BRAND_CATALOG_WITH_LOGO,
+    "BRAND_NOREF_NOLOGO": BRAND_CATALOG_NO_LOGO,
+    "ATTACH_PRIMARY_SUBJECT": ATTACH_PRIMARY_SUBJECT,
+    "ATTACH_ENVIRONMENT_REFERENCE": ATTACH_ENVIRONMENT_REFERENCE,
+    "ATTACH_LOGO": ATTACH_LOGO,
+    "ATTACH_TRYON_PERSON": ATTACH_TRY_ON,
+    "BACKGROUND_SOURCE_REF": BACKGROUND_SOURCE_REF,
+    "BACKGROUND_SOURCE_GENERATED": BACKGROUND_SOURCE_GENERATED,
+    "CUSTOM_PRESERVE": CUSTOM_PRESERVE,
+    "CUSTOM_REALISM": CUSTOM_REALISM,
+    "CUSTOM_ALTER_GUARD": CUSTOM_ALTER_GUARD,
+    "TRYON_CUSTOMER_PRESERVE": TRYON_CUSTOMER_PRESERVE,
+    "TRYON_PLACEMENT_ANATOMY": TRYON_PLACEMENT_ANATOMY,
+    "MULTI_ITEM_FRAME": MULTI_ITEM_FRAME,
+    "USER_ADDITION_WRAP": USER_ADDITION_WRAP,
+    "ENVIRONMENT_POOL": ENVIRONMENT_POOL,
+}
 
 FRAGMENT_KEYS: list[str] = [
     FIDELITY_LOCK,
@@ -42,6 +74,8 @@ FRAGMENT_KEYS: list[str] = [
     BRAND_REF_NO_LOGO,
     BRAND_CATALOG_WITH_LOGO,
     BRAND_CATALOG_NO_LOGO,
+    ATTACH_PRIMARY_SUBJECT,
+    ATTACH_ENVIRONMENT_REFERENCE,
     ATTACH_CATALOG_ROLE_MAP,
     ATTACH_ARTIFACT_SCRUB,
     ATTACH_TRY_ON,
@@ -51,7 +85,9 @@ FRAGMENT_KEYS: list[str] = [
     BACKGROUND_SOURCE_GENERATED,
     CUSTOM_PRESERVE,
     CUSTOM_REALISM,
+    CUSTOM_ALTER_GUARD,
     TRYON_CUSTOMER_PRESERVE,
+    TRYON_PLACEMENT_ANATOMY,
     MULTI_ITEM_FRAME,
     MULTI_ITEM_BLEND_GUARD,
     USER_ADDITION_WRAP,
@@ -64,157 +100,122 @@ FRAGMENT_LABELS: dict[str, str] = {
     EXEC_MODERN_CATALOG: "Execution — Modern Dynamic Catalog",
     EXEC_STYLE_MOOD: "Execution — Style Mood Match",
     BRAND_REF_WITH_LOGO: "Branding — Reference + Logo",
-    BRAND_REF_NO_LOGO: "Branding — Reference Cleanup",
-    BRAND_CATALOG_WITH_LOGO: "Branding — Catalog + Logo",
+    BRAND_REF_NO_LOGO: "Branding — Reference Cleanup (no logo)",
+    BRAND_CATALOG_WITH_LOGO: "Branding — Catalog + Logo (no theme)",
     BRAND_CATALOG_NO_LOGO: "Branding — Catalog No Logo",
-    ATTACH_CATALOG_ROLE_MAP: "Attachment — Catalog Role Map",
+    ATTACH_PRIMARY_SUBJECT: "Attachment — Primary Subject (Image 1)",
+    ATTACH_ENVIRONMENT_REFERENCE: "Attachment — Environment Reference",
+    ATTACH_CATALOG_ROLE_MAP: "Attachment — Catalog Role Map (composed)",
     ATTACH_ARTIFACT_SCRUB: "Attachment — Artifact Scrub",
-    ATTACH_TRY_ON: "Attachment — Try-On",
+    ATTACH_TRY_ON: "Attachment — Try-On Person",
     ATTACH_PRODUCT: "Attachment — Product Only",
-    ATTACH_LOGO: "Attachment — Logo",
+    ATTACH_LOGO: "Attachment — Logo Line",
     BACKGROUND_SOURCE_REF: "Background Source — From Reference",
     BACKGROUND_SOURCE_GENERATED: "Background Source — Generated",
     CUSTOM_PRESERVE: "Custom Prompt — Preserve Slot",
     CUSTOM_REALISM: "Custom Prompt — Physical Realism",
+    CUSTOM_ALTER_GUARD: "Custom Prompt — Alter Guard (not sent to model)",
     TRYON_CUSTOMER_PRESERVE: "Try-On — Customer Photo Preserve",
+    TRYON_PLACEMENT_ANATOMY: "Try-On — Placement Anatomy Lookup",
     MULTI_ITEM_FRAME: "Multi-Item Frame Header",
     MULTI_ITEM_BLEND_GUARD: "Multi-Item Blend Guard",
     USER_ADDITION_WRAP: "User Addition Wrapper",
-    ENVIRONMENT_POOL: "Environment Rotation Pool (JSON list)",
+    ENVIRONMENT_POOL: "Environment Rotation Pool",
 }
 
-DEFAULT_ENVIRONMENT_POOL: list[str] = [
-    "A matte travertine stone slab with soft architectural shadow lines crossing the surface at a low angle.",
-    "Dark brushed concrete with a single directional light source casting a long, soft-edged shadow.",
-    "Fluted cream marble with vertical channel grooves catching diffuse studio light.",
-    "Caustic water reflections on a dark glass surface, with rippling light patterns playing across the background.",
-    "Smooth river stones in graduated grey tones, arranged with negative space around the subject.",
-    "Dark volcanic basalt with a fine mist of water droplets catching specular highlights.",
-    "Raw unbleached silk drapery pooling softly beneath the subject, natural fiber texture visible.",
-    "A frosted acrylic plinth lit from below with a cool rim light separating subject from background.",
-    "Brushed champagne-gold metal surface with a soft gradient reflection of the jewelry piece.",
+
+def _prompts_dir() -> Path:
+    # backend/app/prompt_engine → Jewel AI/docs/Modals/Prompts
+    return Path(__file__).resolve().parents[3] / "docs" / "Modals" / "Prompts"
+
+
+def _load_from_files() -> tuple[dict[str, str], list[str]]:
+    """Load fragment text + environment pool lines from docs/Modals/Prompts."""
+    root = _prompts_dir()
+    loaded: dict[str, str] = {}
+    env_pool: list[str] = []
+    if not root.is_dir():
+        return loaded, env_pool
+
+    for stem, key in _FILE_TO_KEY.items():
+        path = root / f"{stem}.txt"
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8").strip()
+        if key == ENVIRONMENT_POOL:
+            env_pool = [
+                ln.strip()
+                for ln in text.splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ]
+            loaded[key] = json.dumps(env_pool, indent=2)
+        else:
+            loaded[key] = text
+
+    # Compose catalog role map from primary + placeholders
+    primary = loaded.get(ATTACH_PRIMARY_SUBJECT, "")
+    if primary:
+        loaded[ATTACH_CATALOG_ROLE_MAP] = (
+            "ATTACHMENT ROLES & INSTRUCTIONS:\n"
+            f"{primary}"
+            "{{THEME_LINE}}"
+            "{{LOGO_LINE}}"
+        )
+    return loaded, env_pool
+
+
+_FILE_FRAGMENTS, _FILE_ENV_POOL = _load_from_files()
+
+DEFAULT_ENVIRONMENT_POOL: list[str] = _FILE_ENV_POOL or [
+    "a matte travertine stone slab, soft architectural shadow lines crossing the surface at a low camera angle",
+    "dark brushed concrete lit from one direction, casting a long soft-edged shadow across the frame",
+    "fluted cream marble with vertical channel grooves catching diffuse overhead light",
+    "a dark glass surface with caustic water reflections rippling across the background",
+    "smooth grey river stones arranged with generous negative space around the jewelry",
+    "dark volcanic basalt with a fine mist of water droplets catching specular highlights",
+    "raw unbleached silk drapery pooling softly beneath the jewelry, natural fiber texture visible",
+    "a frosted acrylic plinth lit from below with a cool rim light separating subject from background",
+    "a brushed champagne-gold metal surface with a soft gradient reflection of the jewelry piece",
 ]
 
-DEFAULT_FRAGMENTS: dict[str, str] = {
+# Fallback prose if a file is missing (tests / partial installs)
+_FALLBACK: dict[str, str] = {
     FIDELITY_LOCK: (
         "ABSOLUTE PRESERVATION LOCK: The jewelry piece shown in Image 1 must be reproduced "
-        "with zero alteration to its physical identity. Do not change its metal color, "
-        "gemstone color, gemstone count, facet cuts, prong or setting structure, engraving, "
-        "surface texture, proportions, or scale. Do not smooth, sharpen, redesign, or "
-        "reinterpret any part of the piece. Every pixel of the jewelry itself must trace "
-        "back exactly to Image 1 — only its surroundings, lighting, and background may change."
-    ),
-    EXEC_REFERENCE_MIRROR: (
-        "EXECUTION MODE: REFERENCE MIRRORING\n"
-        "1. ENVIRONMENT MIRRORING: Analyze Image 2. Extract and replicate its "
-        "background architecture, surface material, lighting direction, shadow density, and "
-        "color grading. Place the primary jewelry subject from Image 1 into this exact style "
-        "of environment.\n"
-        "2. SUBJECT ISOLATION: Ignore any jewelry, hands, or models shown in Image 2. "
-        "It is a style/environment reference only — never copy its subject matter.\n"
-        "{{BRANDING_CLAUSE}}"
-    ),
-    EXEC_MODERN_CATALOG: (
-        "EXECUTION MODE: MODERN DYNAMIC CATALOG\n"
-        "1. MODERN LUXURY STANDARDS: Generate a fresh, ultra-modern editorial catalog setting. "
-        "Strictly forbidden: velvet jewelry boxes, ring boxes, leather display stands, "
-        "generic gradient studio backdrops, and any prop that resembles traditional retail packaging.\n"
-        "2. ASSIGNED ENVIRONMENT: {{CHOSEN_ENVIRONMENT}}\n"
-        "3. GROUNDING & PERSPECTIVE: The supporting surface plane must align with the jewelry's "
-        "current resting orientation. Generate a deep, dense ambient-occlusion contact shadow "
-        "anchoring the piece to the surface.\n"
-        "{{BRANDING_CLAUSE}}"
-    ),
-    EXEC_STYLE_MOOD: (
-        "ROLE: You are a master commercial jewelry photographer matching a specific visual style.\n\n"
-        "STYLE EXTRACTION: From Image 2, extract only its lighting direction, color temperature, "
-        "contrast level, and overall mood — warm/cool grading, shadow softness, highlight intensity. "
-        "Do not extract or copy any object, background material, or composition from Image 2, "
-        "only its lighting and color character.\n\n"
-        "APPLICATION: Apply this lighting and color mood to the jewelry piece from Image 1 in its "
-        "own environment. Keep the framing, angle, and composition of Image 1 unchanged.\n\n"
-        "{{BRANDING_CLAUSE}}\n\n"
-        "NEGATIVE PROMPT: mismatched shadow direction, color cast on gemstones that alters true "
-        "stone color, over-saturated grading, background elements copied from Image 2."
-    ),
-    BRAND_REF_WITH_LOGO: (
-        "3. BRAND REPLACEMENT: Inspect the Reference Image for any existing watermark, "
-        "logo, or text overlay. Erase it completely — it must not appear in the output. "
-        "Apply {{LOGO_LABEL}} as the sole branding, positioned as a discreet high-end "
-        "commercial watermark (bottom-right or top-center), matching the scene's lighting "
-        "and never overlapping the jewelry subject."
-    ),
-    BRAND_REF_NO_LOGO: (
-        "3. BRAND CLEANUP: If the Reference Image contains any existing watermark, logo, "
-        "or text overlay, erase it completely. The output must contain no branding of any kind."
-    ),
-    BRAND_CATALOG_WITH_LOGO: (
-        "3. BRAND APPLICATION: Apply {{LOGO_LABEL}} as a discreet high-end commercial watermark "
-        "(bottom-right or top-center). Match scene lighting; never overlap the jewelry subject; "
-        "do not invent a different mark."
-    ),
-    BRAND_CATALOG_NO_LOGO: (
-        "3. BRANDING: Do not add any watermark, logo, shop name, or text overlay. "
-        "The output must contain no branding of any kind."
-    ),
-    ATTACH_CATALOG_ROLE_MAP: (
-        "ATTACHMENT ROLES & INSTRUCTIONS:\n"
-        "- Image 1: PRIMARY SUBJECT. Extract ONLY the jewelry piece. "
-        "Preserve 100% of its physical structure and pixels."
-        "{{THEME_LINE}}"
-        "{{LOGO_LINE}}"
+        "with zero alteration to its physical identity."
     ),
     ATTACH_ARTIFACT_SCRUB: (
         "Exclude source watermarks, weight labels, price tags, and burned-in overlay text."
-    ),
-    ATTACH_TRY_ON: (
-        "ATTACHED IMAGES: Image {{PRODUCT_INDEX}} is the jewelry product. "
-        "Image {{PORTRAIT_INDEX}} is the model or customer portrait. "
-        "Place the jewelry naturally on the person."
     ),
     ATTACH_PRODUCT: (
         "ATTACHED IMAGES: Image {{PRODUCT_INDEX}} is the jewelry product — "
         "preserve geometry, materials, and design exactly."
     ),
-    ATTACH_LOGO: (
-        "ATTACHED LOGO: {{LOGO_LABEL}} is the shop brand logo. "
-        "Place it as a discreet commercial watermark (bottom-right or top-center). "
-        "Do not stretch it, invent a different mark, or obscure the jewelry."
-    ),
-    BACKGROUND_SOURCE_REF: (
-        "Use the background surface and material shown in Image 2 exactly, "
-        "cropped and scaled to fit behind the existing jewelry composition."
-    ),
-    BACKGROUND_SOURCE_GENERATED: "Generate this background: {{CHOSEN_ENVIRONMENT}}",
-    CUSTOM_PRESERVE: (
-        "PRESERVE: The jewelry piece's exact geometry, facet cuts, metal color, gemstone color "
-        "and clarity, proportions, and scale from Image 1, in every case, regardless of what the "
-        "Change instruction above requests. If the Change instruction conflicts with preserving "
-        "the jewelry piece itself, apply the Change only to background, lighting, or composition, "
-        "and do not apply any part of it that would alter the jewelry piece's physical identity."
-    ),
-    CUSTOM_REALISM: (
-        "PHYSICAL REALISM: Maintain a single consistent light source, an accurate contact shadow, "
-        "and correct perspective between the jewelry piece and its surroundings."
-    ),
-    TRYON_CUSTOMER_PRESERVE: (
-        "Preserve the customer's photo exactly — do not retouch, smooth, or beautify their skin, "
-        "face, or body. Only add the jewelry piece."
-    ),
-    MULTI_ITEM_FRAME: "An image containing {{ITEM_COUNT}} distinct jewelry items.",
     MULTI_ITEM_BLEND_GUARD: "Ensure item properties do not blend across pieces.",
-    USER_ADDITION_WRAP: "User addition (must not override preservation): {{USER_INSTRUCTION}}",
-    ENVIRONMENT_POOL: "",  # stored as JSON list in prompt_text via seed
+    ATTACH_CATALOG_ROLE_MAP: (
+        "ATTACHMENT ROLES & INSTRUCTIONS:\n"
+        "- Image 1: PRIMARY SUBJECT. The jewelry piece to preserve exactly."
+        "{{THEME_LINE}}"
+        "{{LOGO_LINE}}"
+    ),
 }
+
+DEFAULT_FRAGMENTS: dict[str, str] = {**_FALLBACK, **_FILE_FRAGMENTS}
+if ENVIRONMENT_POOL not in DEFAULT_FRAGMENTS:
+    DEFAULT_FRAGMENTS[ENVIRONMENT_POOL] = json.dumps(DEFAULT_ENVIRONMENT_POOL, indent=2)
 
 
 def substitute(template: str, variables: dict[str, Any]) -> str:
     """Replace {{KEY}} placeholders. Unknown keys left as empty string."""
     out = template or ""
+    # Aliases for user-addition wrappers
+    if "USER_INSTRUCTION" in variables and "USER_ADDITION_TEXT" not in variables:
+        variables = {**variables, "USER_ADDITION_TEXT": variables["USER_INSTRUCTION"]}
+    if "USER_ADDITION_TEXT" in variables and "USER_INSTRUCTION" not in variables:
+        variables = {**variables, "USER_INSTRUCTION": variables["USER_ADDITION_TEXT"]}
     for key, value in variables.items():
         token = "{{" + key + "}}"
         out = out.replace(token, "" if value is None else str(value))
-    # Clear any leftover known-empty optional lines
     while "{{" in out and "}}" in out:
         start = out.find("{{")
         end = out.find("}}", start)

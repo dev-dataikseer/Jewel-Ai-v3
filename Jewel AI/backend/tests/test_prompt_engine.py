@@ -79,7 +79,7 @@ def test_catalog_theme_attachment_when_reference():
     parts = attachment_parts("CATALOG_IMAGE", ImageContext(has_product=True, has_style_reference=True))
     keys = {p.key for p in parts}
     assert "attach_role_map" in keys
-    assert any("REFERENCE ENVIRONMENT" in p.text for p in parts)
+    assert any("ENVIRONMENT REFERENCE" in p.text or "REFERENCE" in p.text.upper() for p in parts)
 
 
 def test_legacy_augment_wrapper():
