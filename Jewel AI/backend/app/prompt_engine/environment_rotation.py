@@ -27,7 +27,7 @@ def _redis_client():
     try:
         import redis
 
-        client = redis.from_url(get_settings().redis_url, socket_connect_timeout=1)
+        client = redis.from_url(get_settings().redis_url, socket_connect_timeout=0.2, socket_timeout=0.2)
         client.ping()
         return client
     except Exception:
