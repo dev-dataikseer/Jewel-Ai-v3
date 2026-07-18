@@ -51,7 +51,9 @@ def build_final_prompt(
             "has_product": ctx.has_product,
             "has_style_reference": ctx.has_style_reference,
             "has_portrait": ctx.has_portrait,
+            "has_logo": ctx.has_logo,
             "image_count": ctx.image_count,
+            "roles": list(ctx.roles or []),
         },
     }
     return final

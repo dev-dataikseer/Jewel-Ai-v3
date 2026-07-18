@@ -168,21 +168,33 @@ When a job runs (or Admin clicks **Server preview**), `compose_prompt()` execute
 9. Return ComposedPrompt { text, negative_prompt, debug, version ids }
 ```
 
-### 4.1 Post-compose augmentation
+### 4.1 Post-compose augmentation (image slot map)
 
-Before calling fal.ai, `augment_prompt_for_workflow()` may append **image role hints**:
+Before calling fal.ai, `build_final_prompt()` appends **image role hints** via `attachment_parts()` after `build_image_packet()` decides the ordered URLs:
 
-| Workflow | Appended text (summary) |
+| Slot order | Role | When |
+|------------|------|------|
+| Image 1 | Product (raw jewelry) | Always for I2I |
+| Image 2 | Theme / style reference **or** portrait | Catalog theme; try-on portrait |
+| Image 3+ | Shop logo | When model `max_images` has capacity |
+
+| Workflow | Attachment text (summary) |
 |----------|-------------------------|
-| `REFERENCE_STYLE_MATCH` | Image 1 = product (preserve). Image 2 = style reference (match mood/lighting). |
-| `JEWELRY_ON_MODEL`, `CUSTOMER_TRY_ON` | Image 1 = jewelry. Image 2 = model/customer portrait. Composite naturally. |
-| Others | No change |
+| `CATALOG_IMAGE`, `BULK_GENERATION` | Image 1 = product. Image 2 = theme (if present). Logo image = place brand mark naturally. |
+| `REFERENCE_STYLE_MATCH` | Image 1 = product. Image 2 = style reference. |
+| `JEWELRY_ON_MODEL`, `CUSTOMER_TRY_ON` | Image 1 = jewelry. Image 2 = portrait. Logo only if a free slot remains. |
+
+**Logo policy:** Prefer sending the logo as a fal reference (`logoMode=model`) so the model places it. If the model is single-image / out of capacity, fall back to `composite_logo_beneath` (`logoMode=compose`). Set `LOGO_FORCE_COMPOSE=1` to always use the bottom-bar fallback.
+
+Assembly lives in `app/pipeline/image_packet.py` and is shared by single and bulk jobs.
 
 ### 4.2 What gets stored on the job
 
-- `final_prompt` — augmented text sent to fal.ai
+- `final_prompt` — packed text sent to fal.ai (master + jewelry subjects + attachments)
 - `master_version_id`, `subject_version_id` (comma-separated if multi-type), `variant_version_id`
 - `provider_metadata.promptDebug` — layer keys, word count, jewelry_types list
+- `provider_metadata.imageRoles` — ordered `{index, role, url}` slot map
+- `provider_metadata.logoMode` / `logoApplied` — `model` | `compose` | `omit` | `none`
 
 ---
 
@@ -333,12 +345,13 @@ Workflows with **variant dropdowns** insert variant text at the master's `varian
 
 | Workflow | Images sent (order) | fal payload shape |
 |----------|---------------------|-------------------|
-| Catalog / Background / Gemstone / Luxury / Custom | `[product]` | `image_urls` or `image_url` per model |
-| Reference style match | `[product, style_reference]` | Multi-ref `image_urls[]` |
-| Jewelry on model / Customer try-on | `[product, portrait]` | VTON: `garment_image` + `model_image` (or equivalent) |
-| Multi-ref models (Nano Banana, Seedream) | Up to N refs in `image_urls` | All URLs in array |
+| Catalog / Bulk (+ optional theme + logo) | `[product, theme?, logo?]` | Multi-ref `image_urls[]` when capacity allows |
+| Background / Gemstone / Luxury / Custom | `[product, logo?]` | `image_urls` or `image_url` per model |
+| Reference style match | `[product, style_reference, logo?]` | Multi-ref `image_urls[]` |
+| Jewelry on model / Customer try-on | `[product, portrait, logo?]` | VTON fields or ordered `image_urls`; logo only if capacity |
+| Single-slot models (e.g. Kontext) | `[product]` | `image_url`; logo via post-compose fallback |
 
-Prompt always describes **what to do**; images carry **what to preserve**. Augmentation text clarifies which image is which for multi-image workflows.
+Prompt always describes **what to do**; images carry **what to preserve / brand**. Attachment text clarifies which image is which. Bulk jobs reuse the same packet builder as single jobs (shared theme/logo meta, per-product `input_url`).
 
 ### 8.2 Negative prompt
 

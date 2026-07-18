@@ -8,6 +8,7 @@ from app.database import SessionLocal
 from app.logging_config import get_logger
 from app.models import Batch, GenerationJob, StylePreset
 from app.pipeline.composer import ComposeInput
+from app.pipeline.image_packet import apply_logo_compose_if_needed, build_image_packet
 from app.prompt_engine import build_final_prompt
 from app.prompt_engine.attachments import ImageContext
 from app.providers.router import route_generation
@@ -70,13 +71,12 @@ async def _process_job_async(job_id: str) -> None:
         model_endpoint = meta.get("modelEndpointId") or meta.get("modelName")
         model_params = meta.get("modelParams") or {}
 
-        image_urls = [u for u in [job.input_url, job.reference_url or job.model_url] if u]
-        seen: set[str] = set()
-        image_urls = [u for u in image_urls if not (u in seen or seen.add(u))]
+        packet = build_image_packet(job, model_endpoint_id=model_endpoint)
+        image_urls = packet.image_urls
+        meta.update(packet.to_meta())
+        job.provider_metadata = meta
+        db.commit()
 
-        has_portrait = bool(job.model_url) or (
-            bool(job.reference_url) and job.workflow in ("JEWELRY_ON_MODEL", "CUSTOMER_TRY_ON")
-        )
         final = build_final_prompt(
             db,
             ComposeInput(
@@ -92,12 +92,7 @@ async def _process_job_async(job_id: str) -> None:
                 style_preset_addon=preset_addon,
             ),
             model_endpoint_id=model_endpoint,
-            image_ctx=ImageContext(
-                has_product=bool(job.input_url),
-                has_style_reference=bool(job.reference_url),
-                has_portrait=has_portrait,
-                image_count=len(image_urls) or 1,
-            ),
+            image_ctx=ImageContext(**packet.to_image_context_kwargs()),
         )
 
         db.refresh(job)
@@ -145,6 +140,7 @@ async def _process_job_async(job_id: str) -> None:
             fal_req = (result.metadata or {}).get("fal_request_id") or (result.usage or {}).get("request_id")
             merged = {
                 **meta,
+                **packet.to_meta(),
                 "promptDebug": final.debug,
                 "providerChain": chain,
                 "usage": result.usage,
@@ -165,36 +161,34 @@ async def _process_job_async(job_id: str) -> None:
 
         from uuid import uuid4
 
-        from app.storage.logo_compose import composite_logo_beneath, load_logo_bytes_from_storage
-
         image_bytes = result.image_bytes
-        logo_url = meta.get("logoUrl")
-        if logo_url:
-            logo_bytes = load_logo_bytes_from_storage(logo_url, storage)
-            if logo_bytes:
-                image_bytes = composite_logo_beneath(image_bytes, logo_bytes)
+        logo_mode = packet.logo_mode
+        logo_url = packet.logo_url
+        image_bytes = apply_logo_compose_if_needed(
+            image_bytes, logo_mode=logo_mode, logo_url=logo_url, storage=storage
+        )
 
         filename = f"generated_{uuid4().hex}.png"
         output_url = storage.save_bytes(image_bytes, filename=filename)
         extra_urls: list[str] = []
         extra_bytes = (result.metadata or {}).get("all_image_bytes") or []
         for idx, blob in enumerate(extra_bytes, start=2):
-            composed_blob = blob
-            if logo_url:
-                logo_bytes = load_logo_bytes_from_storage(logo_url, storage)
-                if logo_bytes:
-                    composed_blob = composite_logo_beneath(blob, logo_bytes)
+            composed_blob = apply_logo_compose_if_needed(
+                blob, logo_mode=logo_mode, logo_url=logo_url, storage=storage
+            )
             extra_urls.append(storage.save_bytes(composed_blob, filename=f"generated_{uuid4().hex}.png"))
 
         timing["completed"] = datetime.now(timezone.utc).isoformat()
         merged = {
             **meta,
+            **packet.to_meta(),
             "promptDebug": final.debug,
             "providerChain": chain,
             "usage": result.usage,
             "timing": timing,
             "progressStage": "completed",
             "statusHint": None,
+            "logoApplied": logo_mode if logo_url else "none",
         }
         if result.metadata and result.metadata.get("fal_request_id"):
             merged["fal_request_id"] = result.metadata["fal_request_id"]
@@ -468,11 +462,11 @@ def finalize_fal_webhook(job_id: str, payload: dict) -> None:
 async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
     from uuid import uuid4
 
+    from app.pipeline.image_packet import apply_logo_compose_if_needed
     from app.providers.fal_response import extract_image_urls
     from app.providers.registry import get_model_definition
     from app.security.url_fetch import safe_fetch_image_bytes
     from app.storage.local import storage
-    from app.storage.logo_compose import composite_logo_beneath, load_logo_bytes_from_storage
 
     db = SessionLocal()
     try:
@@ -497,16 +491,17 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
                 _update_batch(db, job.batch_id)
             return
 
+        meta_peek = job.provider_metadata or {}
+        logo_mode = meta_peek.get("logoMode") or "omit"
+        logo_url = meta_peek.get("logoUrl")
+
         extra_urls: list[str] = []
         primary_url = ""
         for idx, img_url in enumerate(img_urls):
             content = await safe_fetch_image_bytes(img_url)
-            meta_peek = job.provider_metadata or {}
-            logo_url = meta_peek.get("logoUrl")
-            if logo_url:
-                logo_bytes = load_logo_bytes_from_storage(logo_url, storage)
-                if logo_bytes:
-                    content = composite_logo_beneath(content, logo_bytes)
+            content = apply_logo_compose_if_needed(
+                content, logo_mode=logo_mode, logo_url=logo_url, storage=storage
+            )
             saved_url = storage.save_bytes(content, filename=f"generated_{uuid4().hex}.png")
             if idx == 0:
                 primary_url = saved_url
@@ -528,6 +523,7 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
             **meta,
             "webhook_completed": True,
             "progressStage": "completed",
+            "logoApplied": logo_mode if logo_url else "none",
             "timing": {
                 **(meta.get("timing") or {}),
                 "completed": datetime.now(timezone.utc).isoformat(),

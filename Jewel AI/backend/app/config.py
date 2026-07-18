@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # When true, use fal queue webhooks (requires healthy Celery finalize). Default false =
     # subscribe/wait in-process (more reliable for Studio UX).
     fal_use_webhooks: bool = False
+    # When true, always paste logo under the output instead of sending it as a fal reference.
+    logo_force_compose: bool = False
     api_public_url: str = "http://localhost:8000"
     # fal.ai billing / credits monitoring
     fal_credits_low_threshold: float = 5.0

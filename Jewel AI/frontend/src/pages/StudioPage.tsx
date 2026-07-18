@@ -818,6 +818,40 @@ export function StudioPage() {
   const showNumberOfImages =
     "num_images" in schemaProps || "num_samples" in schemaProps;
 
+  const modelMaxImages =
+    selectedModel?.limits?.max_images ??
+    selectedModel?.ui?.max_images ??
+    (selectedModel?.capabilities?.multi_image === false ? 1 : 14);
+  // Optimistic true until a model is selected (catalog default is multi-image).
+  const modelSupportsMultiImage =
+    selectedModel == null
+      ? true
+      : Boolean(selectedModel.capabilities?.multi_image) && modelMaxImages > 1;
+  const hasThemeAttached = Boolean(referenceFile || lockedUrls.reference);
+  const hasLogoAttached = Boolean(logoFile || lockedUrls.logo);
+  const plannedSlots: { role: string; label: string }[] = [
+    { role: "product", label: "Product → Image 1" },
+  ];
+  if (needsModelReference && (referenceFile || lockedUrls.model || lockedUrls.reference)) {
+    plannedSlots.push({ role: "portrait", label: "Portrait → Image 2" });
+  } else if (hasThemeAttached) {
+    plannedSlots.push({
+      role: "theme",
+      label: `Theme → Image ${plannedSlots.length + 1}`,
+    });
+  }
+  const logoAsModelRef =
+    hasLogoAttached &&
+    modelSupportsMultiImage &&
+    plannedSlots.length < modelMaxImages;
+  if (hasLogoAttached && logoAsModelRef) {
+    plannedSlots.push({
+      role: "logo",
+      label: `Logo → Image ${plannedSlots.length + 1}`,
+    });
+  }
+  const logoUsesComposeFallback = hasLogoAttached && !logoAsModelRef;
+
   const workflowVariantLabel =
     workflow === "GEMSTONE_COLOR_CHANGE"
       ? "Target Gemstone Color"
@@ -1549,6 +1583,12 @@ export function StudioPage() {
                 selectedValues={jewelryTypes}
                 onChange={setJewelryTypes}
               />
+              {jewelryTypes.length > 1 && (
+                <p className="text-[11px] text-slate-500 -mt-1 leading-relaxed">
+                  Prompt engine applies the workflow master plus each selected
+                  type ({jewelryTypes.join(", ")}).
+                </p>
+              )}
               {isCatalog && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -1603,13 +1643,13 @@ export function StudioPage() {
                   />
                   <UploadZone
                     id="studio-logo-upload"
-                    label="Shop logo (under output)"
+                    label="Shop logo (reference — model places it)"
                     previews={logoPreviewSrc ? [logoPreviewSrc] : []}
                     onFiles={onLogoPick}
                     single
                     compact
                     fileName={logoFile?.name || "Saved logo"}
-                    hint="Full size OK"
+                    hint="Sent as a reference image when the model supports multi-image"
                     onClear={() => {
                       setLogoFile(null);
                       patchBrandKit({
@@ -1624,18 +1664,34 @@ export function StudioPage() {
                       }));
                     }}
                   />
+                  {(hasThemeAttached || hasLogoAttached) && (
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Sent to the model:{" "}
+                      {plannedSlots.map((s) => s.label).join(" · ")}
+                      {logoUsesComposeFallback
+                        ? " · Logo fallback: under output"
+                        : ""}
+                    </p>
+                  )}
+                  {logoUsesComposeFallback && (
+                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 leading-relaxed">
+                      This model only accepts a single image. Logo will be added
+                      under the output (fallback). Choose a multi-image edit
+                      model for in-frame logo placement.
+                    </p>
+                  )}
                 </div>
               )}
               {!isCatalog && (
                 <UploadZone
                   id="studio-logo-upload-single"
-                  label="Shop logo (optional)"
+                  label="Shop logo (reference — model places it)"
                   previews={logoPreviewSrc ? [logoPreviewSrc] : []}
                   onFiles={onLogoPick}
                   single
                   compact
                   fileName={logoFile?.name || "Saved logo"}
-                  hint="Full size OK"
+                  hint="Optional · model places it when multi-image is supported"
                   onClear={() => {
                     setLogoFile(null);
                     patchBrandKit({
@@ -1650,6 +1706,11 @@ export function StudioPage() {
                     }));
                   }}
                 />
+              )}
+              {!isCatalog && logoUsesComposeFallback && (
+                <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 leading-relaxed">
+                  Logo will be added under the output for this model (fallback).
+                </p>
               )}
               {(options?.lightingStyles?.length ?? 0) > 0 && (
                 <div>
