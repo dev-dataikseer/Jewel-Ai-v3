@@ -6,8 +6,31 @@ export default {
       fontFamily: {
         sans: ['"DM Sans"', "Segoe UI", "system-ui", "sans-serif"],
       },
+      colors: {
+        jewel: {
+          bg: "var(--jewel-bg)",
+          surface: "var(--jewel-surface)",
+          muted: "var(--jewel-surface-muted)",
+          ink: "var(--jewel-ink)",
+          "ink-muted": "var(--jewel-ink-muted)",
+          border: "var(--jewel-border)",
+          accent: "var(--jewel-accent)",
+          "accent-hover": "var(--jewel-accent-hover)",
+          "accent-soft": "var(--jewel-accent-soft)",
+          metal: "var(--jewel-metal)",
+          success: "var(--jewel-success)",
+          warning: "var(--jewel-warning)",
+          danger: "var(--jewel-danger)",
+        },
+      },
+      borderRadius: {
+        jewel: "var(--jewel-radius-md)",
+        "jewel-sm": "var(--jewel-radius-sm)",
+        "jewel-lg": "var(--jewel-radius-lg)",
+      },
       boxShadow: {
-        soft: "0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.04)",
+        soft: "var(--jewel-shadow-sticky)",
+        sticky: "var(--jewel-shadow-sticky)",
       },
     },
   },

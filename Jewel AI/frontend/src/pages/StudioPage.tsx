@@ -4,22 +4,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BadgeCheck,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Download,
   Gem,
-  Heart,
   History,
   ImagePlus,
   Images,
   Layers3,
+  Menu,
+  PanelRight,
   RefreshCcw,
   Settings,
   Sparkles,
   Wand2,
-  X,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ImageCropModal } from "@/components/studio/ImageCropModal";
@@ -27,6 +25,11 @@ import { BatchProgressPanel } from "@/components/studio/BatchProgressPanel";
 import { ModelSelector } from "@/components/studio/ModelSelector";
 import { ProductUploadGallery } from "@/components/studio/ProductUploadGallery";
 import { UploadZone } from "@/components/studio/UploadZone";
+import { ActionDock } from "@/components/ui/ActionDock";
+import { JobStageBar, resolveJobStage } from "@/components/ui/JobStageBar";
+import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
+import { ResultsTray } from "@/components/ui/ResultsTray";
+import { Sheet } from "@/components/ui/Sheet";
 import { jobStatusLabel, useJobStream } from "@/hooks/useJobStream";
 import { api, mediaUrl } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -63,95 +66,6 @@ const WORKFLOW_ICONS: Record<string, typeof Gem> = {
   LUXURY_ENHANCEMENT: Wand2,
   CUSTOM_PROMPT: Sparkles,
 };
-
-function MultiSelectDropdown({
-  label,
-  options,
-  selectedValues,
-  onChange,
-  placeholder = "Select...",
-}: {
-  label?: string;
-  options: string[];
-  selectedValues: string[];
-  onChange: (values: string[]) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const toggle = (val: string) => {
-    onChange(
-      selectedValues.includes(val)
-        ? selectedValues.filter((v) => v !== val)
-        : [...selectedValues, val],
-    );
-  };
-
-  return (
-    <div className="relative" ref={ref}>
-      {label && <label className="ui-label">{label}</label>}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 flex items-center justify-between gap-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
-      >
-        <span className="flex flex-wrap gap-1 flex-1 text-left">
-          {selectedValues.length === 0 ? (
-            <span className="text-slate-400">{placeholder}</span>
-          ) : (
-            selectedValues.map((v) => (
-              <span
-                key={v}
-                className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[11px]"
-              >
-                {v}
-                <X
-                  className="size-2.5 cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggle(v);
-                  }}
-                />
-              </span>
-            ))
-          )}
-        </span>
-        <ChevronDown
-          className={`size-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => toggle(opt)}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-xs ${
-                selectedValues.includes(opt)
-                  ? "bg-blue-50 text-blue-700 font-semibold"
-                  : "hover:bg-slate-50"
-              }`}
-            >
-              {opt}
-              {selectedValues.includes(opt) && <Check className="size-3" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function StudioPage() {
   const queryClient = useQueryClient();
@@ -196,6 +110,10 @@ export function StudioPage() {
   const [catalogMode, setCatalogMode] = useState<"modern" | "reference_mirror" | "style_mood">(
     "modern",
   );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
+  const [inspectorSheetOpen, setInspectorSheetOpen] = useState(false);
 
   const apiWorkflow = workflow;
   const isCatalog = workflow === "CATALOG_IMAGE";
@@ -1092,7 +1010,7 @@ export function StudioPage() {
       <main className="mx-auto max-w-[1600px] w-full px-4 sm:px-6 lg:px-8 py-6 flex-1">
         <div className="grid grid-cols-1 gap-5 items-start lg:grid-cols-[240px_minmax(0,1fr)_300px]">
           {/* Sidebar */}
-          <aside className="space-y-3 lg:sticky lg:top-[4.5rem]">
+          <aside className="hidden space-y-3 lg:sticky lg:top-[4.5rem] lg:block">
             <p className="ui-label px-1 mb-0">Workflows</p>
             <div className="ui-card p-1.5 space-y-0.5">
               {sidebarWorkflows.map((item) => {
@@ -1103,10 +1021,10 @@ export function StudioPage() {
                     key={item.id}
                     type="button"
                     onClick={() => selectWorkflow(item.id)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors ${
+                    className={`flex w-full items-center gap-2.5 rounded-jewel-md px-3 py-2.5 text-left text-[13px] transition-colors ${
                       active
-                        ? "bg-blue-600 text-white font-semibold shadow-sm shadow-blue-600/20"
-                        : "text-slate-600 hover:bg-slate-100 font-medium"
+                        ? "bg-jewel-accent text-white font-semibold"
+                        : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
                     }`}
                   >
                     <Icon className="size-3.5 shrink-0 opacity-90" />
@@ -1115,41 +1033,23 @@ export function StudioPage() {
                 );
               })}
             </div>
-            <div className="ui-card p-3">
-              <p className="ui-label mb-2">Workspace</p>
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="rounded-xl bg-slate-50 p-2.5">
-                  <p className="text-[10px] font-medium text-slate-500">Jobs</p>
-                  <p className="text-sm font-semibold tabular-nums text-slate-900">
-                    {sessionJobs.length}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-2.5">
-                  <p className="text-[10px] font-medium text-slate-500">Active</p>
-                  <p
-                    className={`text-sm font-semibold tabular-nums ${
-                      activeJobs.length ? "text-blue-600" : "text-slate-900"
-                    }`}
-                  >
-                    {activeJobs.length}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={clearWorkspace}
-                className="mt-2 w-full text-[11px] font-semibold text-slate-500 hover:text-slate-800"
-              >
-                Clear workspace
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={clearWorkspace}
+              className="w-full px-1 text-left text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
+            >
+              Clear workspace
+              {sessionJobs.length > 0 ? ` · ${sessionJobs.length} jobs` : ""}
+              {activeJobs.length > 0 ? ` · ${activeJobs.length} active` : ""}
+            </button>
           </aside>
 
           {/* Canvas */}
           <section className="space-y-5 min-w-0">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                <Sparkles className="size-4 text-blue-600" />
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+              <h2 className="text-xl font-semibold text-jewel-ink flex items-center gap-2">
+                <Sparkles className="size-4 text-jewel-accent" />
                 {workflowLabel(workflow, options)}
               </h2>
               {isCatalog && (
@@ -1166,11 +1066,32 @@ export function StudioPage() {
                 </p>
               )}
               {workflow === "VIRTUAL_TRY_ON" && (
-                <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-relaxed">
+                <p className="text-sm text-jewel-ink-muted mt-1.5 max-w-2xl leading-relaxed">
                   Upload jewelry product(s) and one portrait. Choose studio model look or customer photo in
                   Parameters.
                 </p>
               )}
+              </div>
+              <div className="flex shrink-0 gap-1 lg:hidden">
+                <button
+                  type="button"
+                  className="ui-btn-secondary"
+                  onClick={() => setWorkflowSheetOpen(true)}
+                  aria-label="Open workflows"
+                >
+                  <Menu className="size-3.5" />
+                  Workflow
+                </button>
+                <button
+                  type="button"
+                  className="ui-btn-secondary"
+                  onClick={() => setInspectorSheetOpen(true)}
+                  aria-label="Open parameters"
+                >
+                  <PanelRight className="size-3.5" />
+                  Params
+                </button>
+              </div>
             </div>
 
             <>
@@ -1213,7 +1134,7 @@ export function StudioPage() {
                       <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
                         <ProductUploadGallery
                           id="studio-product-upload"
-                          label="Product (multi for bulk)"
+                        label="Product"
                           files={primaryFiles}
                           previews={productPreviewSrcs}
                           error={validationErrors.productImage}
@@ -1250,7 +1171,7 @@ export function StudioPage() {
                     ) : (
                       <ProductUploadGallery
                         id="studio-product-upload"
-                        label="Product (multi for bulk)"
+                        label="Product"
                         files={primaryFiles}
                         previews={productPreviewSrcs}
                         error={validationErrors.productImage}
@@ -1306,71 +1227,30 @@ export function StudioPage() {
                           </>
                         )}
                       {activeJob?.status === "COMPLETED" && (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              regenerateMutation.mutate(activeJob.id)
+                        <ResultsTray
+                          onRegenerate={() => regenerateMutation.mutate(activeJob.id)}
+                          regenerating={regenerateMutation.isPending}
+                          onDownload={activeOutputUrl}
+                          onFavorite={() => toggleFavorite(activeJob)}
+                          favorited={favoriteIds.has(activeJob.id)}
+                          compareActive={compareMode}
+                          onToggleCompare={() => setCompareMode((c) => !c)}
+                          mediaUrl={mediaUrl}
+                          onShare={async () => {
+                            try {
+                              const res = await api.post<{
+                                token: string;
+                                url?: string;
+                              }>("/share-links", { job_id: activeJob.id });
+                              const token = res.data.token;
+                              const shareUrl = `${window.location.origin}/share/${token}`;
+                              await navigator.clipboard.writeText(shareUrl);
+                              toast.success("Share link copied");
+                            } catch (err) {
+                              toast.error(apiErrorMessage(err, "Could not create share link"));
                             }
-                            disabled={regenerateMutation.isPending}
-                            aria-label="Regenerate image"
-                            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
-                          >
-                            <RefreshCcw
-                              className={`inline size-3 mr-1 ${regenerateMutation.isPending ? "animate-spin" : ""}`}
-                            />
-                            Regenerate
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleFavorite(activeJob)}
-                            aria-label={
-                              favoriteIds.has(activeJob.id)
-                                ? "Remove from favorites"
-                                : "Add to favorites"
-                            }
-                            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
-                          >
-                            <Heart
-                              className={`inline size-3 mr-1 ${favoriteIds.has(activeJob.id) ? "fill-red-500 text-red-500" : ""}`}
-                            />
-                            Save
-                          </button>
-                          {activeOutputUrl && (
-                            <a
-                              href={mediaUrl(activeOutputUrl)}
-                              download
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label="Download generated image"
-                              className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
-                            >
-                              <Download className="inline size-3 mr-1" />
-                              Download
-                            </a>
-                          )}
-                          <button
-                            type="button"
-                            aria-label="Copy share link"
-                            onClick={async () => {
-                              try {
-                                const res = await api.post<{
-                                  token: string;
-                                  url?: string;
-                                }>("/share-links", { job_id: activeJob.id });
-                                const token = res.data.token;
-                                const shareUrl = `${window.location.origin}/share/${token}`;
-                                await navigator.clipboard.writeText(shareUrl);
-                                toast.success("Share link copied");
-                              } catch (err) {
-                                toast.error(apiErrorMessage(err, "Could not create share link"));
-                              }
-                            }}
-                            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded hover:bg-slate-100"
-                          >
-                            Share
-                          </button>
-                        </div>
+                          }}
+                        />
                       )}
                       {(activeJob?.status === "PENDING" ||
                         activeJob?.status === "PROCESSING") && (
@@ -1378,13 +1258,27 @@ export function StudioPage() {
                           type="button"
                           onClick={() => cancelMutation.mutate(activeJob.id)}
                           disabled={cancelMutation.isPending}
-                          className="text-xs font-semibold text-rose-600 px-2 py-1 rounded hover:bg-rose-50"
+                          className="ui-btn-danger"
                         >
                           Cancel
                         </button>
                       )}
                       </div>
                     </div>
+                    {activeJob &&
+                      (activeJob.status === "PENDING" ||
+                        activeJob.status === "PROCESSING") && (
+                        <JobStageBar
+                          stage={resolveJobStage(activeJob)}
+                          label={jobStatusLabel(activeJob)}
+                          detail={
+                            activeJob.provider_metadata?.webhook_pending ||
+                            activeJob.provider_metadata?.progressStage === "waiting_on_fal"
+                              ? "Fal.ai is generating your image. This usually takes 20–60 seconds."
+                              : "Preparing request in Jewel AI…"
+                          }
+                        />
+                      )}
                     {!activeJob ? (
                       <div className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-200 bg-white">
                         <Wand2 className="size-8 text-slate-300 mb-2" />
@@ -1436,7 +1330,35 @@ export function StudioPage() {
                       </div>
                     ) : activeJob.status === "COMPLETED" ? (
                       <div className="flex-1 flex flex-col gap-2 min-h-[240px]">
-                        <div className="flex-1 flex items-center justify-center rounded-xl bg-slate-950 p-3">
+                        {compareMode ? (
+                          <div className="grid flex-1 grid-cols-2 gap-2 min-h-[240px]">
+                            <div className="flex flex-col rounded-jewel-md bg-jewel-muted overflow-hidden">
+                              <span className="ui-label mb-0 px-2 pt-2">Input</span>
+                              {(activeJob.input_url || productPreviewSrcs[0]) ? (
+                                <img
+                                  src={mediaUrl(activeJob.input_url || productPreviewSrcs[0])}
+                                  alt="Input"
+                                  className="flex-1 object-contain p-2"
+                                />
+                              ) : (
+                                <span className="m-auto text-xs text-jewel-ink-muted">No input</span>
+                              )}
+                            </div>
+                            <div className="flex flex-col rounded-jewel-md bg-slate-950 overflow-hidden">
+                              <span className="ui-label mb-0 px-2 pt-2 text-slate-400">Output</span>
+                              {activeOutputUrl ? (
+                                <img
+                                  src={mediaUrl(activeOutputUrl)}
+                                  alt="Output"
+                                  className="flex-1 object-contain p-2"
+                                />
+                              ) : (
+                                <span className="m-auto text-xs text-slate-500">No output</span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                        <div className="flex-1 flex items-center justify-center rounded-jewel-md bg-slate-950 p-3">
                           {activeOutputUrl ? (
                             <img
                               src={mediaUrl(activeOutputUrl)}
@@ -1447,6 +1369,7 @@ export function StudioPage() {
                             <span className="text-xs text-slate-500">No output</span>
                           )}
                         </div>
+                        )}
                         {outputUrls.length > 1 && (
                           <div className="flex gap-1.5 overflow-x-auto pb-0.5">
                             {outputUrls.map((url, i) => (
@@ -1456,8 +1379,8 @@ export function StudioPage() {
                                 onClick={() => setOutputIndex(i)}
                                 className={`size-12 shrink-0 overflow-hidden rounded-lg border ${
                                   outputIndex === i
-                                    ? "border-blue-600 ring-2 ring-blue-500/20"
-                                    : "border-slate-200"
+                                    ? "border-jewel-accent ring-2 ring-jewel-accent/20"
+                                    : "border-jewel-border"
                                 }`}
                               >
                                 <img
@@ -1472,19 +1395,12 @@ export function StudioPage() {
                       </div>
                     ) : (
                       <div
-                        className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-blue-100 bg-blue-50/50 min-h-[240px]"
+                        className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-jewel-md border border-jewel-accent-soft bg-jewel-accent-soft/40 min-h-[240px]"
                         aria-live="polite"
                       >
-                        <RefreshCcw className="size-6 text-blue-500 animate-spin mb-3" />
-                        <p className="text-sm font-semibold text-slate-800">
+                        <RefreshCcw className="size-6 text-jewel-accent animate-spin mb-3" />
+                        <p className="text-sm font-semibold text-jewel-ink">
                           {jobStatusLabel(activeJob)}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-2 max-w-sm">
-                          {activeJob.provider_metadata?.webhook_pending ||
-                          activeJob.provider_metadata?.progressStage ===
-                            "waiting_on_fal"
-                            ? "Fal.ai is generating your image. This usually takes 20–60 seconds."
-                            : "Preparing request in Jewel AI…"}
                         </p>
                       </div>
                     )}
@@ -1492,51 +1408,24 @@ export function StudioPage() {
                 </div>
               </div>
 
-              {/* Sticky generate under canvas */}
-              <div className="sticky bottom-3 z-20 hidden lg:flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900 truncate">
-                    {generateBlockedByBatch
-                      ? "Batch running — wait or queue another"
-                      : isBulk
-                        ? `Ready to generate ${primaryFiles.length} images`
-                        : lockedUrls.assetId && !primaryFiles.length
-                          ? "Ready — using loaded product asset"
-                          : "Ready when product is set"}
-                  </p>
-                  {uploadProgress && (
-                    <p className="text-[11px] text-slate-500 truncate">{uploadProgress}</p>
-                  )}
-                  {generateBlockedByBatch && (
-                    <button
-                      type="button"
-                      onClick={() => setBatchForceAllow(true)}
-                      className="mt-0.5 text-[11px] font-semibold text-blue-600 hover:underline"
-                    >
-                      Queue another batch anyway
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={
-                    generateMutation.isPending ||
-                    Boolean(uploadProgress) ||
-                    generateBlockedByBatch
-                  }
-                  className="ui-btn-primary shrink-0"
-                >
-                  {generateMutation.isPending || uploadProgress ? (
-                    <RefreshCcw className="size-4 animate-spin" />
-                  ) : (
-                    <Wand2 className="size-4" />
-                  )}
-                  {isBulk
-                    ? `Generate Bulk (${primaryFiles.length})`
-                    : "Generate"}
-                </button>
-              </div>
+              <ActionDock
+                label={
+                  generateBlockedByBatch
+                    ? "Batch running — wait or queue another"
+                    : isBulk
+                      ? `Ready to generate ${primaryFiles.length} images`
+                      : lockedUrls.assetId && !primaryFiles.length
+                        ? "Ready — using loaded product asset"
+                        : "Ready when product is set"
+                }
+                hint={uploadProgress}
+                batchBlocked={generateBlockedByBatch}
+                onForceBatch={() => setBatchForceAllow(true)}
+                onGenerate={() => generateMutation.mutate()}
+                generating={generateMutation.isPending || Boolean(uploadProgress)}
+                disabled={generateBlockedByBatch}
+                bulkCount={isBulk ? primaryFiles.length : undefined}
+              />
 
               {lastBatchId && (
                 <BatchProgressPanel
@@ -1551,18 +1440,16 @@ export function StudioPage() {
                 />
               )}
 
-              <input
-                type="text"
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                placeholder="Optional instructions: lighting, mood, sparkles..."
-                className="ui-input"
-              />
-
-              {/* Gallery strip */}
+              {/* Session tray */}
               <div className="ui-card p-4">
                 <p className="ui-label mb-3 flex items-center gap-1.5">
                   <History className="size-3.5" /> Recent
+                  {sessionJobs.length > 0 && (
+                    <span className="normal-case tracking-normal font-medium text-jewel-ink-muted">
+                      · {sessionJobs.length} in session
+                      {activeJobs.length > 0 ? ` · ${activeJobs.length} active` : ""}
+                    </span>
+                  )}
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {[
@@ -1577,10 +1464,11 @@ export function StudioPage() {
                         key={job.id}
                         type="button"
                         onClick={() => setActiveJobId(job.id)}
+                        aria-label={`${jobStatusLabel(job)} ${job.workflow || ""}`.trim()}
                         className={`relative size-14 shrink-0 rounded-lg overflow-hidden border ${
                           activeJobId === job.id
-                            ? "border-blue-600 ring-2 ring-blue-500/20"
-                            : "border-slate-200"
+                            ? "border-jewel-accent ring-2 ring-jewel-accent/20"
+                            : "border-jewel-border"
                         }`}
                       >
                         {(job.output_url || job.input_url) && (
@@ -1597,11 +1485,11 @@ export function StudioPage() {
             </>
           </section>
 
-          {/* Parameters */}
-            <aside className="space-y-4 lg:sticky lg:top-[4.5rem]">
+          {/* Parameters — desktop inspector */}
+            <aside className="hidden space-y-4 lg:sticky lg:top-[4.5rem] lg:block">
             <div className="ui-card p-4 space-y-4">
                 <p className="ui-label flex items-center gap-1.5 mb-0">
-                  <Settings className="size-3.5" /> Parameters
+                  <Settings className="size-3.5" /> Essentials
                 </p>
               {workflow === "VIRTUAL_TRY_ON" && (
                 <div>
@@ -1634,10 +1522,6 @@ export function StudioPage() {
                     <option value="reference_mirror">Match reference environment</option>
                     <option value="style_mood">Match lighting / mood only</option>
                   </select>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                    Style mood replaces the old Style from Reference workflow. Attach a theme
-                    image when using reference or mood modes.
-                  </p>
                 </div>
               )}
               <MultiSelectDropdown
@@ -1647,11 +1531,36 @@ export function StudioPage() {
                 onChange={setJewelryTypes}
               />
               {jewelryTypes.length > 1 && (
-                <p className="text-[11px] text-slate-500 -mt-1 leading-relaxed">
-                  Prompt engine applies the workflow master plus each selected
-                  type ({jewelryTypes.join(", ")}).
+                <p className="text-[11px] text-jewel-ink-muted -mt-1 leading-relaxed">
+                  Applies each selected type ({jewelryTypes.join(", ")}).
                 </p>
               )}
+              <div>
+                <label className="ui-label" htmlFor="studio-prompt">
+                  Optional instructions
+                </label>
+                <textarea
+                  id="studio-prompt"
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  placeholder="Lighting, mood, sparkles…"
+                  rows={2}
+                  className="ui-input h-auto min-h-[2.75rem] py-2"
+                />
+              </div>
+
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left text-xs font-semibold text-jewel-ink-muted hover:text-jewel-ink"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((o) => !o)}
+              >
+                Advanced
+                <ChevronDown className={`size-3.5 transition ${advancedOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {advancedOpen && (
+              <div className="space-y-4 border-t border-jewel-border pt-3">
               {isCatalog && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -1825,7 +1734,11 @@ export function StudioPage() {
                   </select>
                 </div>
               )}
-              <div className="space-y-2.5">
+              </div>
+              )}
+
+              <div className="space-y-2.5 border-t border-jewel-border pt-3">
+                <p className="ui-label mb-0">Model</p>
                 {showAspectRatio && (
                   <select
                     value={aspectRatio}
@@ -1879,44 +1792,90 @@ export function StudioPage() {
                   onParamsChange={setModelParams}
                 />
                 {is4kSelected && (
-                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
-                    4K is slower (often 5-6+ minutes) and costs more. Prefer 1K
-                    for catalog/bulk.
+                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-jewel-md px-3 py-2 leading-relaxed">
+                    4K is slower and costs more. Prefer 1K for catalog/bulk.
                   </p>
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => generateMutation.mutate()}
-              disabled={
-                generateMutation.isPending ||
-                Boolean(uploadProgress) ||
-                generateBlockedByBatch
-              }
-              className="ui-btn-primary w-full lg:hidden"
-            >
-              {generateMutation.isPending || uploadProgress ? (
-                <RefreshCcw className="size-4 animate-spin" />
-              ) : (
-                <Wand2 className="size-4" />
-              )}
-              {uploadProgress
-                ? uploadProgress
-                : generateMutation.isPending
-                  ? "Queuing…"
-                  : isBulk
-                    ? `Generate Bulk (${primaryFiles.length})`
-                    : "Generate"}
-            </button>
             {activeJobs.length > 0 && (
-              <p className="text-[11px] text-center text-slate-500">
+              <p className="text-[11px] text-center text-jewel-ink-muted">
                 {activeJobs.length} running — queue more after upload finishes
               </p>
             )}
           </aside>
         </div>
       </main>
+      <Sheet
+        open={workflowSheetOpen}
+        onClose={() => setWorkflowSheetOpen(false)}
+        title="Workflows"
+        side="left"
+      >
+        <div className="space-y-0.5">
+          {sidebarWorkflows.map((item) => {
+            const Icon = WORKFLOW_ICONS[item.id] || Sparkles;
+            const active = workflow === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  selectWorkflow(item.id);
+                  setWorkflowSheetOpen(false);
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-jewel-md px-3 py-2.5 text-left text-[13px] ${
+                  active
+                    ? "bg-jewel-accent text-white font-semibold"
+                    : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
+                }`}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </Sheet>
+      <Sheet
+        open={inspectorSheetOpen}
+        onClose={() => setInspectorSheetOpen(false)}
+        title="Parameters"
+        side="right"
+      >
+        <div className="space-y-3">
+          <MultiSelectDropdown
+            label="Jewelry Type"
+            options={options?.jewelryTypes ?? ["Ring"]}
+            selectedValues={jewelryTypes}
+            onChange={setJewelryTypes}
+          />
+          <div>
+            <label className="ui-label" htmlFor="studio-prompt-mobile">
+              Optional instructions
+            </label>
+            <textarea
+              id="studio-prompt-mobile"
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              rows={2}
+              className="ui-input h-auto min-h-[2.75rem] py-2"
+            />
+          </div>
+          <ModelSelector
+            workflow={apiWorkflow}
+            hasInput={inputImageCount > 0}
+            imageCount={inputImageCount}
+            selectedEndpointId={modelEndpointId}
+            modelParams={modelParams}
+            onModelChange={(endpointId, model) => {
+              setModelEndpointId(endpointId);
+              setSelectedModel(model);
+            }}
+            onParamsChange={setModelParams}
+          />
+        </div>
+      </Sheet>
       {cropTarget && (
         <ImageCropModal
           open

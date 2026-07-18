@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
+import { Dialog } from "@/components/ui/Dialog";
 import { getCroppedImageFile, type CropAreaPixels } from "@/lib/cropImage";
 
 type AspectOption = "free" | "1:1" | "4:3" | "3:4";
@@ -35,11 +36,17 @@ export function ImageCropModal({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<CropAreaPixels | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCroppedAreaPixels(null);
+    }
+  }, [open, imageSrc]);
+
   const onCropComplete = useCallback((_area: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
   }, []);
-
-  if (!open) return null;
 
   const aspect = ASPECTS.find((a) => a.id === aspectId)?.value;
 
@@ -63,82 +70,62 @@ export function ImageCropModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+    <Dialog open={open} onClose={onCancel} title={title} className="max-w-2xl !p-0 overflow-hidden">
+      <div className="relative h-[360px] bg-slate-900">
+        <Cropper
+          image={imageSrc}
+          crop={crop}
+          zoom={zoom}
+          aspect={aspect}
+          onCropChange={setCrop}
+          onZoomChange={setZoom}
+          onCropComplete={onCropComplete}
+        />
+      </div>
+      <div className="space-y-3 border-t border-jewel-border px-4 py-3">
+        <div className="flex flex-wrap gap-1.5">
+          {ASPECTS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setAspectId(a.id)}
+              className={`rounded-jewel-sm px-2.5 py-1 text-[11px] font-semibold ${
+                aspectId === a.id
+                  ? "bg-jewel-accent text-white"
+                  : "bg-jewel-muted text-jewel-ink-muted hover:bg-jewel-border"
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-3 text-xs text-jewel-ink-muted">
+          <span className="w-10 shrink-0">Zoom</span>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="w-full"
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className="ui-btn-secondary" disabled={busy}>
+            Cancel
+          </button>
           <button
             type="button"
-            onClick={onCancel}
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
-            aria-label="Close crop"
+            onClick={() => void confirm()}
+            disabled={busy || !croppedAreaPixels}
+            className="ui-btn-primary"
           >
-            <X className="size-4" />
+            <Check className="size-3.5" />
+            {busy ? "Applying…" : "Apply crop"}
           </button>
         </div>
-
-        <div className="relative h-[360px] bg-slate-900">
-          <Cropper
-            image={imageSrc}
-            crop={crop}
-            zoom={zoom}
-            aspect={aspect}
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onCropComplete={onCropComplete}
-          />
-        </div>
-
-        <div className="space-y-3 border-t border-slate-200 px-4 py-3">
-          <div className="flex flex-wrap gap-1.5">
-            {ASPECTS.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => setAspectId(a.id)}
-                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
-                  aspectId === a.id
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-3 text-xs text-slate-600">
-            <span className="w-10 shrink-0">Zoom</span>
-            <input
-              type="range"
-              min={1}
-              max={3}
-              step={0.05}
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-full"
-            />
-          </label>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onCancel} className="ui-btn-secondary" disabled={busy}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void confirm()}
-              disabled={busy || !croppedAreaPixels}
-              className="ui-btn-primary"
-            >
-              <Check className="size-3.5" />
-              {busy ? "Applying…" : "Apply crop"}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

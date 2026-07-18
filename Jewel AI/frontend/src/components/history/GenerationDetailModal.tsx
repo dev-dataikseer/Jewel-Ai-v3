@@ -199,7 +199,7 @@ export function GenerationDetailModal({
         <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-slate-100 bg-white px-5 py-4">
           <Link to={`/?jobId=${job.id}`} className="ui-btn-primary h-9 px-4 text-xs">
             <ArrowUpRight className="size-3.5" />
-            Load Studio
+            Reuse in Studio
           </Link>
           {onRegenerate && (
             <button

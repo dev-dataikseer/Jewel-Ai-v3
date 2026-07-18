@@ -175,10 +175,13 @@ export function AdminPage() {
                       {metricsLoading ? "—" : `${(metrics?.success_rate ?? 0).toFixed(1)}%`}
                     </p>
                   </div>
-                  <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-3 rounded-full bg-jewel-muted overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all"
-                      style={{ width: metricsLoading ? "0%" : `${metrics?.success_rate ?? 0}%` }}
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: metricsLoading ? "0%" : `${metrics?.success_rate ?? 0}%`,
+                        backgroundColor: "var(--jewel-accent)",
+                      }}
                     />
                   </div>
                 </div>

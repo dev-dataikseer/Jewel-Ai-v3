@@ -235,9 +235,9 @@ export function HistoryPage() {
             <p className="font-semibold text-slate-700">No generations found</p>
             <Link
               to="/"
-              className="text-sm font-medium text-blue-600 hover:underline mt-2 inline-block"
+              className="text-sm font-medium text-jewel-accent hover:underline mt-2 inline-block"
             >
-              Go to Studio
+              Open Studio to generate
             </Link>
           </div>
         ) : (

@@ -14,19 +14,22 @@ export function AppLayout({ subtitle = "Production Suite", children }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-jewel-border bg-jewel-surface/90 backdrop-blur-md">
         <div className="mx-auto flex h-[3.75rem] max-w-[1600px] w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           {/* Brand + credits status (left) — balance sits with identity, not after Admin */}
           <div className="flex min-w-0 items-center gap-3">
             <Link to="/" className="flex min-w-0 items-center gap-3 hover:opacity-90 transition-opacity">
-              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
+              <div
+                className="grid size-9 shrink-0 place-items-center rounded-jewel-md text-white"
+                style={{ backgroundColor: "var(--jewel-accent)" }}
+              >
                 <Gem className="size-4" />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-[15px] font-semibold text-slate-900 leading-none">
+                <h1 className="truncate text-[15px] font-semibold text-jewel-ink leading-none">
                   Jewel AI Studio
                 </h1>
-                <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-jewel-ink-muted">
                   {subtitle}
                 </p>
               </div>
@@ -116,9 +119,7 @@ function NavLink({
       to={to}
       aria-label={label}
       className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors ${
-        active
-          ? "bg-blue-50 text-blue-700"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        active ? "ui-nav-active" : "text-jewel-ink-muted hover:bg-jewel-muted hover:text-jewel-ink"
       }`}
     >
       {children}
