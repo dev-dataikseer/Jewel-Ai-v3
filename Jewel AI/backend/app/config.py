@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     fal_key: str = ""
     # Admin-scoped key required for Platform Billing APIs (credits). Falls back to fal_key.
     fal_admin_key: str = ""
+    # When true, use fal queue webhooks (requires healthy Celery finalize). Default false =
+    # subscribe/wait in-process (more reliable for Studio UX).
+    fal_use_webhooks: bool = False
     api_public_url: str = "http://localhost:8000"
     # fal.ai billing / credits monitoring
     fal_credits_low_threshold: float = 5.0

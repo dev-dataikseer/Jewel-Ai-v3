@@ -142,9 +142,13 @@ class FalAdapter:
 
         client = _client(self.api_key)
 
+        # Webhooks are optional. Prefer subscribe so the job finishes in-process
+        # without depending on Celery finalize_fal_webhook (which some worker
+        # images never registered, leaving Studio stuck on "Waiting on fal.ai").
+        use_webhook = bool(getattr(settings, "fal_use_webhooks", False))
         is_local = "localhost" in settings.api_public_url or "127.0.0.1" in settings.api_public_url
         webhook_url = None
-        if request.job_id and not is_local:
+        if use_webhook and request.job_id and not is_local:
             from app.auth.security import create_webhook_token
 
             webhook_token = create_webhook_token(request.job_id)
@@ -154,17 +158,17 @@ class FalAdapter:
             )
 
         def _run() -> Any:
-            if is_local or not webhook_url:
-                return client.subscribe(
+            if webhook_url:
+                return client.submit(
                     endpoint,
                     arguments=arguments,
-                    with_logs=True,
-                    client_timeout=FAL_CLIENT_TIMEOUT,
+                    webhook_url=webhook_url,
                 )
-            return client.submit(
+            return client.subscribe(
                 endpoint,
                 arguments=arguments,
-                webhook_url=webhook_url,
+                with_logs=False,
+                client_timeout=FAL_CLIENT_TIMEOUT,
             )
 
         try:
@@ -172,7 +176,7 @@ class FalAdapter:
         except Exception as exc:
             raise RuntimeError(f"fal.ai call failed ({endpoint}): {exc}") from exc
 
-        if not is_local and webhook_url:
+        if webhook_url:
             req_id = (
                 result.request_id
                 if hasattr(result, "request_id")

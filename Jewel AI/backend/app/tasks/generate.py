@@ -115,7 +115,7 @@ async def _process_job_async(job_id: str) -> None:
             **(job.provider_metadata or meta),
             "timing": timing,
             "progressStage": "waiting_on_fal",
-            "statusHint": "Submitting to fal.ai",
+            "statusHint": "Generating with fal.ai",
         }
         job.provider_metadata = meta
         db.commit()
