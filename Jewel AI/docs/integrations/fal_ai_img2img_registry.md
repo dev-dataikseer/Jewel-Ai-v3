@@ -3,7 +3,13 @@
 
 **Scope:** Every active Img2Img and Image Editing endpoint accessible through the fal.ai unified API ecosystem.  
 **Filtering:** All models accept multimodal input (image + text prompt) and output a transformed/edited image. Pure T2I, I2V, and standalone CV utilities are excluded.  
-**Coverage:** 14 models across 2 architectural classifications — 11 Dedicated Image Editing endpoints and 3 Standard Image-to-Image endpoints.
+**Coverage:** App catalog image-edit models synced to official fal `/api` schemas (Jul 2026 audit). Explore reference: [fal image-to-image](https://fal.ai/explore/search?view=list&pageSize=40&categories=image-to-image).
+
+### Catalog sync notes (Jul 2026)
+- **GPT Image 2** (`openai/gpt-image-2/edit`): defaults `image_size=auto`, `quality=high`; enum presets only (no pixel strings).
+- **Nano Banana 2**: added `thinking_level` (`minimal`|`high`); `limit_generations` default `true`.
+- **Seedream 5.0 Pro** added: `bytedance/seedream/v5/pro/edit` (note: no `fal-ai/` prefix); sizes `auto_1K`/`auto_2K`.
+- **Seedream 5.0 Lite** vs **4.5**: separate size enums (Lite includes `auto_3K`; 4.5 does not); defaults `auto_2K`.
 
 ---
 
@@ -17,14 +23,15 @@
 | 4 | **FLUX.2 Pro Edit** | `fal-ai/flux-2-pro/edit` | Dedicated Editing | $0.03/MP | 4MP | 9 images |
 | 5 | **FLUX.1 Kontext Pro** | `fal-ai/flux-pro/kontext` | Std Img2Img / Context | $0.04/image | 1024x1024 | 1 image |
 | 6 | **Nano Banana 2 Edit** | `fal-ai/nano-banana-2/edit` | Dedicated Editing | $0.06-$0.16 | 4K | 14 images |
-| 7 | **Seedream 5.0 Lite Edit** | `fal-ai/bytedance/seedream/v5/lite/edit` | Dedicated Editing | $0.035/image | 3072x3072 | 10 images |
-| 8 | **Seedream 4.5 Edit** | `fal-ai/bytedance/seedream/v4.5/edit` | Dedicated Editing | $0.04/image | 4MP | 10 images |
-| 9 | **GPT Image 1.5 Edit** | `fal-ai/gpt-image-1.5/edit` | Dedicated Editing | $0.009-$0.133 | 1536x1024 | 16 images |
-| 10 | **FLUX.2 [dev] Edit** | `fal-ai/flux-2/edit` | Dedicated Editing | $0.012/MP | 4MP | 4 images |
-| 11 | **GLM-Image Image-to-Image** | `fal-ai/glm-image/image-to-image` | Std Img2Img | Per-MP | 2048x2048 | 4 images |
-| 12 | **FireRed Image Edit v1.1** | `fal-ai/firered-image-edit-v1.1` | Dedicated Editing | $0.0325/MP | 2352x1760+ | Multiple |
-| 13 | **Grok Imagine Edit** | `xai/grok-imagine-image/edit` | Dedicated Editing | $0.022/image | 2K | 3 images |
-| 14 | **FLUX.1 [dev] Image-to-Image** | `fal-ai/flux/dev/image-to-image` | Std Img2Img | $0.025/MP | Standard | 1 image |
+| 7 | **Seedream 5.0 Pro Edit** | `bytedance/seedream/v5/pro/edit` | Dedicated Editing | $0.0675+/image | 2K | 10 images |
+| 8 | **Seedream 5.0 Lite Edit** | `fal-ai/bytedance/seedream/v5/lite/edit` | Dedicated Editing | $0.035/image | 3072x3072 | 10 images |
+| 9 | **Seedream 4.5 Edit** | `fal-ai/bytedance/seedream/v4.5/edit` | Dedicated Editing | $0.04/image | 4MP | 10 images |
+| 10 | **GPT Image 1.5 Edit** | `fal-ai/gpt-image-1.5/edit` | Dedicated Editing | $0.009-$0.133 | 1536x1024 | 16 images |
+| 11 | **FLUX.2 [dev] Edit** | `fal-ai/flux-2/edit` | Dedicated Editing | $0.012/MP | 4MP | 4 images |
+| 12 | **GLM-Image Image-to-Image** | `fal-ai/glm-image/image-to-image` | Std Img2Img | Per-MP | 2048x2048 | 4 images |
+| 13 | **FireRed Image Edit v1.1** | `fal-ai/firered-image-edit-v1.1` | Dedicated Editing | $0.0325/MP | 2352x1760+ | Multiple |
+| 14 | **Grok Imagine Edit** | `xai/grok-imagine-image/edit` | Dedicated Editing | $0.022/image | 2K | 3 images |
+| 15 | **FLUX.1 [dev] Image-to-Image** | `fal-ai/flux/dev/image-to-image` | Std Img2Img | $0.025/MP | Standard | 1 image |
 
 ---
 
@@ -33,7 +40,7 @@
 ### Category A: Dedicated Image Editing / Instruction Endpoints
 Models explicitly designed for localized edits, conversational text instructions, inpainting, or multi-reference composition. These endpoints do not expose a `strength` parameter; instead, they use natural language understanding to determine edit scope.
 
-**Members (11):** FLUX.2 Max Edit, GPT Image 2 Edit, Nano Banana Pro Edit, FLUX.2 Pro Edit, Nano Banana 2 Edit, Seedream 5.0 Lite Edit, Seedream 4.5 Edit, GPT Image 1.5 Edit, FLUX.2 [dev] Edit, FireRed Image Edit v1.1, Grok Imagine Edit
+**Members (12):** FLUX.2 Max Edit, GPT Image 2 Edit, Nano Banana Pro Edit, FLUX.2 Pro Edit, Nano Banana 2 Edit, Seedream 5.0 Pro Edit, Seedream 5.0 Lite Edit, Seedream 4.5 Edit, GPT Image 1.5 Edit, FLUX.2 [dev] Edit, FireRed Image Edit v1.1, Grok Imagine Edit
 
 ### Category B: Standard Image-to-Image Endpoints
 Built on latent diffusion/rectified flow structures where a structural image is transformed globally based on a `strength` or `denoising_strength` parameter. These expose lower-level diffusion controls (guidance_scale, num_inference_steps, strength).
@@ -180,8 +187,9 @@ Built on latent diffusion/rectified flow structures where a structural image is 
   - `sync_mode` (boolean, default: `false`).
   - `safety_tolerance` (SafetyToleranceEnum, default: `"4"`) — `1` to `6`.
   - `enable_web_search` (boolean) — Web grounding for current visual references.
-  - `limit_generations` (boolean) — Cap generations at 1 per round.
+  - `limit_generations` (boolean, default: `true`) — Cap generations at 1 per round.
   - `system_prompt` (string) — Style/persona steering.
+  - `thinking_level` (ThinkingLevelEnum) — Optional `minimal` or `high` reasoning depth.
 
 * **Pricing:** $0.06 (512px), $0.08 (1K), $0.12 (2K), $0.16 (4K); web search +$0.015 [^37^]
 * **Max Resolution:** 4K (2048x2048)
@@ -190,7 +198,28 @@ Built on latent diffusion/rectified flow structures where a structural image is 
 
 ---
 
-### Rank 7. Seedream 5.0 Lite Edit
+### Rank 7. Seedream 5.0 Pro Edit
+
+* **API Path / Endpoint:** `bytedance/seedream/v5/pro/edit` (no `fal-ai/` prefix)
+* **Category:** [Dedicated Image Editing]
+* **Technical Summary:** ByteDance **Seedream 5.0 Pro** — grounded, region-precise editing that changes one element while keeping the rest of the frame intact, with layer separation, sketch completion, and up to 10 reference images.
+* **Search / SDK Tags:** `seedream-5-pro` | `bytedance` | `grounded-edit` | `multi-reference`
+* **Real Available API Parameters:**
+  - `prompt` (string, *required*)
+  - `image_urls` (list<string>, *required*) — Up to 10 references.
+  - `image_size` (ImageSize | Enum, default: `auto_2K`) — `square_hd`, `square`, `portrait_4_3`, `portrait_16_9`, `landscape_4_3`, `landscape_16_9`, `auto_1K`, `auto_2K`.
+  - `num_images` (integer, default: `1`)
+  - `output_format` (OutputFormatEnum, default: `jpeg`) — `jpeg` or `png`.
+  - `enable_safety_checker` (boolean, default: `true`)
+  - `sync_mode` (boolean)
+
+* **Pricing:** From $0.0675/image (≤1536) / $0.135 (≤2048); extra references +$0.0045
+* **Max Resolution:** 2K (2048x2048)
+* **Multi-Image Support:** Up to 10 reference images
+
+---
+
+### Rank 8. Seedream 5.0 Lite Edit
 
 * **API Path / Endpoint:** `fal-ai/bytedance/seedream/v5/lite/edit`
 * **Category:** [Dedicated Image Editing]
@@ -212,7 +241,7 @@ Built on latent diffusion/rectified flow structures where a structural image is 
 
 ---
 
-### Rank 8. Seedream 4.5 Edit
+### Rank 9. Seedream 4.5 Edit
 
 * **API Path / Endpoint:** `fal-ai/bytedance/seedream/v4.5/edit`
 * **Category:** [Dedicated Image Editing]

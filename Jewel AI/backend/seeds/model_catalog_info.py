@@ -67,7 +67,7 @@ MODEL_INFO: dict[str, dict] = {
         "pricing": "From $0.005/image (1024x768, low) to $0.401 (3840x2160, high)",
         "max_resolution": "3840x2160 (8.3MP), max edge 3840px",
         "multi_image_support": "Multiple image URLs supported",
-        "aspect_ratios": "Custom (multiples of 16, aspect ratio <= 3:1)",
+        "aspect_ratios": "auto, square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "fal-ai/flux-2-pro/edit": {
         "rank": 5,
@@ -147,8 +147,25 @@ MODEL_INFO: dict[str, dict] = {
         "multi_image_support": "Multiple reference images",
         "aspect_ratios": "auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16",
     },
-    "fal-ai/bytedance/seedream/v5/lite/edit": {
+    "bytedance/seedream/v5/pro/edit": {
         "rank": 10,
+        "model_category": "Dedicated Image Editing",
+        "architecture": (
+            "ByteDance Seedream 5.0 Pro — grounded, region-precise editing with layer separation "
+            "and sketch completion; up to 10 reference images."
+        ),
+        "key_strengths": (
+            "Precise single-element edits while preserving the rest of the frame, "
+            "native multi-reference grounded editing, auto_1K/auto_2K sizing."
+        ),
+        "tags": "seedream-5-pro | bytedance | grounded-edit | multi-reference | region-precise",
+        "pricing": "From $0.0675/image (≤1536) / $0.135 (≤2048); +$0.0045 per extra reference",
+        "max_resolution": "2K (2048x2048)",
+        "multi_image_support": "Up to 10 reference images",
+        "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_1K, auto_2K",
+    },
+    "fal-ai/bytedance/seedream/v5/lite/edit": {
+        "rank": 11,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "ByteDance Seedream 5.0 Lite — DiT with Chain of Thought reasoning pass before pixel generation."
@@ -164,7 +181,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_3K, auto_4K",
     },
     "fal-ai/bytedance/seedream/v4.5/edit": {
-        "rank": 11,
+        "rank": 12,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "ByteDance Seedream 4.5 — unified single-architecture generation and editing model."
@@ -180,7 +197,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_4K",
     },
     "fal-ai/gpt-image-1.5/edit": {
-        "rank": 12,
+        "rank": 13,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "OpenAI GPT Image 1.5 — natively multimodal model on GPT-5 architecture. "
@@ -197,7 +214,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "1024x1024, 1536x1024, 1024x1536",
     },
     "fal-ai/flux-2/edit": {
-        "rank": 13,
+        "rank": 14,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "Black Forest Labs FLUX.2 [dev] — full 32B rectified flow transformer with adjustable parameters."
@@ -213,7 +230,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "fal-ai/glm-image/image-to-image": {
-        "rank": 14,
+        "rank": 15,
         "model_category": "Standard Image-to-Image",
         "architecture": (
             "Zhipu AI GLM-Image — 9B autoregressive generator + 7B diffusion decoder (single-stream DiT)."
@@ -229,7 +246,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, landscape_16_9, landscape_4_3, portrait_16_9, portrait_4_3",
     },
     "fal-ai/firered-image-edit-v1.1": {
-        "rank": 15,
+        "rank": 16,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "FireRed Image Edit 1.1 — open-source editing model retrained from Qwen Image Edit 2509."
@@ -245,7 +262,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9",
     },
     "xai/grok-imagine-image/edit": {
-        "rank": 16,
+        "rank": 17,
         "model_category": "Dedicated Image Editing",
         "architecture": (
             "xAI Grok Imagine — Aurora engine diffusion optimized for prompt adherence."
@@ -261,7 +278,7 @@ MODEL_INFO: dict[str, dict] = {
         "aspect_ratios": "auto, 2:1, 20:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, 1:2",
     },
     "fal-ai/flux/dev/image-to-image": {
-        "rank": 17,
+        "rank": 18,
         "model_category": "Standard Image-to-Image",
         "architecture": (
             "Black Forest Labs FLUX.1 [dev] — 12B flow transformer with strength-based composition control."

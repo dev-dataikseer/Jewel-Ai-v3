@@ -76,8 +76,14 @@ def _merge_params(spec: ModelSpec | None, model_def: ModelDefinition | None, req
             merged["aspect_ratio"] = request.aspect_ratio
         elif "image_size" in schema_props and "image_size" not in merged:
             size_enum = schema_props.get("image_size", {}).get("enum") or []
-            if "1024x1024" in size_enum or "auto" in size_enum:
+            # GPT Image 1.x uses pixel strings; GPT Image 2 uses named presets + auto.
+            if "1024x1024" in size_enum:
                 merged["image_size"] = aspect_to_gpt_size(request.aspect_ratio)
+            elif any(v in size_enum for v in ("square_hd", "square", "landscape_16_9", "portrait_16_9")):
+                mapped = aspect_to_image_size(request.aspect_ratio)
+                merged["image_size"] = mapped if mapped in size_enum else ("auto" if "auto" in size_enum else mapped)
+            elif "auto" in size_enum:
+                merged["image_size"] = "auto"
             else:
                 merged["image_size"] = aspect_to_image_size(request.aspect_ratio)
 

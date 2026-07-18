@@ -122,9 +122,9 @@ NANO_BANANA_2_PARAMS = {
             "enum": ["1", "2", "3", "4", "5", "6"],
             "default": "4",
         },
+        "limit_generations": {"type": "boolean", "title": "Limit generations", "default": True},
         "enable_web_search": {"type": "boolean", "title": "Web search", "default": False},
         "system_prompt": {"type": "string", "title": "System prompt"},
-        "limit_generations": {"type": "boolean", "title": "Limit generations", "default": True},
         "thinking_level": {
             "type": "string",
             "title": "Thinking level",
@@ -145,27 +145,23 @@ GPT_IMAGE_2_PARAMS = {
         "image_size": {
             "type": "string",
             "title": "Image size",
+            # Official fal openai/gpt-image-2/edit schema (Jul 2026)
             "enum": [
                 "auto",
                 "square_hd",
-                "landscape_4_3",
-                "landscape_16_9",
+                "square",
                 "portrait_4_3",
                 "portrait_16_9",
-                "1024x1024",
-                "1536x1024",
-                "1024x1536",
-                "2048x2048",
-                "2560x1440",
-                "3840x2160",
+                "landscape_4_3",
+                "landscape_16_9",
             ],
-            "default": "1024x1024",
+            "default": "auto",
         },
         "quality": {
             "type": "string",
             "title": "Quality",
             "enum": ["auto", "low", "medium", "high"],
-            "default": "medium",
+            "default": "high",
         },
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 4, "default": 1},
         "output_format": {
@@ -396,17 +392,85 @@ VTON_CAPS = {
     "virtual_try_on": True,
 }
 
-SEEDREAM_EDIT_PARAMS = {
+# Seedream 5.0 Lite official enums include auto_3K; 4.5 docs list auto_2K/auto_4K only.
+SEEDREAM_V5_LITE_EDIT_PARAMS = {
     "type": "object",
     "properties": {
         "image_size": {
             "type": "string",
             "title": "Image size",
-            "enum": ["square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9", "auto_2K", "auto_3K", "auto_4K"],
-            "default": "square_hd",
+            "enum": [
+                "square_hd",
+                "square",
+                "portrait_4_3",
+                "portrait_16_9",
+                "landscape_4_3",
+                "landscape_16_9",
+                "auto_2K",
+                "auto_3K",
+                "auto_4K",
+            ],
+            "default": "auto_2K",
         },
         "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 6, "default": 1},
         "max_images": {"type": "integer", "title": "Max images per gen", "minimum": 1, "maximum": 6, "default": 1},
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+    },
+}
+
+SEEDREAM_V45_EDIT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "image_size": {
+            "type": "string",
+            "title": "Image size",
+            "enum": [
+                "square_hd",
+                "square",
+                "portrait_4_3",
+                "portrait_16_9",
+                "landscape_4_3",
+                "landscape_16_9",
+                "auto_2K",
+                "auto_4K",
+            ],
+            "default": "auto_2K",
+        },
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 6, "default": 1},
+        "max_images": {"type": "integer", "title": "Max images per gen", "minimum": 1, "maximum": 6, "default": 1},
+        "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
+    },
+}
+
+# Back-compat alias used by older references / docs snippets.
+SEEDREAM_EDIT_PARAMS = SEEDREAM_V5_LITE_EDIT_PARAMS
+
+# Seedream 5.0 Pro uses a different endpoint id (no fal-ai/ prefix) and distinct size enums.
+SEEDREAM_V5_PRO_EDIT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "image_size": {
+            "type": "string",
+            "title": "Image size",
+            "enum": [
+                "square_hd",
+                "square",
+                "portrait_4_3",
+                "portrait_16_9",
+                "landscape_4_3",
+                "landscape_16_9",
+                "auto_1K",
+                "auto_2K",
+            ],
+            "default": "auto_2K",
+        },
+        "num_images": {"type": "integer", "title": "Images", "minimum": 1, "maximum": 6, "default": 1},
+        "output_format": {
+            "type": "string",
+            "title": "Output format",
+            "enum": ["jpeg", "png"],
+            "default": "jpeg",
+        },
         "enable_safety_checker": {"type": "boolean", "title": "Safety checker", "default": True},
     },
 }
@@ -794,7 +858,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
         "input_schema": GPT_IMAGE_2_PARAMS,
-        "default_params": {"image_size": "1024x1024", "quality": "medium", "num_images": 1, "output_format": "png"},
+        "default_params": {"image_size": "auto", "quality": "high", "num_images": 1, "output_format": "png"},
         "workflow_allowlist": None,
         "config": {
             "image_field": "image_urls",
@@ -918,30 +982,30 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "cost_per_call": 0.039,
     },
     {
-        "endpoint_id": "fal-ai/bytedance/seedream/v5/lite/edit",
-        "display_name": "Seedream 5.0 Lite Edit",
+        "endpoint_id": "bytedance/seedream/v5/pro/edit",
+        "display_name": "Seedream 5.0 Pro Edit",
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": SEEDREAM_EDIT_PARAMS,
+        "input_schema": SEEDREAM_V5_PRO_EDIT_PARAMS,
         "default_params": {
-            "image_size": "square_hd",
+            "image_size": "auto_2K",
             "num_images": 1,
-            "max_images": 1,
+            "output_format": "jpeg",
             "enable_safety_checker": True,
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls", "max_reference_images": 10},
         "sort_order": 10,
-        "cost_per_call": 0.035,
+        "cost_per_call": 0.0675,
     },
     {
-        "endpoint_id": "fal-ai/bytedance/seedream/v4.5/edit",
-        "display_name": "Seedream 4.5 Edit",
+        "endpoint_id": "fal-ai/bytedance/seedream/v5/lite/edit",
+        "display_name": "Seedream 5.0 Lite Edit",
         "category": "image_to_image",
         "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
-        "input_schema": SEEDREAM_EDIT_PARAMS,
+        "input_schema": SEEDREAM_V5_LITE_EDIT_PARAMS,
         "default_params": {
-            "image_size": "square_hd",
+            "image_size": "auto_2K",
             "num_images": 1,
             "max_images": 1,
             "enable_safety_checker": True,
@@ -949,6 +1013,23 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls", "max_reference_images": 10},
         "sort_order": 11,
+        "cost_per_call": 0.035,
+    },
+    {
+        "endpoint_id": "fal-ai/bytedance/seedream/v4.5/edit",
+        "display_name": "Seedream 4.5 Edit",
+        "category": "image_to_image",
+        "capabilities": {**IMAGE_EDIT_CAPS, "multi_image": True},
+        "input_schema": SEEDREAM_V45_EDIT_PARAMS,
+        "default_params": {
+            "image_size": "auto_2K",
+            "num_images": 1,
+            "max_images": 1,
+            "enable_safety_checker": True,
+        },
+        "workflow_allowlist": None,
+        "config": {"image_field": "image_urls", "max_reference_images": 10},
+        "sort_order": 12,
         "cost_per_call": 0.04,
     },
     {
@@ -967,7 +1048,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls"},
-        "sort_order": 12,
+        "sort_order": 13,
         "cost_per_call": 0.08,
     },
     {
@@ -986,7 +1067,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls", "max_reference_images": 4},
-        "sort_order": 13,
+        "sort_order": 14,
         "cost_per_call": 0.012,
     },
     {
@@ -1004,7 +1085,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls", "max_reference_images": 4},
-        "sort_order": 14,
+        "sort_order": 15,
         "cost_per_call": 0.05,
     },
     {
@@ -1023,7 +1104,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls"},
-        "sort_order": 15,
+        "sort_order": 16,
         "cost_per_call": 0.0325,
     },
     {
@@ -1035,7 +1116,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         "default_params": {"num_images": 1, "aspect_ratio": "auto", "resolution": "1k", "output_format": "jpeg"},
         "workflow_allowlist": None,
         "config": {"image_field": "image_urls", "max_reference_images": 3},
-        "sort_order": 16,
+        "sort_order": 17,
         "cost_per_call": 0.022,
     },
     {
@@ -1055,7 +1136,7 @@ _IMAGE_EDIT_MODELS: list[dict] = [
         },
         "workflow_allowlist": None,
         "config": {"image_field": "image_url"},
-        "sort_order": 17,
+        "sort_order": 18,
         "cost_per_call": 0.025,
     },
 ]
