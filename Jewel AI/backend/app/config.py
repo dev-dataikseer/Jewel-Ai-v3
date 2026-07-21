@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     allow_prompt_reseed: bool | None = None
     webhook_pending_timeout_minutes: int = 20
     stuck_job_minutes: int = 15
+    # Celery token-bucket for process_image_job (protects DB/R2; fal queue absorbs bursts).
+    fal_celery_rate_limit: str = "10/s"
     daily_job_limit: int = 100
     schema_via_alembic: bool = False
     # When true, debit user credits atomically on job create (SELECT FOR UPDATE).

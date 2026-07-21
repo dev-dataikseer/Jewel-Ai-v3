@@ -331,6 +331,8 @@ class Batch(Base):
     total_jobs: Mapped[int] = mapped_column(Integer, default=0)
     completed_jobs: Mapped[int] = mapped_column(Integer, default=0)
     cost_policy: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

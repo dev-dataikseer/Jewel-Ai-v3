@@ -65,3 +65,10 @@ def _init_sentry() -> None:
 
 
 _init_sentry()
+
+# Apply fal job rate limit from settings (token bucket across workers sharing Redis).
+try:
+    _rl = (settings.fal_celery_rate_limit or "10/s").strip() or "10/s"
+    _generate_tasks.process_image_job.rate_limit = _rl
+except Exception:
+    pass

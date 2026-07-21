@@ -391,6 +391,23 @@ def migrate_batch_user_column(engine: Engine) -> None:
                 pass
 
 
+def migrate_batch_wallclock_columns(engine: Engine) -> None:
+    """Add batches.started_at / completed_at for batch wall-clock timing."""
+    inspector = inspect(engine)
+    if not inspector.has_table("batches"):
+        return
+    dialect = engine.dialect.name
+    dt = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+    with engine.begin() as conn:
+        if dialect == "postgresql":
+            conn.execute(text("ALTER TABLE batches ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE"))
+            conn.execute(text("ALTER TABLE batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE"))
+        else:
+            _add_column_if_missing(conn, inspector, "batches", "started_at", dt)
+            inspector = inspect(engine)
+            _add_column_if_missing(conn, inspector, "batches", "completed_at", dt)
+
+
 def migrate_provider_admin_key_column(engine: Engine) -> None:
     """Add providers.encrypted_admin_api_key for fal Platform Billing Admin key."""
     import logging

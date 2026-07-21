@@ -137,6 +137,7 @@ async def _process_job_async(job_id: str) -> None:
         meta["progressStage"] = "composing_prompt"
         job.provider_metadata = meta
         db.commit()
+        _mark_batch_started(db, job.batch_id)
 
         preset_addon = None
         if job.style_preset_id:
@@ -279,7 +280,8 @@ async def _process_job_async(job_id: str) -> None:
             )
             extra_urls.append(storage.save_bytes(composed_blob, filename=f"generated_{uuid4().hex}.png"))
 
-        timing["completed"] = datetime.now(timezone.utc).isoformat()
+        timing["storage_saved"] = datetime.now(timezone.utc).isoformat()
+        timing["completed"] = timing["storage_saved"]
         merged = {
             **meta,
             **packet.to_meta(),
@@ -291,6 +293,15 @@ async def _process_job_async(job_id: str) -> None:
             "statusHint": None,
             "logoApplied": logo_mode if logo_url else "none",
         }
+        # Sync path: fal returned inline — capture inference_time if present
+        from app.services.job_timing import extract_fal_inference_seconds, record_job_eta_sample
+
+        sync_payload = result.metadata or {}
+        inference = extract_fal_inference_seconds(sync_payload) or extract_fal_inference_seconds(
+            {"metrics": sync_payload.get("metrics"), "payload": sync_payload}
+        )
+        if inference is not None:
+            merged["fal_inference_time"] = inference
         if result.metadata and result.metadata.get("fal_request_id"):
             merged["fal_request_id"] = result.metadata["fal_request_id"]
         job.status = "COMPLETED"
@@ -304,11 +315,7 @@ async def _process_job_async(job_id: str) -> None:
         db.commit()
 
         try:
-            from app.services.job_timing import duration_from_timing, record_duration_sample
-
-            dur = duration_from_timing(merged)
-            if dur is not None:
-                record_duration_sample(job, dur)
+            record_job_eta_sample(job, merged)
         except Exception:
             pass
 
@@ -353,6 +360,20 @@ def _update_batch(db: Session, batch_id: str) -> None:
     batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if not batch:
         return
+    now = datetime.now(timezone.utc)
+    if getattr(batch, "started_at", None) is None:
+        # First child progress — mark batch wall-clock start
+        any_started = (
+            db.query(GenerationJob.id)
+            .filter(
+                GenerationJob.batch_id == batch_id,
+                GenerationJob.status.in_(("PROCESSING", "COMPLETED", "FAILED", "CANCELLED")),
+            )
+            .first()
+        )
+        if any_started:
+            batch.started_at = now
+
     completed = (
         db.query(GenerationJob)
         .filter(GenerationJob.batch_id == batch_id, GenerationJob.status == "COMPLETED")
@@ -376,10 +397,29 @@ def _update_batch(db: Session, batch_id: str) -> None:
             batch.status = "CANCELLED"
         else:
             batch.status = "COMPLETED_WITH_ERRORS"
+        if getattr(batch, "completed_at", None) is None:
+            batch.completed_at = now
     db.commit()
 
 
-@celery_app.task(name="app.tasks.generate.process_image_job", bind=True, max_retries=2, default_retry_delay=30)
+def _mark_batch_started(db: Session, batch_id: str | None) -> None:
+    if not batch_id:
+        return
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        return
+    if getattr(batch, "started_at", None) is None:
+        batch.started_at = datetime.now(timezone.utc)
+        db.commit()
+
+
+@celery_app.task(
+    name="app.tasks.generate.process_image_job",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=30,
+    rate_limit=None,  # set from settings after import (see celery_app)
+)
 def process_image_job(self, job_id: str, request_id: str | None = None) -> None:
     """Run generation. Transient failures retry via Celery; permanent failures stay FAILED.
 
@@ -550,10 +590,18 @@ def _recover_fal_result(job_id: str) -> bool:
 
         if not isinstance(payload, dict):
             return False
+        from app.api.routers.providers import (
+            _stamp_webhook_observability,
+            extract_fal_webhook_request_id,
+        )
+
         # Normalize to webhook-like envelope expected by finalize.
         envelope = payload if "payload" in payload else {"status": "OK", "payload": payload}
+        # Ensure request_id is present for finalize matching (poll payloads vary).
+        if not extract_fal_webhook_request_id(envelope) and request_id:
+            envelope = {**envelope, "request_id": str(request_id)}
 
-        meta["webhook_accepted"] = True
+        meta = _stamp_webhook_observability(meta, envelope)
         meta["recovered_via_fal_poll"] = True
         job.provider_metadata = meta
         db.commit()
@@ -631,7 +679,11 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
             return
 
         # Defense in depth: refuse finalize if payload request_id does not match job.
-        from app.api.routers.providers import extract_fal_webhook_request_id
+        from app.api.routers.providers import (
+            _stamp_webhook_observability,
+            extract_fal_webhook_request_id,
+        )
+        from app.services.job_timing import extract_fal_inference_seconds, record_job_eta_sample
 
         expected = (job.provider_metadata or {}).get("fal_request_id") or (
             (job.provider_metadata or {}).get("usage") or {}
@@ -643,6 +695,11 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
                 extra={"extra_fields": {"job_id": job_id, "expected": expected, "got": got}},
             )
             return
+
+        # Best-effort receipt stamp for poll recovery (webhook path already stamped).
+        meta0 = _stamp_webhook_observability(dict(job.provider_metadata or {}), payload or {})
+        job.provider_metadata = meta0
+        db.commit()
 
         model_def = get_model_definition(db, job.provider_model) if job.provider_model else None
         config = (model_def.config or {}) if model_def else {}
@@ -677,7 +734,7 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
         if not job or job.status == "COMPLETED":
             return
-        meta = job.provider_metadata or {}
+        meta = dict(job.provider_metadata or {})
         if job.cost is None and model_def and model_def.cost_per_call is not None:
             job.cost = float(model_def.cost_per_call)
         job.output_url = primary_url
@@ -685,23 +742,28 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
         job.status = "COMPLETED"
         if not job.final_prompt and meta.get("composedPrompt"):
             job.final_prompt = meta.get("composedPrompt")
-        job.provider_metadata = {
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        timing = dict(meta.get("timing") or {})
+        timing.setdefault("fal_webhook_received", now_iso)
+        timing["storage_saved"] = now_iso
+        timing["completed"] = now_iso
+        if meta.get("fal_inference_time") is None:
+            inference = extract_fal_inference_seconds(payload)
+            if inference is not None:
+                meta["fal_inference_time"] = inference
+
+        merged = {
             **meta,
             "webhook_completed": True,
             "progressStage": "completed",
             "logoApplied": logo_mode if logo_url else "none",
-            "timing": {
-                **(meta.get("timing") or {}),
-                "completed": datetime.now(timezone.utc).isoformat(),
-            },
+            "timing": timing,
         }
+        job.provider_metadata = merged
         db.commit()
         try:
-            from app.services.job_timing import duration_from_timing, record_duration_sample
-
-            dur = duration_from_timing(job.provider_metadata)
-            if dur is not None:
-                record_duration_sample(job, dur)
+            record_job_eta_sample(job, merged)
         except Exception:
             pass
         if job.batch_id:

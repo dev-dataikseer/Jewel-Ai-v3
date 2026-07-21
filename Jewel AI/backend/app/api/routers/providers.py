@@ -33,6 +33,32 @@ def extract_fal_webhook_request_id(payload: dict) -> str | None:
     return None
 
 
+def _stamp_webhook_observability(meta: dict, payload: dict) -> dict:
+    """Stamp webhook receipt + fal inference_time onto job metadata."""
+    from datetime import datetime, timezone
+
+    from app.services.job_timing import extract_fal_inference_seconds
+
+    out = dict(meta or {})
+    timing = dict(out.get("timing") or {})
+    now = datetime.now(timezone.utc).isoformat()
+    timing.setdefault("fal_webhook_received", now)
+    out["timing"] = timing
+    out["webhook_accepted"] = True
+
+    inference = extract_fal_inference_seconds(payload)
+    if inference is not None:
+        out["fal_inference_time"] = inference
+        metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else None
+        if metrics is None and isinstance(payload.get("payload"), dict):
+            nested = payload["payload"].get("metrics")
+            if isinstance(nested, dict):
+                metrics = nested
+        if metrics:
+            out["fal_metrics"] = metrics
+    return out
+
+
 def _expected_fal_request_id(job: GenerationJob) -> str | None:
     meta = job.provider_metadata or {}
     return meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id")
@@ -167,8 +193,8 @@ def _fal_webhook_sync(db: Session, job_id: str, payload: dict) -> dict:
             return {"status": "already_processed", "reason": "already_processed"}
 
         # Mark accepted so stuck sweep won't re-queue while finalize runs.
-        meta = dict(job.provider_metadata or {})
-        meta["webhook_accepted"] = True
+        # Stamp fal_webhook_received + inference_time before finalize I/O.
+        meta = _stamp_webhook_observability(dict(job.provider_metadata or {}), payload)
         job.provider_metadata = meta
         db.commit()
 
@@ -204,6 +230,13 @@ def _fal_webhook_sync(db: Session, job_id: str, payload: dict) -> dict:
             error = payload.get("error", "Unknown webhook error")
             job.status = "FAILED"
             job.error_message = str(error)
+            meta = dict(job.provider_metadata or {})
+            timing = dict(meta.get("timing") or {})
+            from datetime import datetime, timezone
+
+            timing["failed"] = datetime.now(timezone.utc).isoformat()
+            meta["timing"] = timing
+            job.provider_metadata = meta
             db.commit()
             if job.batch_id:
                 try:

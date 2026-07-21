@@ -163,6 +163,8 @@ def _batch_to_out(db: Session, batch: Batch, *, include_jobs: bool = True) -> Ba
         processing_jobs=counts.get("PROCESSING", 0),
         failed_jobs=counts.get("FAILED", 0),
         cancelled_jobs=counts.get("CANCELLED", 0),
+        started_at=getattr(batch, "started_at", None),
+        completed_at=getattr(batch, "completed_at", None),
         created_at=batch.created_at,
         updated_at=batch.updated_at,
         jobs=jobs_out,
@@ -477,7 +479,7 @@ def create_bulk_jobs(
     from app.services.queue_dispatch import celery_worker_available
 
     queue_mode = "celery" if celery_worker_available() else "inline"
-    enqueue_image_jobs([j.id for j in jobs], stagger_ms=250, request_id=_request_id(request))
+    enqueue_image_jobs([j.id for j in jobs], stagger_ms=0, request_id=_request_id(request))
     return {
         "batchId": batch.id,
         "jobIds": [j.id for j in jobs],

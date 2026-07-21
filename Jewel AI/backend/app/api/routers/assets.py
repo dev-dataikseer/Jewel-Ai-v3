@@ -1,3 +1,4 @@
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -7,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.auth.deps import RequireUser
 from app.config import get_settings
 from app.database import get_db
+from app.logging_config import get_logger
 from app.models import Asset
 from app.pipeline.validator import validate_upload
 from app.providers.fal_upload import upload_bytes_to_fal
@@ -14,9 +16,10 @@ from app.schemas.common import AssetOut
 from app.storage.local import storage
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 
-def _asset_out(asset: Asset) -> AssetOut:
+def _asset_out(asset: Asset, *, upload_ms: int | None = None) -> AssetOut:
     from app.security.media_signing import sign_media_url
 
     out = AssetOut.model_validate(asset)
@@ -24,6 +27,8 @@ def _asset_out(asset: Asset) -> AssetOut:
     data["original_url"] = sign_media_url(data.get("original_url")) or data.get("original_url")
     # processed_url may be fal CDN — leave as-is if absolute non-upload
     data["processed_url"] = sign_media_url(data.get("processed_url")) if data.get("processed_url") else None
+    if upload_ms is not None:
+        data["upload_ms"] = int(upload_ms)
     return AssetOut.model_validate(data)
 
 
@@ -73,6 +78,7 @@ async def upload_asset(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    t0 = time.perf_counter()
     content = await file.read()
     content_type = file.content_type or "image/jpeg"
     validate_upload(content_type, len(content), content)
@@ -86,7 +92,19 @@ async def upload_asset(
         content_type=content_type,
         filename=filename,
     )
-    return _asset_out(asset)
+    upload_ms = int((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "asset_upload_complete",
+        extra={
+            "extra_fields": {
+                "asset_id": asset.id,
+                "user_id": user.id,
+                "upload_ms": upload_ms,
+                "bytes": len(content),
+            }
+        },
+    )
+    return _asset_out(asset, upload_ms=upload_ms)
 
 
 @router.get("/{asset_id}", response_model=AssetOut)
@@ -112,6 +130,7 @@ async def bulk_upload(
     if len(files) > 30:
         raise HTTPException(status_code=400, detail="Maximum 30 files")
 
+    t0 = time.perf_counter()
     prepared: list[tuple[bytes, str, str]] = []
     for file in files:
         content = await file.read()
@@ -146,4 +165,17 @@ async def bulk_upload(
         return assets
 
     assets = await run_in_threadpool(_persist_all)
-    return [_asset_out(a) for a in assets]
+    total_ms = int((time.perf_counter() - t0) * 1000)
+    per_ms = int(total_ms / max(1, len(assets)))
+    logger.info(
+        "asset_bulk_upload_complete",
+        extra={
+            "extra_fields": {
+                "user_id": user.id,
+                "count": len(assets),
+                "upload_ms_total": total_ms,
+                "upload_ms_avg": per_ms,
+            }
+        },
+    )
+    return [_asset_out(a, upload_ms=per_ms) for a in assets]

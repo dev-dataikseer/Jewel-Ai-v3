@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
         migrate_job_indexes,
         migrate_tenancy_columns,
         migrate_batch_user_column,
+        migrate_batch_wallclock_columns,
         migrate_provider_admin_key_column,
         migrate_generation_job_runtime_columns,
         migrate_prompt_fragments,
@@ -79,6 +80,13 @@ async def lifespan(app: FastAPI):
         migrate_prompt_fragments(engine)
         migrate_provider_admin_key_column(engine)
         migrate_mfa_and_audit(engine)
+    # Idempotent additive columns — safe on every boot (including Alembic-managed DBs).
+    try:
+        migrate_batch_wallclock_columns(engine)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("migrate_batch_wallclock_columns skipped")
     # When SCHEMA_VIA_ALEMBIC=true, operators run `alembic upgrade head` — no boot DDL.
     db = SessionLocal()
     try:

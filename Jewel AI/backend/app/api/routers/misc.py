@@ -216,11 +216,14 @@ def admin_usage(
         .limit(limit)
         .all()
     )
+    from app.services.job_timing import compute_duration_splits
+
     recent_jobs = []
     for job, email in recent:
         duration_ms = None
         if job.processing_started_at and job.status in ("COMPLETED", "FAILED") and job.updated_at:
             duration_ms = int((job.updated_at - job.processing_started_at).total_seconds() * 1000)
+        splits = compute_duration_splits(job.provider_metadata or {})
         recent_jobs.append(
             {
                 "id": job.id,
@@ -238,6 +241,10 @@ def admin_usage(
                 "updated_at": job.updated_at.isoformat() if job.updated_at else None,
                 "processing_started_at": job.processing_started_at.isoformat() if job.processing_started_at else None,
                 "duration_ms": duration_ms,
+                "prep_ms": splits.get("prep_ms"),
+                "fal_inference_ms": splits.get("fal_inference_ms"),
+                "finalize_ms": splits.get("finalize_ms"),
+                "worker_total_ms": splits.get("worker_total_ms"),
             }
         )
 

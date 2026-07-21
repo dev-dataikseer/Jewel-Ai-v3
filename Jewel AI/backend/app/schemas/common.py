@@ -101,6 +101,8 @@ class BatchOut(BaseModel):
     processing_jobs: int = 0
     failed_jobs: int = 0
     cancelled_jobs: int = 0
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     jobs: list["JobOut"] = Field(default_factory=list)
@@ -149,6 +151,7 @@ class AssetOut(BaseModel):
     original_url: str
     type: str
     created_at: datetime
+    upload_ms: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
