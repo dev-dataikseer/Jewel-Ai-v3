@@ -182,6 +182,16 @@ class FalAdapter:
                 if hasattr(result, "request_id")
                 else (result.get("request_id") if isinstance(result, dict) else str(result))
             )
+            logger.info(
+                "fal webhook submit",
+                extra={
+                    "extra_fields": {
+                        "job_id": request.job_id,
+                        "fal_request_id": req_id,
+                        "endpoint": endpoint,
+                    }
+                },
+            )
             cost = model_def.cost_per_call if model_def and model_def.cost_per_call else 0.1
             return GenerationResult(
                 image_bytes=None,
@@ -200,6 +210,17 @@ class FalAdapter:
                 f"fal.ai returned no images for {endpoint}. "
                 f"Response keys: {list(result.keys()) if isinstance(result, dict) else type(result)}"
             )
+
+        logger.info(
+            "fal subscribe complete",
+            extra={
+                "extra_fields": {
+                    "job_id": request.job_id,
+                    "endpoint": endpoint,
+                    "image_count": len(img_urls),
+                }
+            },
+        )
 
         all_bytes: list[bytes] = []
         from app.security.url_fetch import safe_fetch_image_bytes

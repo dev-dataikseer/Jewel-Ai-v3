@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Replace, UploadCloud, X } from "lucide-react";
+import { Crop, Replace, UploadCloud, X } from "lucide-react";
 
 type Props = {
   id: string;
@@ -9,11 +9,12 @@ type Props = {
   single?: boolean;
   multiple?: boolean;
   error?: string;
-  /** Compact chip when assets already selected */
+  /** Compact chip when assets already selected (inspector / brand kit) */
   compact?: boolean;
+  /** Fill parent cell equally with Product stage (Studio dual Input) */
+  stage?: boolean;
   fileCount?: number;
   fileName?: string | null;
-  /** Optional low-priority crop (not shown in brand kit) */
   onCrop?: () => void;
   cropLabel?: string;
   onClear?: () => void;
@@ -29,6 +30,7 @@ export function UploadZone({
   multiple,
   error,
   compact,
+  stage,
   fileCount,
   fileName,
   onCrop,
@@ -57,6 +59,110 @@ export function UploadZone({
 
   const hasPreview = previews.length > 0;
 
+  const fileInput = (
+    <input
+      ref={inputRef}
+      id={inputId}
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      className="hidden"
+      aria-describedby={helpId}
+      multiple={multiple && !single}
+      onChange={(e) => applyFiles(e.target.files)}
+    />
+  );
+
+  if (stage) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col">
+        <div
+          className={`relative min-h-0 flex-1 overflow-hidden rounded-lg transition-colors ${
+            dragging
+              ? "border-2 border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)]/40"
+              : error
+                ? "border-2 border-[var(--jewel-danger)] bg-white"
+                : hasPreview
+                  ? "border border-[var(--jewel-border)] bg-white"
+                  : "border-2 border-dashed border-[var(--jewel-border)] bg-white hover:border-[var(--jewel-accent)]"
+          }`}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
+          {hasPreview ? (
+            <div className="absolute inset-0 flex flex-col">
+              <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--jewel-hairline)] px-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-jewel-ink-muted">
+                  {label}
+                </span>
+                <div className="flex items-center gap-0.5">
+                  {onCrop ? (
+                    <button
+                      type="button"
+                      onClick={onCrop}
+                      className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
+                      aria-label={cropLabel}
+                      title={cropLabel}
+                    >
+                      <Crop className="size-3.5" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-[var(--jewel-surface-muted)]"
+                    aria-label="Replace image"
+                    title="Replace"
+                  >
+                    <Replace className="size-3.5" />
+                  </button>
+                  {onClear ? (
+                    <button
+                      type="button"
+                      onClick={onClear}
+                      className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label="Clear image"
+                      title="Clear"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="relative min-h-0 flex-1 flex items-center justify-center p-2">
+                <img
+                  src={previews[0]}
+                  alt={`${label} preview`}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            </div>
+          ) : (
+            <label
+              htmlFor={inputId}
+              className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-1.5 p-3 text-center"
+            >
+              <UploadCloud className="size-7 text-[var(--jewel-accent)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-jewel-ink">
+                {dragging ? "Drop image" : label}
+              </span>
+              <span className="text-[11px] text-jewel-ink-muted">Click or drop to upload</span>
+            </label>
+          )}
+          {fileInput}
+        </div>
+        <p id={helpId} className="sr-only">
+          Upload {label.toLowerCase()} image as JPEG, PNG, or WebP
+        </p>
+        {error ? <p className="mt-1 text-xs text-red-600 shrink-0">{error}</p> : null}
+      </div>
+    );
+  }
+
   if (compact && hasPreview) {
     return (
       <div className="space-y-1">
@@ -71,7 +177,7 @@ export function UploadZone({
         >
           <img
             src={previews[0]}
-            alt=""
+            alt={`${label} preview`}
             className="size-12 shrink-0 rounded-lg object-cover border border-slate-100"
           />
           <div className="min-w-0 flex-1">
@@ -83,6 +189,17 @@ export function UploadZone({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
+            {onCrop ? (
+              <button
+                type="button"
+                onClick={onCrop}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                title={cropLabel}
+                aria-label={cropLabel}
+              >
+                <Crop className="size-3.5" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -104,25 +221,8 @@ export function UploadZone({
               </button>
             )}
           </div>
-          <input
-            ref={inputRef}
-            id={inputId}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            multiple={multiple && !single}
-            onChange={(e) => applyFiles(e.target.files)}
-          />
+          {fileInput}
         </div>
-        {onCrop && (
-          <button
-            type="button"
-            onClick={onCrop}
-            className="text-[10px] font-medium text-slate-400 hover:text-slate-600"
-          >
-            {cropLabel} (optional)
-          </button>
-        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     );
@@ -157,18 +257,9 @@ export function UploadZone({
       >
         <UploadCloud className="mb-1 size-5 text-blue-600" aria-hidden="true" />
         <span className="text-[11px] font-semibold text-slate-700">
-          {dragging ? "Drop to upload" : "Click or drop to upload"}
+          {dragging ? "Drop" : "Upload"}
         </span>
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          aria-describedby={helpId}
-          multiple={multiple && !single}
-          onChange={(e) => applyFiles(e.target.files)}
-        />
+        {fileInput}
       </label>
       <p id={helpId} className="sr-only">
         Upload {label.toLowerCase()} image as JPEG, PNG, or WebP
@@ -180,7 +271,8 @@ export function UploadZone({
             <img
               key={`${url}-${i}`}
               src={url}
-              alt=""
+              alt={`${label} preview ${i + 1}`}
+              loading="lazy"
               className="size-11 rounded-lg border border-slate-200 object-cover"
             />
           ))}

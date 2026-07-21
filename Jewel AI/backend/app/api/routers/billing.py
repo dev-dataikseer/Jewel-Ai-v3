@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth.deps import RequireAdmin, RequireUser
+from app.auth.deps import RequireUser
 from app.database import get_db
 from app.providers.fal_billing.service import get_credits_view
 
@@ -31,8 +31,8 @@ def get_fal_credits(user: RequireUser, db: Session = Depends(get_db)):
 
 
 @router.post("/fal-credits/refresh", response_model=FalCreditsOut)
-def refresh_fal_credits(user: RequireAdmin, db: Session = Depends(get_db)):
-    """Manual refresh — admin only (hits fal.ai Platform Billing API)."""
+def refresh_fal_credits(user: RequireUser, db: Session = Depends(get_db)):
+    """Manual refresh — hits fal.ai Platform Billing API for live balance."""
     # Pick up FAL_ADMIN_KEY added to .env after process start
     from app.config import get_settings
 

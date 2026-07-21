@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, UserCog, UserPlus } from "lucide-react";
+import { UserCog, UserPlus } from "lucide-react";
+import { FacetMark } from "@/components/ui/FacetMark";
 import { api } from "@/lib/api";
 import type { User } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,13 +21,30 @@ export function UserManagement() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPassword, setEditPassword] = useState("");
+  const [creditDraft, setCreditDraft] = useState<Record<string, string>>({});
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["admin", "users"],
-    queryFn: async () => (await api.get<UserRow[]>("/users")).data,
+    queryFn: async () => {
+      const res = await api.get<{ items: UserRow[] } | UserRow[]>("/users", { params: { limit: 100 } });
+      const data = res.data;
+      return Array.isArray(data) ? data : data.items || [];
+    },
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+  const creditMutation = useMutation({
+    mutationFn: async ({ id, amount }: { id: string; amount: number }) => {
+      await api.post(`/users/${id}/credits`, { amount });
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Credits added");
+    },
+    onError: (err: { friendlyMessage?: string }) =>
+      toast.error(err.friendlyMessage || "Credit top-up failed"),
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -99,10 +117,10 @@ export function UserManagement() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <div className="ui-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <UserCog className="size-4 text-blue-600" />
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">My Account</h2>
+          <h2 className="text-sm font-semibold text-slate-800">My account</h2>
         </div>
         <form onSubmit={onAccount} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
           <input
@@ -135,19 +153,19 @@ export function UserManagement() {
           <button
             type="submit"
             disabled={accountMutation.isPending}
-            className="h-10 rounded-lg bg-blue-600 text-xs font-bold text-white md:col-span-2 flex items-center justify-center gap-2"
+            className="h-10 rounded-lg bg-[var(--jewel-accent)] text-xs font-bold text-white md:col-span-2 flex items-center justify-center gap-2"
           >
-            {accountMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
+            {accountMutation.isPending && <FacetMark variant="spin" size={14} className="text-white" />}
             Save My Account
           </button>
         </form>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6">
-        <form onSubmit={onCreate} className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-3 h-fit">
+        <form onSubmit={onCreate} className="ui-card p-6 space-y-3 h-fit">
           <div className="flex items-center gap-2 mb-1">
             <UserPlus className="size-4 text-blue-600" />
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Create User</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Create user</h2>
           </div>
           <input
             type="email"
@@ -175,15 +193,15 @@ export function UserManagement() {
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="h-10 w-full rounded-lg bg-blue-600 text-xs font-bold text-white flex items-center justify-center gap-2"
+            className="h-10 w-full rounded-lg bg-[var(--jewel-accent)] text-xs font-bold text-white flex items-center justify-center gap-2"
           >
-            {createMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
+            {createMutation.isPending && <FacetMark variant="spin" size={14} className="text-white" />}
             Add Studio User
           </button>
         </form>
 
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-4">All Users</h2>
+        <div className="ui-card p-6">
+          <h2 className="text-sm font-semibold text-slate-800 mb-4">All users</h2>
           {isLoading ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : (
@@ -197,62 +215,89 @@ export function UserManagement() {
                     <p className="font-semibold text-sm text-slate-800">{u.email}</p>
                     <p className="text-[11px] text-slate-500">
                       {u.name || "—"} · {u.role}
+                      {typeof u.credits === "number" ? ` · ${u.credits} credits` : ""}
                       {u.id === me?.id ? " (you)" : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-[18rem] justify-end">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="+credits"
+                      value={creditDraft[u.id] || ""}
+                      onChange={(e) =>
+                        setCreditDraft((d) => ({ ...d, [u.id]: e.target.value }))
+                      }
+                      className="h-8 w-24 rounded-lg border border-slate-200 px-2 text-xs font-mono-data"
+                    />
+                    <button
+                      type="button"
+                      className="h-8 px-2 rounded-lg ui-btn-secondary text-[11px] font-semibold"
+                      disabled={creditMutation.isPending}
+                      onClick={() => {
+                        const amount = Number(creditDraft[u.id] || 0);
+                        if (!amount || amount < 1) {
+                          toast.error("Enter a positive credit amount");
+                          return;
+                        }
+                        creditMutation.mutate({ id: u.id, amount });
+                        setCreditDraft((d) => ({ ...d, [u.id]: "" }));
+                      }}
+                    >
+                      Top up
+                    </button>
                     {editingId === u.id ? (
-                      <>
-                        <input
-                          type="password"
-                          placeholder="New password"
-                          value={editPassword}
-                          onChange={(e) => setEditPassword(e.target.value)}
-                          className="h-8 w-36 rounded-lg border border-slate-200 px-2 text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateMutation.mutate({
-                              id: u.id,
-                              body: editPassword ? { password: editPassword } : {},
-                            })
-                          }
-                          className="h-8 px-2 rounded-lg bg-blue-600 text-[11px] font-bold text-white"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(null);
-                            setEditPassword("");
-                          }}
-                          className="h-8 px-2 rounded-lg border border-slate-200 text-[11px]"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(u.id)}
-                          className="h-8 px-2 rounded-lg border border-slate-200 text-[11px] font-semibold"
-                        >
-                          Reset password
-                        </button>
-                        {u.id !== me?.id && u.role !== "admin" && (
-                          <button
-                            type="button"
-                            onClick={() => updateMutation.mutate({ id: u.id, body: { is_active: false } })}
-                            className="h-8 px-2 rounded-lg border border-rose-200 text-[11px] font-semibold text-rose-600"
-                          >
-                            Deactivate
-                          </button>
-                        )}
-                      </>
-                    )}
+                      <input
+                        type="password"
+                        placeholder="New password"
+                        value={editPassword}
+                        onChange={(e) => setEditPassword(e.target.value)}
+                        className="h-8 w-36 rounded-lg border border-slate-200 px-2 text-xs"
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={editingId === u.id ? updateMutation.isPending : false}
+                      onClick={() => {
+                        if (editingId === u.id) {
+                          updateMutation.mutate({
+                            id: u.id,
+                            body: editPassword ? { password: editPassword } : {},
+                          });
+                        } else {
+                          setEditingId(u.id);
+                        }
+                      }}
+                      className="h-8 px-2 rounded-lg border border-slate-200 text-[11px] font-semibold"
+                    >
+                      {editingId === u.id ? "Save" : "Reset password"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={editingId !== u.id}
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditPassword("");
+                      }}
+                      className="h-8 px-2 rounded-lg border border-slate-200 text-[11px] disabled:opacity-40"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={u.id === me?.id || u.role === "admin"}
+                      onClick={() => updateMutation.mutate({ id: u.id, body: { is_active: false } })}
+                      className="h-8 px-2 rounded-lg border border-rose-200 text-[11px] font-semibold text-rose-600 disabled:opacity-40"
+                      title={
+                        u.id === me?.id
+                          ? "Cannot deactivate yourself"
+                          : u.role === "admin"
+                            ? "Cannot deactivate admins here"
+                            : undefined
+                      }
+                    >
+                      Deactivate
+                    </button>
                   </div>
                 </div>
               ))}

@@ -5,7 +5,6 @@ import {
   api,
   clearTokens,
   getAccessToken,
-  getRefreshToken,
   setTokens,
 } from "@/lib/api";
 import type { User } from "@/types";
@@ -24,6 +23,7 @@ function isAuthFailure(err: unknown): boolean {
 export function useAuth() {
   const queryClient = useQueryClient();
   const [hasToken, setHasToken] = useState(() => !!getAccessToken());
+  const [bootstrapping, setBootstrapping] = useState(() => !getAccessToken());
 
   useEffect(() => {
     const sync = () => {
@@ -41,6 +41,35 @@ export function useAuth() {
       window.removeEventListener("storage", sync);
     };
   }, [queryClient]);
+
+  // Restore session from httpOnly refresh cookie after full page reload.
+  useEffect(() => {
+    if (getAccessToken()) {
+      setBootstrapping(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axios.post(
+          "/api/auth/refresh",
+          {},
+          { withCredentials: true, headers: { "X-CSRF-Token": document.cookie.match(/(?:^|; )jewel_csrf=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|; )jewel_csrf=([^;]*)/)![1]) : "" } },
+        );
+        if (!cancelled && res.data?.access_token) {
+          setTokens(res.data.access_token, res.data.refresh_token);
+          setHasToken(true);
+        }
+      } catch {
+        /* no session */
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     data: user,
@@ -69,7 +98,7 @@ export function useAuth() {
   }, [hasToken, isError, error, queryClient]);
 
   const login = useCallback(
-    async (payload: { email: string; password: string }) => {
+    async (payload: { email: string; password: string; otp?: string; backup_code?: string }) => {
       const { data } = await api.post<LoginResponse>("/auth/login", payload);
       setTokens(data.access_token, data.refresh_token);
       setHasToken(true);
@@ -80,11 +109,8 @@ export function useAuth() {
   );
 
   const logout = useCallback(async () => {
-    const refresh = getRefreshToken();
     try {
-      if (refresh) {
-        await api.post("/auth/logout", { refresh_token: refresh });
-      }
+      await api.post("/auth/logout", {});
     } catch {
       // Best-effort revoke; always clear local session.
     }
@@ -96,7 +122,7 @@ export function useAuth() {
 
   return {
     user: hasToken ? user : null,
-    isLoading: hasToken && userLoading && !(isError && isAuthFailure(error)),
+    isLoading: bootstrapping || (hasToken && userLoading && !(isError && isAuthFailure(error))),
     isError,
     isAuthenticated: hasToken && !!user,
     isAdmin: user?.role === "admin",

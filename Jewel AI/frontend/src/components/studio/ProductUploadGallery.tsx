@@ -1,12 +1,13 @@
 import { useCallback, useRef, useState } from "react";
-import { ImagePlus, Plus, UploadCloud, X } from "lucide-react";
+import { Crop, Plus, UploadCloud, X } from "lucide-react";
 import { toast } from "sonner";
 
 const MAX_FILES = 30;
 
 type Props = {
   id: string;
-  label?: string;
+  /** Shown only on empty state inside the stage */
+  emptyTitle?: string;
   files: File[];
   previews: string[];
   error?: string;
@@ -14,12 +15,16 @@ type Props = {
   onReplace: (files: File[]) => void;
   onRemoveAt: (index: number) => void;
   onClearAll: () => void;
-  onCrop?: () => void;
+  imageZoom?: number;
+  /** When true, hide per-image remove overlays (parent header owns Replace) */
+  cleanPreview?: boolean;
+  /** Crop a specific uploaded file (local File only) */
+  onCropAt?: (index: number) => void;
 };
 
 export function ProductUploadGallery({
   id,
-  label = "Product (multi for bulk)",
+  emptyTitle = "Product",
   files,
   previews,
   error,
@@ -27,7 +32,9 @@ export function ProductUploadGallery({
   onReplace,
   onRemoveAt,
   onClearAll,
-  onCrop,
+  imageZoom = 1,
+  cleanPreview = false,
+  onCropAt,
 }: Props) {
   const emptyInputId = `${id}-empty-input`;
   const addInputId = `${id}-add-input`;
@@ -36,8 +43,9 @@ export function ProductUploadGallery({
   const [dragging, setDragging] = useState(false);
 
   const hasFiles = files.length > 0;
+  const hasPreviewOnly = !hasFiles && previews.length > 0;
   const room = Math.max(0, MAX_FILES - files.length);
-  const isSingle = files.length === 1;
+  const isSingle = files.length === 1 || (hasPreviewOnly && previews.length === 1);
 
   const takeFiles = useCallback(
     (list: FileList | null, mode: "append" | "replace") => {
@@ -71,59 +79,18 @@ export function ProductUploadGallery({
     takeFiles(e.dataTransfer.files, hasFiles ? "append" : "replace");
   };
 
-  // Match Studio Output frame: fixed 240px stage, image fits inside (object-contain)
-  const stageClass = `relative h-[240px] w-full shrink-0 overflow-hidden rounded-xl border-2 transition-colors ${
+  const stageClass = `relative min-h-0 h-full w-full flex-1 overflow-hidden rounded-lg transition-colors ${
     dragging
-      ? "border-blue-400 bg-blue-50/40"
+      ? "border-2 border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)]/40"
       : error
-        ? "border-red-400 bg-slate-50/50"
-        : hasFiles
-          ? "border-slate-200 bg-slate-950"
-          : "border-dashed border-slate-200 bg-slate-50/50 hover:border-blue-400 hover:bg-blue-50/30"
+        ? "border-2 border-[var(--jewel-danger)] bg-white"
+        : !hasFiles && !hasPreviewOnly
+          ? "border-2 border-dashed border-[var(--jewel-border)] bg-white hover:border-[var(--jewel-accent)]"
+          : "border border-[var(--jewel-border)] bg-white"
   }`;
 
   return (
-    <div className="flex w-full flex-col gap-2">
-      {/* Header — upload actions move here once images exist */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <label className="ui-label mb-0">{label}</label>
-          {hasFiles && (
-            <p className="truncate text-[10px] text-slate-400">
-              {isSingle
-                ? files[0]?.name || "1 image"
-                : `${files.length} images selected`}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {hasFiles && (
-            <span className="hidden text-[10px] tabular-nums text-slate-400 sm:inline">
-              {files.length}/{MAX_FILES}
-            </span>
-          )}
-          {hasFiles && room > 0 && (
-            <button
-              type="button"
-              onClick={() => addInputRef.current?.click()}
-              className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-            >
-              <ImagePlus className="size-3.5" />
-              Add more
-            </button>
-          )}
-          {hasFiles && (
-            <button
-              type="button"
-              onClick={onClearAll}
-              className="inline-flex h-7 items-center rounded-lg px-2 text-[10px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
+    <div className="flex w-full h-full min-h-0 flex-col">
       <input
         ref={addInputRef}
         id={addInputId}
@@ -149,7 +116,6 @@ export function ProductUploadGallery({
         }}
       />
 
-      {/* Stage — same footprint empty ↔ filled */}
       <div
         className={stageClass}
         onDragEnter={(e) => {
@@ -160,42 +126,67 @@ export function ProductUploadGallery({
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        {!hasFiles ? (
+        {!hasFiles && !hasPreviewOnly ? (
           <label
             htmlFor={emptyInputId}
-            className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center p-4"
+            className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 p-4"
           >
-            <UploadCloud className="mb-2 size-6 text-blue-600" aria-hidden="true" />
-            <span className="text-xs font-semibold text-slate-700">
-              {dragging ? "Drop to upload" : "Click or drop product images"}
+            <UploadCloud className="size-8 text-[var(--jewel-accent)]" aria-hidden="true" />
+            <span className="text-sm font-semibold text-[var(--jewel-ink)]">
+              {dragging ? "Drop images" : emptyTitle}
             </span>
-            <span className="mt-1 text-[10px] text-slate-400">
-              Up to {MAX_FILES} · JPEG, PNG, WebP
+            <span className="text-[11px] text-[var(--jewel-ink-muted)]">
+              Click or drop to upload
             </span>
           </label>
         ) : isSingle ? (
-          <div className="group absolute inset-0 flex items-center justify-center p-3">
-            <img
-              src={previews[0]}
-              alt={files[0]?.name || "Product"}
-              className="max-h-full max-w-full rounded object-contain"
-            />
-            <button
-              type="button"
-              onClick={() => onRemoveAt(0)}
-              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-lg bg-slate-900/75 text-white opacity-90 transition hover:bg-rose-600 group-hover:opacity-100"
-              title="Remove image"
-              aria-label="Remove image"
-            >
-              <X className="size-3.5" strokeWidth={2.5} />
-            </button>
-            {dragging && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-blue-600/20 backdrop-blur-[1px]">
-                <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm">
-                  Drop to add more
+          <div className="absolute inset-0 flex flex-col">
+            {(onCropAt && hasFiles) || (!cleanPreview && hasFiles) ? (
+              <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--jewel-hairline)] px-2 bg-white/95">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-jewel-ink-muted">
+                  {emptyTitle}
                 </span>
+                <div className="flex items-center gap-0.5">
+                  {onCropAt && hasFiles ? (
+                    <button
+                      type="button"
+                      onClick={() => onCropAt(0)}
+                      className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
+                      aria-label="Crop image"
+                      title="Crop"
+                    >
+                      <Crop className="size-3.5" />
+                      Crop
+                    </button>
+                  ) : null}
+                  {!cleanPreview && hasFiles ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAt(0)}
+                      className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label="Remove image"
+                    >
+                      <X className="size-3.5" strokeWidth={2.5} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            )}
+            ) : null}
+            <div className="relative min-h-0 flex-1 flex items-center justify-center p-3">
+              <img
+                src={previews[0]}
+                alt={files[0]?.name || "Product"}
+                className="max-h-full max-w-full object-contain transition-transform"
+                style={{ transform: `scale(${imageZoom})` }}
+              />
+              {dragging ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--jewel-accent)]/15">
+                  <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[var(--jewel-accent)] shadow-sm">
+                    Drop to add
+                  </span>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col">
@@ -204,74 +195,76 @@ export function ProductUploadGallery({
                 {previews.map((url, i) => (
                   <div
                     key={`${files[i]?.name ?? "img"}-${i}-${url.slice(-12)}`}
-                    className="group relative aspect-square overflow-hidden rounded-lg border border-white/10 bg-slate-900"
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--jewel-border)] bg-white"
                   >
                     <img
                       src={url}
                       alt={files[i]?.name || `Product ${i + 1}`}
                       className="size-full object-cover"
                     />
-                    <span className="absolute left-1 top-1 rounded bg-black/55 px-1 py-px text-[9px] font-semibold tabular-nums text-white">
+                    <span className="absolute left-1 top-1 rounded bg-white/90 border border-[var(--jewel-border)] px-1 py-px text-[9px] font-semibold tabular-nums text-slate-700">
                       {i + 1}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAt(i)}
-                      className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-md bg-black/70 text-white"
-                      title={`Remove image ${i + 1}`}
-                      aria-label={`Remove image ${i + 1}`}
+                    <div
+                      className={`absolute right-1 top-1 flex flex-col gap-0.5 ${
+                        onCropAt ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      } transition-opacity focus-within:opacity-100`}
                     >
-                      <X className="size-3.5" strokeWidth={2.5} />
-                    </button>
+                      {onCropAt && files[i] ? (
+                        <button
+                          type="button"
+                          onClick={() => onCropAt(i)}
+                          className="flex size-6 items-center justify-center rounded-md bg-white/95 text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
+                          aria-label={`Crop image ${i + 1}`}
+                          title="Crop"
+                        >
+                          <Crop className="size-3" />
+                        </button>
+                      ) : null}
+                      {!cleanPreview ? (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveAt(i)}
+                          className="flex size-6 items-center justify-center rounded-md bg-white/90 text-slate-700 hover:bg-rose-100 hover:text-rose-600"
+                          aria-label={`Remove image ${i + 1}`}
+                        >
+                          <X className="size-3.5" strokeWidth={2.5} />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/90 px-2 py-1.5 backdrop-blur-sm">
-              <span className="text-[10px] font-semibold tabular-nums text-slate-200">
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 border-t border-[var(--jewel-hairline)] bg-white px-2 py-1.5">
+              <span className="text-[10px] font-semibold tabular-nums text-slate-600">
                 {files.length} selected
               </span>
               <div className="flex items-center gap-1.5">
-                {room > 0 && (
+                {room > 0 ? (
                   <button
                     type="button"
                     onClick={() => addInputRef.current?.click()}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] font-semibold text-white hover:bg-white/20"
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--jewel-surface-muted)] px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-[var(--jewel-accent-soft)]"
                   >
                     <Plus className="size-3" />
-                    Add more
+                    Add
                   </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={onClearAll}
-                  className="rounded-md px-2 py-1 text-[10px] font-semibold text-slate-300 hover:bg-white/10 hover:text-white"
+                  className="rounded-md px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-[var(--jewel-surface-muted)]"
                 >
                   Clear
                 </button>
               </div>
             </div>
-            {dragging && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-blue-600/20 backdrop-blur-[1px]">
-                <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm">
-                  Drop to add more
-                </span>
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {isSingle && onCrop && (
-        <button
-          type="button"
-          onClick={onCrop}
-          className="self-start text-[10px] font-medium text-slate-400 hover:text-slate-600"
-        >
-          Crop (optional)
-        </button>
-      )}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error ? <p className="mt-1 text-xs text-red-600 shrink-0">{error}</p> : null}
     </div>
   );
 }

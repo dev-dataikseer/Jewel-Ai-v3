@@ -15,7 +15,6 @@ WORKFLOWS: list[dict[str, str | bool]] = [
     {"id": "BACKGROUND_REPLACEMENT", "label": "Background Replacement", "requires_reference": False, "bulk": False},
     {"id": "LUXURY_ENHANCEMENT", "label": "Luxury Enhancement", "requires_reference": False, "bulk": False},
     {"id": "CUSTOM_PROMPT", "label": "Custom Prompt", "requires_reference": False, "bulk": False},
-    {"id": "RATE_TOOLS", "label": "Rate Tools", "requires_reference": False, "bulk": False},
     # Legacy aliases kept for history filters / old jobs (hidden from Studio sidebar via frontend)
     {"id": "JEWELRY_ON_MODEL", "label": "Jewelry On Model (legacy)", "requires_reference": True, "bulk": False},
     {"id": "CUSTOMER_TRY_ON", "label": "Customer Try-On (legacy)", "requires_reference": True, "bulk": False},

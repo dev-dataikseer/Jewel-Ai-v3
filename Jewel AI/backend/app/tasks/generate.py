@@ -44,6 +44,28 @@ def _get_meta(job: GenerationJob) -> dict:
 _TERMINAL_JOB_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 
 
+def _mark_job_failed_terminal(job_id: str, message: str) -> None:
+    """Force a job into FAILED after Celery exhausts retries (poison pill)."""
+    db = SessionLocal()
+    try:
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if not job or job.status in _TERMINAL_JOB_STATUSES:
+            return
+        job.status = "FAILED"
+        job.error_message = message
+        meta = dict(job.provider_metadata or {})
+        meta["poison_max_retries"] = True
+        job.provider_metadata = meta
+        db.commit()
+        if job.batch_id:
+            try:
+                _update_batch(db, job.batch_id)
+            except Exception:
+                logger.exception("Batch update after poison fail for %s", job_id)
+    finally:
+        db.close()
+
+
 async def _process_job_async(job_id: str) -> None:
     db = SessionLocal()
     prompt = ""
@@ -65,6 +87,26 @@ async def _process_job_async(job_id: str) -> None:
                 extra={"extra_fields": {"job_id": job_id}},
             )
             return
+
+        api_request_id = (job.provider_metadata or {}).get("request_id")
+        logger.info(
+            "Processing image job",
+            extra={
+                "extra_fields": {
+                    "job_id": job_id,
+                    "request_id": api_request_id,
+                    "workflow": job.workflow,
+                }
+            },
+        )
+        try:
+            import sentry_sdk
+
+            if api_request_id:
+                sentry_sdk.set_tag("request_id", str(api_request_id))
+            sentry_sdk.set_tag("job_id", job_id)
+        except Exception:
+            pass
 
         # Atomic claim: only one worker may move PENDING → PROCESSING.
         now = datetime.now(timezone.utc)
@@ -185,6 +227,18 @@ async def _process_job_async(job_id: str) -> None:
         if result.is_webhook_pending:
             timing["fal_queued"] = datetime.now(timezone.utc).isoformat()
             fal_req = (result.metadata or {}).get("fal_request_id") or (result.usage or {}).get("request_id")
+            if not fal_req:
+                job.status = "FAILED"
+                job.error_message = "fal.ai webhook submit returned no request_id"
+                job.provider_metadata = {
+                    **meta,
+                    "timing": timing,
+                    "progressStage": "failed",
+                }
+                db.commit()
+                if job.batch_id:
+                    _update_batch(db, job.batch_id)
+                return
             merged = {
                 **meta,
                 **packet.to_meta(),
@@ -326,11 +380,26 @@ def _update_batch(db: Session, batch_id: str) -> None:
 
 
 @celery_app.task(name="app.tasks.generate.process_image_job", bind=True, max_retries=2, default_retry_delay=30)
-def process_image_job(self, job_id: str) -> None:
+def process_image_job(self, job_id: str, request_id: str | None = None) -> None:
     """Run generation. Transient failures retry via Celery; permanent failures stay FAILED.
 
     Stuck PROCESSING jobs are also recovered by sweep_stuck_jobs (Beat).
+    After max_retries the job is marked terminal FAILED (poison pill) so it cannot
+    loop forever in PENDING/PROCESSING.
     """
+    if request_id:
+        logger.info(
+            "Celery process_image_job start",
+            extra={"extra_fields": {"job_id": job_id, "request_id": request_id}},
+        )
+        try:
+            import sentry_sdk
+
+            sentry_sdk.set_tag("request_id", str(request_id))
+            sentry_sdk.set_tag("job_id", job_id)
+        except Exception:
+            pass
+
     try:
         asyncio.run(_process_job_async(job_id))
     except Exception as exc:
@@ -338,6 +407,21 @@ def process_image_job(self, job_id: str) -> None:
         try:
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
+            logger.error(
+                "Celery poison job: max_retries exceeded — marking FAILED",
+                extra={
+                    "extra_fields": {
+                        "job_id": job_id,
+                        "request_id": request_id,
+                        "error": str(exc),
+                        "retries": getattr(self.request, "retries", None),
+                    }
+                },
+            )
+            _mark_job_failed_terminal(
+                job_id,
+                f"Worker crashed after max retries: {type(exc).__name__}: {exc}",
+            )
             raise
 
 
@@ -538,12 +622,26 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
 
     db = SessionLocal()
     try:
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).with_for_update().first()
         if not job or job.status == "COMPLETED":
             return
         if job.status != "PROCESSING":
             return
         if (job.provider_metadata or {}).get("webhook_completed"):
+            return
+
+        # Defense in depth: refuse finalize if payload request_id does not match job.
+        from app.api.routers.providers import extract_fal_webhook_request_id
+
+        expected = (job.provider_metadata or {}).get("fal_request_id") or (
+            (job.provider_metadata or {}).get("usage") or {}
+        ).get("request_id")
+        got = extract_fal_webhook_request_id(payload if isinstance(payload, dict) else {})
+        if not expected or not got or str(got) != str(expected):
+            logger.warning(
+                "finalize_request_id_mismatch",
+                extra={"extra_fields": {"job_id": job_id, "expected": expected, "got": got}},
+            )
             return
 
         model_def = get_model_definition(db, job.provider_model) if job.provider_model else None

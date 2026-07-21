@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Activity, Save, Wallet } from "lucide-react";
+import { Activity, Info, Save, Wallet } from "lucide-react";
+import { FacetMark } from "@/components/ui/FacetMark";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { api } from "@/lib/api";
 import type { FalCreditsResponse } from "@/components/FalCreditsWidget";
 import type { ModelDefinition, Provider } from "@/types";
@@ -76,25 +78,33 @@ export function ProviderSettings() {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">fal.ai Provider Settings</h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Generation uses an API-scoped key. Credits in the header require an{" "}
-          <span className="font-semibold text-slate-700">Admin-scoped</span> key (fal dashboard → Keys → Admin)
-          for <code className="text-[10px]">GET /account/billing?expand=credits</code>.
+    <div className="ui-panel-hero overflow-hidden w-full">
+      <div
+        className="border-b border-[var(--jewel-border)] px-6 py-4"
+        style={{ backgroundColor: "var(--jewel-surface-muted)" }}
+      >
+        <h2 className="text-sm font-semibold text-slate-800">fal.ai provider settings</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Paste an admin-scoped fal key to show live credits in the header.
+          <span
+            className="ml-1 inline-flex align-middle text-slate-400 cursor-help"
+            title="Admin keys come from fal dashboard → Keys → Admin. Billing uses GET /account/billing?expand=credits. You can also set FAL_ADMIN_KEY in backend/.env. API-scoped keys return 403 on billing."
+          >
+            <Info className="size-3.5" aria-label="More about admin keys" />
+          </span>
         </p>
       </div>
-      <div className="p-6 space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+      <div className="ui-admin-cols ui-admin-cols-60 gap-0 lg:divide-x divide-[var(--jewel-border)]">
+        <div className="p-6 space-y-5">
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Default fal.ai Model
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              Default fal.ai model
             </label>
             <select
               value={modelEndpoint}
               onChange={(e) => setModelEndpoint(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input text-xs font-semibold"
             >
               {models.map((m) => (
                 <option key={m.endpoint_id} value={m.endpoint_id}>
@@ -102,14 +112,9 @@ export function ProviderSettings() {
                 </option>
               ))}
             </select>
-            {fal && (
-              <p className="mt-2 text-[11px] text-slate-400">
-                Current: {fal.model_name} · {fal.health_status}
-              </p>
-            )}
           </div>
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
               FAL_KEY (generation)
             </label>
             <input
@@ -117,11 +122,11 @@ export function ProviderSettings() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={fal?.has_api_key ? "Saved — enter to replace" : "Enter fal.ai API key"}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input text-xs font-semibold"
             />
           </div>
-          <div className="md:col-span-2">
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
               FAL Admin API key (billing / credits)
             </label>
             <input
@@ -133,43 +138,85 @@ export function ProviderSettings() {
                   ? "Saved — enter to replace Admin-scoped key"
                   : "Paste Admin API key (Authorization: Key …)"
               }
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input text-xs font-semibold"
             />
-            <p className="mt-1.5 text-[11px] text-slate-400">
-              Required for header Credits. API-scope keys return 403 on billing. You can also set{" "}
-              <code className="text-[10px]">FAL_ADMIN_KEY</code> in backend/.env.
-            </p>
+          </div>
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              aria-busy={saveMutation.isPending}
+              className="ui-btn-primary h-10 px-5 text-xs"
+            >
+              {saveMutation.isPending ? (
+                <FacetMark variant="spin" size={14} className="text-white" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              {saveMutation.isPending ? "Saving…" : "Save Configuration"}
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            <Save className="size-4" />
-            {saveMutation.isPending ? "Saving..." : "Save Configuration"}
-          </button>
-          <button
-            type="button"
-            onClick={() => testMutation.mutate()}
-            disabled={testMutation.isPending}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Activity className="size-4 text-blue-600" />
-            {testMutation.isPending ? "Testing..." : "Test fal.ai"}
-          </button>
-          <button
-            type="button"
-            onClick={() => testBillingMutation.mutate()}
-            disabled={testBillingMutation.isPending}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Wallet className="size-4 text-emerald-600" />
-            {testBillingMutation.isPending ? "Checking…" : "Test billing / credits"}
-          </button>
+        <div className="p-6 space-y-4" style={{ backgroundColor: "var(--jewel-surface-muted)" }}>
+          <h3 className="text-sm font-semibold text-slate-800">Live health & credits</h3>
+          <div className="ui-card-muted p-4 space-y-2">
+            <p className="text-xs text-slate-500">Connection</p>
+            <p className="text-sm font-semibold text-slate-800">
+              {fal ? (
+                <span className="inline-flex items-center gap-2">
+                  <StatusDot
+                    tone={
+                      String(fal.health_status || "").toLowerCase().includes("health") ||
+                      String(fal.health_status || "").toLowerCase() === "ok"
+                        ? "ok"
+                        : "warn"
+                    }
+                  />
+                  <span>
+                    {fal.model_name} · {fal.health_status}
+                  </span>
+                </span>
+              ) : (
+                "No fal provider row yet"
+              )}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              API key: {fal?.has_api_key ? "saved" : "missing"} · Admin key:{" "}
+              {fal?.has_admin_api_key ? "saved" : "missing"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending}
+              aria-busy={testMutation.isPending}
+              className="ui-btn-secondary h-10 px-4"
+            >
+              {testMutation.isPending ? (
+                <FacetMark variant="spin" size={14} className="text-[var(--jewel-accent)]" />
+              ) : (
+                <Activity className="size-4 text-blue-600" />
+              )}
+              {testMutation.isPending ? "Testing…" : "Test fal.ai"}
+            </button>
+            <button
+              type="button"
+              onClick={() => testBillingMutation.mutate()}
+              disabled={testBillingMutation.isPending}
+              aria-busy={testBillingMutation.isPending}
+              className="ui-btn-secondary h-10 px-4"
+            >
+              {testBillingMutation.isPending ? (
+                <FacetMark variant="spin" size={14} className="text-emerald-600" />
+              ) : (
+                <Wallet className="size-4 text-emerald-600" />
+              )}
+              {testBillingMutation.isPending ? "Checking…" : "Test billing / credits"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

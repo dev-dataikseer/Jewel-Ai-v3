@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, RefreshCcw, Wallet } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { useAuth } from "@/hooks/useAuth";
+import { apiErrorMessage } from "@/lib/apiError";
 
 export type FalCreditsResponse = {
   available: boolean;
@@ -16,35 +17,21 @@ export type FalCreditsResponse = {
   error_type?: string | null;
 };
 
-function formatBalance(balance: number, currency: string) {
+function formatBalance(balance: number) {
   try {
     return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: currency || "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(balance);
   } catch {
-    return `$${(balance ?? 0).toFixed(2)}`;
-  }
-}
-
-function formatUpdatedAt(iso?: string | null) {
-  if (!iso) return null;
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  } catch {
-    return null;
+    return Number(balance ?? 0).toFixed(2);
   }
 }
 
 export function FalCreditsWidget() {
   const queryClient = useQueryClient();
-  const { isAdmin } = useAuth();
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["billing", "fal-credits"],
     queryFn: async () =>
       (await api.get<FalCreditsResponse>("/billing/fal-credits")).data,
@@ -54,71 +41,68 @@ export function FalCreditsWidget() {
   });
 
   const refresh = useMutation({
-    mutationFn: async () => {
-      if (isAdmin) {
-        return (await api.post<FalCreditsResponse>("/billing/fal-credits/refresh")).data;
-      }
-      const res = await refetch();
-      return res.data as FalCreditsResponse;
-    },
+    mutationFn: async () =>
+      (await api.post<FalCreditsResponse>("/billing/fal-credits/refresh")).data,
     onSuccess: (next) => {
-      if (next) queryClient.setQueryData(["billing", "fal-credits"], next);
+      queryClient.setQueryData(["billing", "fal-credits"], next);
+      if (next?.available && next.current_balance != null) {
+        toast.success(`Credits updated: ${formatBalance(next.current_balance)}`);
+      } else if (next?.error) {
+        toast.error(next.error);
+      }
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err as Error, "Could not refresh fal credits"));
     },
   });
 
-  const updated = formatUpdatedAt(data?.updated_at);
   const showLow = Boolean(data?.low_balance && data.available);
-  const label =
+  const balanceLabel =
     data?.available && data.current_balance != null
-      ? formatBalance(data.current_balance, data.currency)
-      : "Unavailable";
+      ? formatBalance(data.current_balance)
+      : isLoading
+        ? "…"
+        : "—";
 
   const titleHint = data?.error
     ? `Last error: ${data.error}`
     : data?.username
       ? `fal.ai account: ${data.username}`
-      : "fal.ai credit balance (requires FAL_ADMIN_KEY with Admin scope)";
+      : "Refresh fal.ai credit balance";
 
   return (
     <div
-      className={`inline-flex h-8 max-w-[280px] items-center gap-1.5 rounded-lg border px-2 text-[12px] font-medium ${
+      className={`relative inline-flex items-center gap-2 rounded-xl border bg-white py-1.5 pl-3 pr-8 ${
         showLow
-          ? "border-amber-200 bg-amber-50 text-amber-900"
+          ? "border-amber-200"
           : data?.available
-            ? "border-slate-200 bg-slate-50 text-slate-700"
-            : "border-rose-200 bg-rose-50 text-rose-800"
+            ? "border-[var(--jewel-border)]"
+            : "border-rose-200"
       }`}
       title={titleHint}
     >
       {showLow || (!data?.available && data?.error) ? (
         <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-hidden />
-      ) : (
-        <Wallet className="size-3.5 shrink-0 text-slate-500" aria-hidden />
-      )}
+      ) : null}
       <div className="min-w-0 leading-tight">
-        <p className="truncate tabular-nums">
-          {isLoading && !data ? "Credits…" : `Credits: ${label}`}
+        <p className="text-[10px] font-medium text-[var(--jewel-ink-muted)] leading-none">
+          Credits Balance
         </p>
-        {data?.error && !data.available ? (
-          <p className="truncate text-[10px] font-normal text-rose-600" title={data.error}>
-            {data.error}
-          </p>
-        ) : updated ? (
-          <p className="truncate text-[10px] font-normal text-slate-500">
-            Updated {updated}
-            {data?.stale ? " · stale" : ""}
-          </p>
-        ) : null}
+        <p className="mt-0.5 text-[15px] font-bold text-[var(--jewel-ink)] leading-none tabular-nums">
+          {balanceLabel}
+        </p>
       </div>
       <button
         type="button"
+        aria-label="Refresh fal credits"
+        title="Refresh from fal.ai"
+        disabled={refresh.isPending}
         onClick={() => refresh.mutate()}
-        disabled={refresh.isPending || isFetching}
-        aria-label="Refresh fal.ai credits"
-        className="ml-0.5 rounded p-1 text-slate-500 hover:bg-white/80 hover:text-slate-800 disabled:opacity-50"
+        className="absolute -right-2 top-1/2 -translate-y-1/2 inline-flex size-7 items-center justify-center rounded-lg text-white shadow-[var(--jewel-shadow-cta)] disabled:opacity-70"
+        style={{ backgroundImage: "var(--jewel-grad-cta)" }}
       >
-        <RefreshCcw
-          className={`size-3 ${refresh.isPending || isFetching ? "animate-spin" : ""}`}
+        <RefreshCw
+          className={`size-3.5 stroke-[2.5] ${refresh.isPending ? "animate-spin" : ""}`}
         />
       </button>
     </div>

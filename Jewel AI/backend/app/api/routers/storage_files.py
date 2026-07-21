@@ -15,7 +15,6 @@ def _user_owns_upload(db: Session, user: User, file_path: str) -> bool:
     """True if the path appears on an asset or job owned by the user (or user is admin)."""
     if user.role == "admin":
         return True
-    needle = f"/uploads/{file_path.lstrip('/')}"
     asset_hit = (
         db.query(Asset.id)
         .filter(
@@ -42,6 +41,25 @@ def _user_owns_upload(db: Session, user: User, file_path: str) -> bool:
     return job_hit is not None
 
 
+def authorize_upload_path(
+    file_path: str,
+    exp: str | None,
+    sig: str | None,
+    user: User | None,
+    db: Session,
+) -> None:
+    if ".." in file_path or file_path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    signed_ok = verify_upload_signature(file_path, exp, sig)
+    if signed_ok:
+        return
+    if user is not None:
+        if not _user_owns_upload(db, user, file_path):
+            raise HTTPException(status_code=403, detail="Not allowed to access this file")
+        return
+    raise HTTPException(status_code=401, detail="Authentication or signed URL required")
+
+
 @router.get("/uploads/{file_path:path}")
 def serve_upload(
     file_path: str,
@@ -50,16 +68,7 @@ def serve_upload(
     user: User | None = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if ".." in file_path or file_path.startswith("/"):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    signed_ok = verify_upload_signature(file_path, exp, sig)
-    if signed_ok:
-        pass
-    elif user is not None:
-        if not _user_owns_upload(db, user, file_path):
-            raise HTTPException(status_code=403, detail="Not allowed to access this file")
-    else:
-        raise HTTPException(status_code=401, detail="Authentication or signed URL required")
+    authorize_upload_path(file_path, exp, sig, user, db)
     try:
         data, content_type = storage.read_upload(file_path)
     except FileNotFoundError:

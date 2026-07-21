@@ -44,9 +44,60 @@ def _validate_role(role: str) -> None:
         raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
 
 
-@router.get("", response_model=list[UserOut])
-def list_users(user: RequireAdmin, db: Session = Depends(get_db)):
-    return db.query(User).order_by(User.created_at.desc()).all()
+@router.get("")
+def list_users(
+    user: RequireAdmin,
+    db: Session = Depends(get_db),
+    limit: int = 50,
+    cursor: str | None = None,
+):
+    limit = max(1, min(limit, 100))
+    q = db.query(User).order_by(User.created_at.desc(), User.id.desc())
+    if cursor:
+        # cursor = "{created_at_iso}|{id}"
+        try:
+            created_s, uid = cursor.split("|", 1)
+            from datetime import datetime
+
+            created = datetime.fromisoformat(created_s)
+            q = q.filter(
+                (User.created_at < created) | ((User.created_at == created) & (User.id < uid))
+            )
+        except Exception:
+            pass
+    rows = q.limit(limit + 1).all()
+    next_cursor = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = f"{last.created_at.isoformat()}|{last.id}"
+        rows = rows[:limit]
+    return {
+        "items": [UserOut.model_validate(u) for u in rows],
+        "next_cursor": next_cursor,
+    }
+
+
+class CreditTopUp(BaseModel):
+    amount: int = Field(gt=0, le=1_000_000)
+
+
+@router.post("/{user_id}/credits", response_model=UserOut)
+def top_up_credits(user_id: str, body: CreditTopUp, admin: RequireAdmin, db: Session = Depends(get_db)):
+    from app.services.audit import write_audit
+    from app.services.credits import credit_top_up
+
+    target = credit_top_up(db, user_id, body.amount)
+    write_audit(
+        db,
+        actor_user_id=admin.id,
+        action="user.credits_top_up",
+        entity_type="user",
+        entity_id=user_id,
+        after={"amount": body.amount, "credits": target.credits},
+    )
+    db.commit()
+    db.refresh(target)
+    return target
 
 
 @router.post("", response_model=UserOut)

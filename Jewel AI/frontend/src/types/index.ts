@@ -220,21 +220,6 @@ export type Provider = {
   capabilities?: Record<string, unknown>;
 };
 
-export type RateEntry = {
-  id: string;
-  rate_type: string;
-  metal_type?: string | null;
-  diamond_shape?: string | null;
-  diamond_color?: string | null;
-  diamond_clarity?: string | null;
-  carat?: string | null;
-  value: number;
-  currency: string;
-  city?: string | null;
-  updated_at?: string;
-  created_at?: string;
-};
-
 export type User = {
   id: string;
   email: string;
@@ -359,7 +344,6 @@ export const WORKFLOWS = [
   { id: "BACKGROUND_REPLACEMENT", label: "Background Replacement", bulk: true },
   { id: "LUXURY_ENHANCEMENT", label: "Luxury Enhancement", bulk: true },
   { id: "CUSTOM_PROMPT", label: "Custom Prompt", bulk: true },
-  { id: "RATE_TOOLS", label: "Rate Tools", bulk: false },
   // Legacy (history / regenerate)
   { id: "JEWELRY_ON_MODEL", label: "Jewelry On Model", bulk: true },
   { id: "CUSTOMER_TRY_ON", label: "Customer Try-On", bulk: true },
@@ -367,14 +351,14 @@ export const WORKFLOWS = [
   { id: "BULK_GENERATION", label: "Bulk Generation", bulk: true },
 ] as const;
 
-/** Studio sidebar — consolidated (no Rates/Bulk/legacy duplicates). */
+/** Studio sidebar — short nav labels (full names stay in WORKFLOWS / page title). */
 export const STUDIO_SIDEBAR_WORKFLOWS = [
-  { id: "CATALOG_IMAGE", label: "Catalog Image" },
-  { id: "VIRTUAL_TRY_ON", label: "Virtual Try-On" },
-  { id: "GEMSTONE_COLOR_CHANGE", label: "Gemstone Color Change" },
-  { id: "BACKGROUND_REPLACEMENT", label: "Background Replacement" },
-  { id: "LUXURY_ENHANCEMENT", label: "Luxury Enhancement" },
-  { id: "CUSTOM_PROMPT", label: "Custom Prompt" },
+  { id: "CATALOG_IMAGE", label: "Catalog" },
+  { id: "VIRTUAL_TRY_ON", label: "Try-On" },
+  { id: "GEMSTONE_COLOR_CHANGE", label: "Gemstone" },
+  { id: "BACKGROUND_REPLACEMENT", label: "Background" },
+  { id: "LUXURY_ENHANCEMENT", label: "Luxury" },
+  { id: "CUSTOM_PROMPT", label: "Custom" },
 ] as const;
 
 export const HISTORY_WORKFLOW_FILTERS = [

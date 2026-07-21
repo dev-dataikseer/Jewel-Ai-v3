@@ -41,3 +41,27 @@ celery_app.conf.update(
         },
     },
 )
+
+
+def _init_sentry() -> None:
+    dsn = (settings.sentry_dsn or "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.celery import CeleryIntegration
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=settings.node_env,
+            release="jewel-ai-worker",
+            traces_sample_rate=0.05 if settings.is_production else 0.0,
+            integrations=[CeleryIntegration()],
+        )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Sentry init failed (Celery)")
+
+
+_init_sentry()

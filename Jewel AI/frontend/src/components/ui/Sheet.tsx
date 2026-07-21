@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
 type SheetProps = {
@@ -9,12 +9,39 @@ type SheetProps = {
   side?: "left" | "right" | "bottom";
 };
 
-/** Mobile/tablet drawer for Workflows or Inspector. */
+/** Mobile/tablet drawer for Workflows or Inspector. Focus trap + Escape + restore focus.
+ *  Tablet (md–lg): slightly wider panels; desktop (lg+) uses the 3-zone grid instead of sheets.
+ */
 export function Sheet({ open, onClose, title, children, side = "bottom" }: SheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
+    previousFocus.current = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const focusable = panel?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.[0]?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel || !focusable?.length) return;
+      const list = Array.from(focusable);
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -22,6 +49,7 @@ export function Sheet({ open, onClose, title, children, side = "bottom" }: Sheet
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      previousFocus.current?.focus?.();
     };
   }, [open, onClose]);
 
@@ -29,10 +57,10 @@ export function Sheet({ open, onClose, title, children, side = "bottom" }: Sheet
 
   const sideClass =
     side === "left"
-      ? "inset-y-0 left-0 w-[min(100%,280px)]"
+      ? "inset-y-0 left-0 w-[min(100%,280px)] md:w-[min(100%,320px)]"
       : side === "right"
-        ? "inset-y-0 right-0 w-[min(100%,320px)]"
-        : "inset-x-0 bottom-0 max-h-[85vh] rounded-t-jewel-lg";
+        ? "inset-y-0 right-0 w-[min(100%,320px)] md:w-[min(100%,360px)]"
+        : "inset-x-0 bottom-0 max-h-[85vh] rounded-t-jewel-lg md:max-h-[80vh]";
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -43,6 +71,7 @@ export function Sheet({ open, onClose, title, children, side = "bottom" }: Sheet
         onClick={onClose}
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

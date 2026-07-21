@@ -61,7 +61,7 @@ export function SharePage() {
                     >
                       <img
                         src={mediaUrl(url)}
-                        alt="Shared output"
+                        alt={`${data.workflow}${data.jewelry_type ? ` — ${data.jewelry_type}` : ""} shared output`}
                         className="max-h-[70vh] max-w-full object-contain rounded"
                       />
                     </div>

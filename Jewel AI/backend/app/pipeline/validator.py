@@ -10,10 +10,12 @@ from seeds.prompts_data import JEWELRY_TYPES, WORKFLOWS
 
 JEWELRY_TYPE_SET = set(JEWELRY_TYPES)
 
-ALLOWED_WORKFLOWS = {w["id"] for w in WORKFLOWS if w["id"] != "RATE_TOOLS"}
+ALLOWED_WORKFLOWS = {w["id"] for w in WORKFLOWS}
 
 ALLOWED_UPLOAD_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+MAX_IMAGE_DIMENSION = 8192
+MAX_IMAGE_PIXELS = 25_000_000  # ~25MP — Pillow decompression-bomb ceiling
 
 JOB_FIELD_WHITELIST = {
     "workflow",
@@ -47,7 +49,7 @@ JOB_FIELD_WHITELIST = {
 }
 
 # Workflows that generate images and must include a product asset
-GENERATION_WORKFLOWS = ALLOWED_WORKFLOWS - {"BULK_GENERATION", "RATE_TOOLS"}
+GENERATION_WORKFLOWS = ALLOWED_WORKFLOWS - {"BULK_GENERATION"}
 
 _INJECTION_PATTERNS = re.compile(
     r"(ignore\s+(all\s+)?previous|forget\s+(all\s+)?instructions|disregard\s+(all\s+)?|override\s+(the\s+)?preservation)",
@@ -146,6 +148,29 @@ def validate_upload(content_type: str, size_bytes: int, content: bytes | None = 
         raise HTTPException(status_code=400, detail="File too large (max 20 MB)")
     if content:
         validate_image_magic_bytes(content, content_type)
+        validate_image_dimensions(content)
+
+
+def validate_image_dimensions(content: bytes) -> None:
+    """Reject decompression bombs / absurd pixel dimensions before full pipeline decode."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    try:
+        with Image.open(__import__("io").BytesIO(content)) as img:
+            img.load()  # force decode header + enough to know size
+            w, h = img.size
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(status_code=400, detail="Image exceeds maximum allowed pixels") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid or corrupt image file") from exc
+    if w > MAX_IMAGE_DIMENSION or h > MAX_IMAGE_DIMENSION:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image dimensions too large (max {MAX_IMAGE_DIMENSION}px per side)",
+        )
+    if w * h > MAX_IMAGE_PIXELS:
+        raise HTTPException(status_code=400, detail="Image exceeds maximum allowed pixels")
 
 
 def validate_image_magic_bytes(content: bytes, content_type: str) -> None:

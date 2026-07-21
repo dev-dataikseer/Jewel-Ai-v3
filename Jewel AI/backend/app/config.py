@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     stuck_job_minutes: int = 15
     daily_job_limit: int = 100
     schema_via_alembic: bool = False
+    # When true, debit user credits atomically on job create (SELECT FOR UPDATE).
+    enforce_user_credits: bool = False
+    sentry_dsn: str = ""
+    csrf_cookie_name: str = "jewel_csrf"
+    refresh_cookie_name: str = "jewel_refresh_token"
 
     fal_key: str = ""
     # Admin-scoped key required for Platform Billing APIs (credits). Falls back to fal_key.
@@ -148,6 +153,7 @@ def validate_production_settings() -> list[str]:
 
 def assert_production_settings() -> None:
     """Fail fast on critical misconfiguration in production."""
+    s = get_settings()
     issues = validate_production_settings()
     critical_markers = (
         "JWT_SECRET",
@@ -158,7 +164,28 @@ def assert_production_settings() -> None:
         "FERNET_KEY",
         "STORAGE_BACKEND=local",
         "bucket credentials",
+        "DATABASE_URL",
+        "SCHEMA_VIA_ALEMBIC",
+        "FRONTEND_ORIGIN",
     )
+    # SQLite cannot handle concurrent API + Celery + Beat writers.
+    db_url = (s.database_url or "").lower()
+    if "sqlite" in db_url:
+        issues.append("DATABASE_URL must use PostgreSQL in production (SQLite is local/dev only)")
+    if not s.schema_via_alembic:
+        issues.append("SCHEMA_VIA_ALEMBIC must be true in production")
+    # Same-site cookie auth requires SPA and API on the same registrable host.
+    try:
+        from urllib.parse import urlparse
+
+        api_host = urlparse(s.api_public_url).hostname or ""
+        fe_hosts = {urlparse(o).hostname or "" for o in s.cors_origins}
+        if api_host and fe_hosts and api_host not in fe_hosts:
+            issues.append(
+                "FRONTEND_ORIGIN host must match API_PUBLIC_URL host in production (same-site cookies)"
+            )
+    except Exception:
+        pass
     critical = [w for w in issues if any(m in w for m in critical_markers)]
     if critical:
         raise RuntimeError("Production configuration invalid: " + "; ".join(critical))

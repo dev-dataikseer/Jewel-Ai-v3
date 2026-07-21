@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.deps import RequireUser
 from app.config import get_settings
@@ -34,6 +35,35 @@ def _mirror_to_fal_cdn(content: bytes, content_type: str, filename: str) -> str 
     except Exception:
         return None
 
+
+def _persist_asset(
+    db: Session,
+    *,
+    user_id: str,
+    content: bytes,
+    content_type: str,
+    filename: str,
+) -> Asset:
+    try:
+        url = storage.save_bytes(content, filename=filename, content_type=content_type)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
+        ) from exc
+    fal_url = _mirror_to_fal_cdn(content, content_type, filename)
+    asset = Asset(
+        user_id=user_id,
+        original_url=url,
+        processed_url=fal_url,
+        type="PRODUCT",
+    )
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
 router = APIRouter(prefix="/assets", tags=["assets"])
 
 
@@ -44,26 +74,18 @@ async def upload_asset(
     db: Session = Depends(get_db),
 ):
     content = await file.read()
-    validate_upload(file.content_type or "image/jpeg", len(content), content)
-    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
+    content_type = file.content_type or "image/jpeg"
+    validate_upload(content_type, len(content), content)
+    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(content_type, ".jpg")
     filename = f"asset-{uuid.uuid4().hex}{ext}"
-    try:
-        url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
-        ) from exc
-    fal_url = _mirror_to_fal_cdn(content, file.content_type or "image/jpeg", filename)
-    asset = Asset(
+    asset = await run_in_threadpool(
+        _persist_asset,
+        db,
         user_id=user.id,
-        original_url=url,
-        processed_url=fal_url,
-        type="PRODUCT",
+        content=content,
+        content_type=content_type,
+        filename=filename,
     )
-    db.add(asset)
-    db.commit()
-    db.refresh(asset)
     return _asset_out(asset)
 
 
@@ -75,24 +97,39 @@ async def bulk_upload(
 ):
     if len(files) > 30:
         raise HTTPException(status_code=400, detail="Maximum 30 files")
-    assets = []
+
+    prepared: list[tuple[bytes, str, str]] = []
     for file in files:
         content = await file.read()
-        validate_upload(file.content_type or "image/jpeg", len(content), content)
-        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(file.content_type or "", ".jpg")
+        content_type = file.content_type or "image/jpeg"
+        validate_upload(content_type, len(content), content)
+        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get(content_type, ".jpg")
         filename = f"asset-{uuid.uuid4().hex}{ext}"
-        try:
-            url = storage.save_bytes(content, filename=filename, content_type=file.content_type or "image/jpeg")
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
-            ) from exc
-        fal_url = _mirror_to_fal_cdn(content, file.content_type or "image/jpeg", filename)
-        asset = Asset(user_id=user.id, original_url=url, processed_url=fal_url, type="PRODUCT")
-        db.add(asset)
-        assets.append(asset)
-    db.commit()
-    for a in assets:
-        db.refresh(a)
+        prepared.append((content, content_type, filename))
+
+    def _persist_all() -> list[Asset]:
+        assets: list[Asset] = []
+        for content, content_type, filename in prepared:
+            try:
+                url = storage.save_bytes(content, filename=filename, content_type=content_type)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Image storage upload failed — check R2/S3 credentials ({type(exc).__name__})",
+                ) from exc
+            fal_url = _mirror_to_fal_cdn(content, content_type, filename)
+            asset = Asset(
+                user_id=user.id,
+                original_url=url,
+                processed_url=fal_url,
+                type="PRODUCT",
+            )
+            db.add(asset)
+            assets.append(asset)
+        db.commit()
+        for a in assets:
+            db.refresh(a)
+        return assets
+
+    assets = await run_in_threadpool(_persist_all)
     return [_asset_out(a) for a in assets]

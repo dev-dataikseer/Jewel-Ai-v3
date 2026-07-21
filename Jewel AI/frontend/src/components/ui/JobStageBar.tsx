@@ -1,3 +1,5 @@
+import { FacetMark } from "@/components/ui/FacetMark";
+
 type JobStageBarProps = {
   stage: "idle" | "queued" | "generating" | "finalizing" | "ready" | "failed" | "cancelled";
   label: string;
@@ -18,6 +20,8 @@ export function JobStageBar({ stage, label, detail }: JobStageBarProps) {
           ),
         );
 
+  const showSpin = stage === "queued" || stage === "generating" || stage === "finalizing";
+
   return (
     <div className="mb-3 space-y-2" aria-live="polite">
       <div className="flex gap-1">
@@ -36,8 +40,17 @@ export function JobStageBar({ stage, label, detail }: JobStageBarProps) {
           />
         ))}
       </div>
-      <p className="text-sm font-semibold text-jewel-ink">{label}</p>
-      {detail && <p className="text-xs text-jewel-ink-muted">{detail}</p>}
+      <div className="flex items-start gap-2">
+        {showSpin ? (
+          <FacetMark variant="spin" size={18} className="mt-0.5 shrink-0 text-[var(--jewel-accent)]" />
+        ) : stage === "ready" ? (
+          <FacetMark variant="check" size={18} className="mt-0.5 shrink-0 text-[var(--jewel-accent)]" />
+        ) : null}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-jewel-ink">{label}</p>
+          {detail && <p className="text-xs text-jewel-ink-muted">{detail}</p>}
+        </div>
+      </div>
     </div>
   );
 }

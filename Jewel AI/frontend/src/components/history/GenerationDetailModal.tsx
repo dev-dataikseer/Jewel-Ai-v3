@@ -4,13 +4,12 @@ import {
   ArrowUpRight,
   Download,
   Heart,
-  Link2,
   RefreshCcw,
   Trash2,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
-import { api, mediaUrl } from "@/lib/api";
+import { ShareLinkControls } from "@/components/share/ShareLinkControls";
+import { mediaUrl } from "@/lib/api";
 import type { Job } from "@/types";
 import { label, workflowLabel } from "@/types";
 
@@ -77,7 +76,10 @@ export function GenerationDetailModal({
   actionPending,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
   const titleId = `generation-modal-title-${job.id}`;
+  const wf = workflowLabel(job.workflow);
 
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -105,13 +107,37 @@ export function GenerationDetailModal({
   }, [job.id]);
 
   useEffect(() => {
-    closeRef.current?.focus();
+    previousFocus.current = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const focusable = panel?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    (closeRef.current || focusable?.[0])?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel || !focusable?.length) return;
+      const list = Array.from(focusable);
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      previousFocus.current?.focus?.();
+    };
+  }, [onClose, job.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -122,6 +148,7 @@ export function GenerationDetailModal({
         onClick={onClose}
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -130,7 +157,7 @@ export function GenerationDetailModal({
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 backdrop-blur px-5 py-4">
           <div className="min-w-0">
             <h2 id={titleId} className="text-lg font-semibold text-slate-900 truncate">
-              {workflowLabel(job.workflow)}
+              {wf}
             </h2>
             <p className="text-xs text-slate-500 mt-1 truncate">{subtitleParts.join(" · ")}</p>
           </div>
@@ -147,11 +174,16 @@ export function GenerationDetailModal({
 
         <div className="px-5 py-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <ComparePanel title="Input" url={job.input_url} alt="Input" emptyLabel="No input image" />
+            <ComparePanel
+              title="Input"
+              url={job.input_url}
+              alt={`${wf} input`}
+              emptyLabel="No input image"
+            />
             <ComparePanel
               title="Output"
               url={outputUrl}
-              alt="Output"
+              alt={`${wf} output`}
               emptyLabel="No output yet"
               status={job.status}
               errorMessage={job.error_message}
@@ -170,7 +202,12 @@ export function GenerationDetailModal({
                       : "border-slate-200"
                   }`}
                 >
-                  <img src={mediaUrl(url)} alt="" className="size-full object-cover" />
+                  <img
+                    src={mediaUrl(url)}
+                    alt={`${wf} output ${i + 1}`}
+                    loading="lazy"
+                    className="size-full object-cover"
+                  />
                 </button>
               ))}
             </div>
@@ -180,10 +217,15 @@ export function GenerationDetailModal({
               <ComparePanel
                 title="Reference"
                 url={job.reference_url}
-                alt="Reference"
+                alt={`${wf} reference`}
                 emptyLabel="No reference image"
               />
-              <ComparePanel title="Model" url={job.model_url} alt="Model" emptyLabel="No model image" />
+              <ComparePanel
+                title="Model"
+                url={job.model_url}
+                alt={`${wf} model`}
+                emptyLabel="No model image"
+              />
             </div>
           )}
           {job.final_prompt && (
@@ -235,27 +277,7 @@ export function GenerationDetailModal({
               Download Output
             </a>
           )}
-          {job.status === "COMPLETED" && (
-            <button
-              type="button"
-              className="ui-btn-secondary"
-              onClick={async () => {
-                try {
-                  const res = await api.post<{ token: string }>("/share-links", {
-                    job_id: job.id,
-                  });
-                  const shareUrl = `${window.location.origin}/share/${res.data.token}`;
-                  await navigator.clipboard.writeText(shareUrl);
-                  toast.success("Share link copied");
-                } catch {
-                  toast.error("Could not create share link");
-                }
-              }}
-            >
-              <Link2 className="size-3.5" />
-              Share
-            </button>
-          )}
+          {job.status === "COMPLETED" && <ShareLinkControls jobId={job.id} />}
           {onDelete && (
             <button
               type="button"

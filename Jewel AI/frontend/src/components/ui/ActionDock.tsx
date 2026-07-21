@@ -1,4 +1,5 @@
-import { RefreshCcw, Wand2 } from "lucide-react";
+import { Wand2 } from "lucide-react";
+import { FacetMark } from "@/components/ui/FacetMark";
 
 type ActionDockProps = {
   label: string;
@@ -46,14 +47,19 @@ export function ActionDock({
         type="button"
         onClick={onGenerate}
         disabled={disabled || generating}
+        aria-busy={generating || undefined}
         className="ui-btn-primary shrink-0"
       >
         {generating ? (
-          <RefreshCcw className="size-4 animate-spin" />
+          <FacetMark variant="spin" size={16} className="text-white" />
         ) : (
           <Wand2 className="size-4" />
         )}
-        {bulkCount && bulkCount > 1 ? `Generate Bulk (${bulkCount})` : "Generate"}
+        {generating
+          ? "Generating…"
+          : bulkCount && bulkCount > 1
+            ? `Generate Bulk (${bulkCount})`
+            : "Generate"}
       </button>
     </div>
   );

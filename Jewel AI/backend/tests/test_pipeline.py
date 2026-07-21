@@ -20,9 +20,9 @@ def test_whitelist_job_fields():
     assert "hack" not in whitelist_job_fields(body)
 
 
-def test_rate_tools_rejected():
+def test_unknown_workflow_rejected():
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        validate_job_create({"workflow": "RATE_TOOLS"})
+        validate_job_create({"workflow": "NOT_A_REAL_WORKFLOW"})
     assert exc.value.status_code == 400

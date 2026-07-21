@@ -10,13 +10,15 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",
+    "@tanstack/react-virtual": "^3.14.6",
     "axios": "^1.12.2",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-easy-crop": "^6.2.2",
     "react-router-dom": "^7.9.1",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "^19.1.13",

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Layers3, X } from "lucide-react";
-import { api, mediaUrl } from "@/lib/api";
+import { Download, Layers3, RefreshCcw, X } from "lucide-react";
+import { api, thumbUrl } from "@/lib/api";
+import { useStudioUiStore } from "@/stores/studioUi";
 import type { BatchOut, Job } from "@/types";
+import { workflowLabel } from "@/types";
 
 type Props = {
   batchId: string;
@@ -52,6 +54,8 @@ export function BatchProgressPanel({
   queueModeWarning,
 }: Props) {
   const queryClient = useQueryClient();
+  const filter = useStudioUiStore((s) => s.batchFilter);
+  const setFilter = useStudioUiStore((s) => s.setBatchFilter);
 
   const { data: batch } = useQuery({
     queryKey: ["batch", batchId],
@@ -59,8 +63,14 @@ export function BatchProgressPanel({
     refetchInterval: (q) => {
       const s = q.state.data?.status;
       // Jobs update via useJobStream; poll batch summary less often to cut duplicate traffic.
-      return s === "PENDING" || s === "PROCESSING" ? 8000 : false;
+      // Slow further when the tab is backgrounded.
+      if (s !== "PENDING" && s !== "PROCESSING") return false;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return 30_000;
+      }
+      return 8000;
     },
+    refetchIntervalInBackground: false,
   });
 
   const cancelMutation = useMutation({
@@ -93,16 +103,37 @@ export function BatchProgressPanel({
     onError: () => toast.error("ZIP download failed"),
   });
 
+  const jobs = (batch?.jobs || []) as Job[];
+  const failedJobs = jobs.filter((j) => j.status === "FAILED");
+
+  const retryFailedMutation = useMutation({
+    mutationFn: async (failedIds: string[]) => {
+      const results = await Promise.allSettled(
+        failedIds.map((id) => api.post(`/jobs/${id}/retry`)),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const bad = results.length - ok;
+      return { ok, bad };
+    },
+    onSuccess: async ({ ok, bad }) => {
+      await queryClient.invalidateQueries({ queryKey: ["batch", batchId] });
+      await queryClient.invalidateQueries({ queryKey: ["recent-jobs"] });
+      if (bad === 0) toast.success(`Retried ${ok} failed job${ok === 1 ? "" : "s"}`);
+      else toast.message(`Retried ${ok}; ${bad} could not be queued`);
+    },
+    onError: () => toast.error("Retry failed"),
+  });
+
   if (!batch) {
     return (
       <div className="ui-card p-4 text-xs text-slate-500">Loading batch…</div>
     );
   }
 
-  const jobs = (batch.jobs || []) as Job[];
+  const visibleJobs = filter === "failed" ? failedJobs : jobs;
   const total = batch.total_jobs || jobs.length || 1;
   const done = batch.completed_jobs || 0;
-  const failed = batch.failed_jobs || 0;
+  const failed = batch.failed_jobs || failedJobs.length || 0;
   const pct = Math.round((done / total) * 100);
   const active =
     batch.status === "PENDING" || batch.status === "PROCESSING";
@@ -143,16 +174,56 @@ export function BatchProgressPanel({
 
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full bg-blue-600 transition-all"
+          className="h-full bg-[var(--jewel-accent)] transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
 
-      {jobs.length > 0 && (
+      {failedJobs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={`rounded-md px-2 py-1 font-semibold ${
+                filter === "all" ? "bg-slate-900 text-white" : "text-slate-600"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("failed")}
+              className={`rounded-md px-2 py-1 font-semibold ${
+                filter === "failed" ? "bg-slate-900 text-white" : "text-slate-600"
+              }`}
+            >
+              Failed only
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              retryFailedMutation.mutate(failedJobs.map((j) => j.id))
+            }
+            disabled={retryFailedMutation.isPending}
+            className="ui-btn-secondary h-8 px-3 text-xs"
+          >
+            <RefreshCcw
+              className={`size-3.5 ${retryFailedMutation.isPending ? "animate-spin" : ""}`}
+            />
+            {retryFailedMutation.isPending ? "Retrying…" : "Retry failed"}
+          </button>
+        </div>
+      )}
+
+      {visibleJobs.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {jobs.map((job, i) => {
+          {visibleJobs.map((job, i) => {
             const thumb = job.output_url || job.input_url;
             const selected = activeJobId === job.id;
+            const role = job.output_url ? "output" : "input";
+            const alt = `${workflowLabel(job.workflow)} ${role}`;
             return (
               <button
                 key={job.id}
@@ -160,15 +231,17 @@ export function BatchProgressPanel({
                 onClick={() => onSelectJob(job.id)}
                 className={`relative size-14 shrink-0 overflow-hidden rounded-lg border ${
                   selected
-                    ? "border-blue-600 ring-2 ring-blue-500/25"
+                    ? "border-[var(--jewel-accent)] ring-2 ring-[var(--jewel-accent)]/25"
                     : "border-slate-200"
                 }`}
                 title={`Job ${i + 1}: ${statusLabel(job.status)}`}
               >
                 {thumb ? (
                   <img
-                    src={mediaUrl(thumb)}
-                    alt=""
+                    src={thumbUrl(thumb, 160)}
+                    alt={alt}
+                    loading="lazy"
+                    decoding="async"
                     className="size-full object-cover"
                   />
                 ) : (

@@ -16,7 +16,6 @@ from app.models import (
     PromptWorkflowLayerConfig,
     StylePreset,
 )
-from app.pipeline.composer import ComposeInput
 from app.pipeline.layer_derive import (
     assemble_raw_text_from_layers,
     default_structural_config,
@@ -24,15 +23,6 @@ from app.pipeline.layer_derive import (
 )
 from app.pipeline.layer_validate import validate_master_layers, validate_subject_layers
 from app.pipeline.layers import sort_layers
-from app.prompt_engine import build_final_prompt
-from app.prompt_engine.attachments import ImageContext
-from app.providers.model_validate import validate_generation_request, validate_model_params
-from app.providers.registry import get_model_definition
-from app.providers.router import route_generation
-from app.providers.types import GenerationRequest
-from app.schemas.common import PromptTestRequest, PromptTestResponse
-from app.storage.local import storage
-from app.tasks.generate import process_image_job
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
@@ -467,60 +457,6 @@ def list_variant_versions(variant_id: str, user: RequireAdmin, db: Session = Dep
         .all()
     )
     return [{"id": v.id, "version": v.version, "is_active": v.is_active, "prompt_text": v.prompt_text} for v in versions]
-
-
-@router.post("/test", response_model=PromptTestResponse)
-def test_prompt(body: PromptTestRequest, user: RequireAdmin, db: Session = Depends(get_db)):
-    final = build_final_prompt(
-        db,
-        ComposeInput(**body.model_dump(exclude={"model_endpoint_id", "model_params", "image_url"})),
-        model_endpoint_id=body.model_endpoint_id,
-        image_ctx=ImageContext(has_product=bool(body.image_url), image_count=1 if body.image_url else 1),
-    )
-    return PromptTestResponse(prompt=final.text, negative_prompt=final.negative_prompt, debug=final.debug)
-
-
-@router.post("/test/generate")
-async def test_generate(body: PromptTestRequest, user: RequireAdmin, db: Session = Depends(get_db)):
-    if not body.image_url:
-        raise HTTPException(status_code=400, detail="image_url is required for test generation")
-    final = build_final_prompt(
-        db,
-        ComposeInput(**body.model_dump(exclude={"model_endpoint_id", "model_params", "image_url"})),
-        model_endpoint_id=body.model_endpoint_id,
-        image_ctx=ImageContext(has_product=True, image_count=1),
-    )
-    endpoint = body.model_endpoint_id
-    model_def = get_model_definition(db, endpoint) if endpoint else None
-    if endpoint and not model_def:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {endpoint}")
-    params = validate_model_params(model_def, body.model_params)
-    request = GenerationRequest(
-        prompt=final.text,
-        negative_prompt=final.negative_prompt,
-        workflow=body.workflow,
-        model_endpoint_id=endpoint,
-        model_params=params,
-        image_urls=[body.image_url],
-    )
-    validate_generation_request(model_def, request)
-    result, chain = await route_generation(db, request)
-    if result.is_webhook_pending or not result.image_bytes:
-        raise HTTPException(status_code=503, detail="Test generation requires synchronous provider response")
-    url = storage.save_bytes(result.image_bytes, filename=f"test_{body.workflow}.png")
-    return {
-        "output_url": url,
-        "prompt": final.text,
-        "provider": result.provider,
-        "model": result.model,
-        "chain": chain,
-        "debug": final.debug,
-        "version_ids": {
-            "master": final.master_version_id,
-            "subject": final.subject_version_id,
-            "variant": final.variant_version_id,
-        },
-    }
 
 
 # ── Prompt fragments (shared Admin-editable blocks) ──────────────────────────

@@ -1,33 +1,34 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BadgeCheck,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Crop,
   Gem,
-  History,
+  Heart,
   ImagePlus,
   Images,
   Layers3,
   Menu,
   PanelRight,
-  RefreshCcw,
-  Settings,
   Sparkles,
+  UploadCloud,
   Wand2,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ImageCropModal } from "@/components/studio/ImageCropModal";
 import { BatchProgressPanel } from "@/components/studio/BatchProgressPanel";
-import { ModelSelector } from "@/components/studio/ModelSelector";
+import { ImageStageControls } from "@/components/studio/ImageStageControls";
 import { ProductUploadGallery } from "@/components/studio/ProductUploadGallery";
+import { StudioInspectorPanel } from "@/components/studio/StudioInspectorPanel";
 import { UploadZone } from "@/components/studio/UploadZone";
 import { ActionDock } from "@/components/ui/ActionDock";
+import { FacetMark } from "@/components/ui/FacetMark";
 import { JobStageBar, resolveJobStage } from "@/components/ui/JobStageBar";
-import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
 import { ResultsTray } from "@/components/ui/ResultsTray";
 import { Sheet } from "@/components/ui/Sheet";
 import { jobStatusLabel, useJobStream } from "@/hooks/useJobStream";
@@ -53,7 +54,7 @@ import type {
   ModelDefinition,
   StylePreset,
 } from "@/types";
-import { STUDIO_SIDEBAR_WORKFLOWS, workflowLabel } from "@/types";
+import { STUDIO_SIDEBAR_WORKFLOWS, WORKFLOWS, workflowLabel } from "@/types";
 
 const WORKFLOW_ICONS: Record<string, typeof Gem> = {
   CATALOG_IMAGE: ImagePlus,
@@ -110,10 +111,13 @@ export function StudioPage() {
   const [catalogMode, setCatalogMode] = useState<"modern" | "reference_mirror" | "style_mood">(
     "modern",
   );
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [workflowSheetOpen, setWorkflowSheetOpen] = useState(false);
   const [inspectorSheetOpen, setInspectorSheetOpen] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"settings" | "advanced">("settings");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [inputZoom, setInputZoom] = useState(1);
+  const [outputZoom, setOutputZoom] = useState(1);
 
   const apiWorkflow = workflow;
   const isCatalog = workflow === "CATALOG_IMAGE";
@@ -402,6 +406,14 @@ export function StudioPage() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    const preset = searchParams.get("preset");
+    if (!preset) return;
+    setStylePresetId(preset);
+    searchParams.delete("preset");
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     const batchId = searchParams.get("batchId");
     if (!batchId) return;
     setLastBatchId(batchId);
@@ -596,11 +608,20 @@ export function StudioPage() {
           workflow: apiWorkflow,
           jewelry_type: jewelryTypes.join(", "),
           prompt_text: promptText || null,
-          aspect_ratio: aspectRatio,
+          aspect_ratio: String(modelParams.aspect_ratio || aspectRatio),
           person_generation: personGeneration,
-          number_of_images: numberOfImages,
+          number_of_images: Number(
+            modelParams.num_images ?? modelParams.num_samples ?? numberOfImages,
+          ) || 1,
           model_endpoint_id: modelEndpointId || selectedModel?.endpoint_id,
-          model_params: modelParams,
+          model_params: {
+            ...modelParams,
+            ...(negativePrompt.trim() &&
+            "negative_prompt" in (selectedModel?.input_schema?.properties ?? {})
+              ? { negative_prompt: negativePrompt.trim() }
+              : {}),
+          },
+
           reference_url: needsModelReference ? undefined : referenceUrl,
           model_url: modelUrl,
           ...(workflow === "VIRTUAL_TRY_ON"
@@ -763,47 +784,9 @@ export function StudioPage() {
   );
 
   const schemaProps = selectedModel?.input_schema?.properties ?? {};
-  const showAspectRatio =
-    "aspect_ratio" in schemaProps || "image_size" in schemaProps;
   const showPersonGeneration = Boolean(
     selectedModel?.capabilities?.person_generation,
   );
-  const showNumberOfImages =
-    "num_images" in schemaProps || "num_samples" in schemaProps;
-
-  const modelMaxImages =
-    selectedModel?.limits?.max_images ??
-    selectedModel?.ui?.max_images ??
-    (selectedModel?.capabilities?.multi_image === false ? 1 : 14);
-  // Optimistic true until a model is selected (catalog default is multi-image).
-  const modelSupportsMultiImage =
-    selectedModel == null
-      ? true
-      : Boolean(selectedModel.capabilities?.multi_image) && modelMaxImages > 1;
-  const hasThemeAttached = Boolean(referenceFile || lockedUrls.reference);
-  const hasLogoAttached = Boolean(logoFile || lockedUrls.logo);
-  const plannedSlots: { role: string; label: string }[] = [
-    { role: "product", label: "Product → Image 1" },
-  ];
-  if (needsModelReference && (referenceFile || lockedUrls.model || lockedUrls.reference)) {
-    plannedSlots.push({ role: "portrait", label: "Portrait → Image 2" });
-  } else if (hasThemeAttached) {
-    plannedSlots.push({
-      role: "theme",
-      label: `Theme → Image ${plannedSlots.length + 1}`,
-    });
-  }
-  const logoAsModelRef =
-    hasLogoAttached &&
-    modelSupportsMultiImage &&
-    plannedSlots.length < modelMaxImages;
-  if (hasLogoAttached && logoAsModelRef) {
-    plannedSlots.push({
-      role: "logo",
-      label: `Logo → Image ${plannedSlots.length + 1}`,
-    });
-  }
-  const logoUsesComposeFallback = hasLogoAttached && !logoAsModelRef;
 
   const workflowVariantLabel =
     workflow === "GEMSTONE_COLOR_CHANGE"
@@ -890,7 +873,9 @@ export function StudioPage() {
     ? primaryPreviews.map((p) => p.url)
     : lockedUrls.input
       ? [mediaUrl(lockedUrls.input)]
-      : [];
+      : activeJob?.input_url
+        ? [mediaUrl(activeJob.input_url)]
+        : [];
 
   const outputUrls = useMemo(() => {
     if (!activeJob) return [] as string[];
@@ -928,23 +913,11 @@ export function StudioPage() {
   const generateBlockedByBatch = Boolean(batchActive && !batchForceAllow);
 
   const selectWorkflow = (id: string) => {
-    const hasUploads =
-      primaryFiles.length > 0 ||
-      Boolean(referenceFile) ||
-      Boolean(logoFile) ||
-      Boolean(lockedUrls.input) ||
-      Boolean(lockedUrls.reference) ||
-      Boolean(lockedUrls.logo);
-    if (hasUploads && id !== workflow) {
-      const ok = window.confirm(
-        "Switch workflow? Product uploads will be kept; reference/portrait may need re-check for the new workflow.",
-      );
-      if (!ok) return;
-    }
+    if (id === workflow) return;
     setWorkflow(id);
-    // Keep product files; reset job selection only
     setActiveJobId(null);
     setValidationErrors({});
+    setCompareMode(false);
   };
 
   const clearWorkspace = () => {
@@ -973,147 +946,299 @@ export function StudioPage() {
     toast.message("Brand kit cleared");
   };
 
-  const is4kSelected = useMemo(() => {
-    const res = String(
-      modelParams.resolution || modelParams.image_size || "",
-    ).toUpperCase();
-    return res.includes("4K") || res === "AUTO_4K";
-  }, [modelParams]);
-
   const sidebarWorkflows = useMemo(() => {
+    const preferred = STUDIO_SIDEBAR_WORKFLOWS.map((w) => ({
+      id: w.id as string,
+      label: w.label,
+      title: WORKFLOWS.find((x) => x.id === w.id)?.label || w.label,
+    }));
+    const preferredIds = new Set(preferred.map((w) => w.id));
     const fromApi = (options?.workflows || [])
       .filter(
         (w) =>
           ![
-            "RATE_TOOLS",
             "BULK_GENERATION",
             "JEWELRY_ON_MODEL",
             "CUSTOMER_TRY_ON",
           ].includes(w.id),
       )
-      .map((w) => ({ id: w.id, label: w.label }));
-    if (fromApi.length) {
-      // Ensure Virtual Try-On appears once near top
-      const withoutDup = fromApi.filter((w) => w.id !== "VIRTUAL_TRY_ON");
-      return [
-        ...STUDIO_SIDEBAR_WORKFLOWS.filter(
-          (w) => w.id === "CATALOG_IMAGE" || w.id === "VIRTUAL_TRY_ON",
-        ),
-        ...withoutDup.filter((w) => w.id !== "CATALOG_IMAGE"),
-      ];
-    }
-    return [...STUDIO_SIDEBAR_WORKFLOWS];
+      .map((w) => ({ id: w.id, label: w.label, title: w.label }));
+
+    if (!fromApi.length) return preferred;
+
+    const byId = new Map(fromApi.map((w) => [w.id, w] as const));
+    // Keep short sidebar labels; only use API to confirm the workflow exists.
+    const ordered = preferred
+      .filter((w) => byId.has(w.id))
+      .map((w) => ({ ...w, title: byId.get(w.id)?.title || w.title }));
+
+    const extras = fromApi
+      .filter((w) => !preferredIds.has(w.id))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return [...ordered, ...extras];
   }, [options?.workflows]);
 
+  const schemaHasNegative = "negative_prompt" in schemaProps;
+
+  // Keep generate payload in sync with Advanced model params
+  useEffect(() => {
+    const ar = modelParams.aspect_ratio;
+    if (typeof ar === "string" && ar.trim()) setAspectRatio(ar);
+    const n = modelParams.num_images ?? modelParams.num_samples;
+    if (typeof n === "number" && n > 0) setNumberOfImages(n);
+  }, [modelParams]);
+  const footerModel = selectedModel?.display_name || selectedModel?.endpoint_id || null;
+
+  const clearTheme = () => {
+    setReferenceFile(null);
+    patchBrandKit({
+      themeAssetId: null,
+      themeUrl: null,
+      themeName: null,
+    });
+    setLockedUrls((u) => ({
+      ...u,
+      reference: null,
+      themeAssetId: null,
+    }));
+  };
+
+  const clearLogo = () => {
+    setLogoFile(null);
+    patchBrandKit({
+      logoAssetId: null,
+      logoUrl: null,
+      logoName: null,
+    });
+    setLockedUrls((u) => ({
+      ...u,
+      logo: null,
+      logoAssetId: null,
+    }));
+  };
+
+  const inspectorPanel = (
+    <StudioInspectorPanel
+      tab={inspectorTab}
+      onTabChange={setInspectorTab}
+      workflow={workflow}
+      jewelryTypes={jewelryTypes}
+      onJewelryTypesChange={setJewelryTypes}
+      options={options}
+      promptText={promptText}
+      onPromptTextChange={setPromptText}
+      negativePrompt={negativePrompt}
+      onNegativePromptChange={setNegativePrompt}
+      schemaHasNegative={schemaHasNegative}
+      apiWorkflow={apiWorkflow}
+      inputImageCount={inputImageCount}
+      modelEndpointId={modelEndpointId}
+      modelParams={modelParams}
+      onModelChange={(endpointId, model) => {
+        setModelEndpointId(endpointId);
+        setSelectedModel(model);
+      }}
+      onParamsChange={setModelParams}
+      isCatalog={isCatalog}
+      tryOnPreset={tryOnPreset}
+      onTryOnPresetChange={setTryOnPreset}
+      catalogMode={catalogMode}
+      onCatalogModeChange={setCatalogMode}
+      workflowVariantLabel={workflowVariantLabel}
+      workflowVariants={workflowVariants}
+      workflowVariantKey={workflowVariantKey}
+      onWorkflowVariantKeyChange={setWorkflowVariantKey}
+      stylePresets={stylePresets}
+      stylePresetId={stylePresetId}
+      onStylePresetIdChange={setStylePresetId}
+      lightingStyle={lightingStyle}
+      onLightingStyleChange={setLightingStyle}
+      showPersonGeneration={showPersonGeneration}
+      personGeneration={personGeneration}
+      onPersonGenerationChange={setPersonGeneration}
+      themePreviewSrc={themePreviewSrc}
+      logoPreviewSrc={logoPreviewSrc}
+      referenceFile={referenceFile}
+      logoFile={logoFile}
+      onReferencePick={onReferencePick}
+      onLogoPick={onLogoPick}
+      clearBrandAssets={clearBrandAssets}
+      clearTheme={clearTheme}
+      clearLogo={clearLogo}
+      validationErrors={validationErrors}
+      isBulk={isBulk}
+      lockedUrls={lockedUrls}
+      onGenerate={() => generateMutation.mutate()}
+      generating={generateMutation.isPending || Boolean(uploadProgress)}
+      generateDisabled={generateBlockedByBatch}
+      generateBlockedByBatch={generateBlockedByBatch}
+      onForceBatch={() => setBatchForceAllow(true)}
+      uploadProgress={uploadProgress}
+      bulkCount={isBulk ? primaryFiles.length : undefined}
+    />
+  );
+
   return (
-    <AppLayout>
-      <main className="mx-auto max-w-[1600px] w-full px-4 sm:px-6 lg:px-8 py-6 flex-1">
-        <div className="grid grid-cols-1 gap-5 items-start lg:grid-cols-[240px_minmax(0,1fr)_300px]">
-          {/* Sidebar */}
-          <aside className="hidden space-y-3 lg:sticky lg:top-[4.5rem] lg:block">
-            <p className="ui-label px-1 mb-0">Workflows</p>
-            <div className="ui-card p-1.5 space-y-0.5">
-              {sidebarWorkflows.map((item) => {
-                const Icon = WORKFLOW_ICONS[item.id] || Sparkles;
-                const active = workflow === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => selectWorkflow(item.id)}
-                    className={`flex w-full items-center gap-2.5 rounded-jewel-md px-3 py-2.5 text-left text-[13px] transition-colors ${
-                      active
-                        ? "bg-jewel-accent text-white font-semibold"
-                        : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
-                    }`}
+    <AppLayout subtitle="AI Creative Suite" footerModel={footerModel}>
+      <main className="flex flex-1 min-h-0 w-full overflow-hidden bg-[var(--jewel-bg)]">
+        <div className="flex h-full w-full min-h-0">
+          {/* Left sidebar */}
+          <aside className="hidden w-[220px] xl:w-[240px] shrink-0 flex-col overflow-hidden bg-[var(--jewel-surface-muted)] lg:flex border-r border-[var(--jewel-border)] min-h-0 self-stretch">
+            <div className="p-3 flex flex-col h-full min-h-0 gap-4 overflow-y-auto overscroll-contain">
+              <div>
+                <p className="ui-section-label mb-1.5 px-2.5">Create</p>
+                <div className="space-y-0.5">
+                  {sidebarWorkflows.map((item) => {
+                    const Icon = WORKFLOW_ICONS[item.id] || Sparkles;
+                    const active = workflow === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        title={item.title || item.label}
+                        onClick={() => selectWorkflow(item.id)}
+                        className={`flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors ${
+                          active
+                            ? "bg-[var(--jewel-accent-soft)] text-[var(--jewel-accent)] shadow-sm"
+                            : "text-jewel-ink-muted hover:bg-[var(--jewel-surface-muted)] hover:text-jewel-ink"
+                        }`}
+                      >
+                        <Icon className="size-4 shrink-0 stroke-[1.75]" strokeWidth={1.75} />
+                        <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="h-px w-full bg-[var(--jewel-hairline)] shrink-0" />
+              <div>
+                <p className="ui-section-label mb-1.5 px-2.5">Library</p>
+                <div className="space-y-0.5">
+                  <Link
+                    to="/history"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-jewel-ink-muted hover:bg-[var(--jewel-surface-muted)] hover:text-jewel-ink transition-colors"
                   >
-                    <Icon className="size-3.5 shrink-0 opacity-90" />
-                    <span className="leading-snug">{item.label}</span>
-                  </button>
-                );
-              })}
+                    <Clock className="size-4 shrink-0 stroke-[1.75]" />
+                    Recent Generations
+                  </Link>
+                  <Link
+                    to="/history"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-jewel-ink-muted hover:bg-[var(--jewel-surface-muted)] hover:text-jewel-ink transition-colors"
+                  >
+                    <Heart className="size-4 shrink-0 stroke-[1.75]" />
+                    Favorites
+                  </Link>
+                </div>
+              </div>
+              <div className="mt-auto pt-2 border-t border-[var(--jewel-hairline)]">
+                <button
+                  type="button"
+                  onClick={clearWorkspace}
+                  className="w-full px-2.5 py-2 text-left text-[12px] font-semibold text-jewel-ink-muted hover:text-jewel-ink transition-colors rounded-lg hover:bg-[var(--jewel-surface-muted)]"
+                >
+                  Clear workspace {sessionJobs.length > 0 ? ` (${sessionJobs.length})` : ""}
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={clearWorkspace}
-              className="w-full px-1 text-left text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
-            >
-              Clear workspace
-              {sessionJobs.length > 0 ? ` · ${sessionJobs.length} jobs` : ""}
-              {activeJobs.length > 0 ? ` · ${activeJobs.length} active` : ""}
-            </button>
           </aside>
 
-          {/* Canvas */}
-          <section className="space-y-5 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-              <h2 className="text-xl font-semibold text-jewel-ink flex items-center gap-2">
-                <Sparkles className="size-4 text-jewel-accent" />
-                {workflowLabel(workflow, options)}
-              </h2>
-              {isCatalog && (
-                <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-relaxed">
-                  Multi-upload for bulk catalog. Theme is required for bulk; optional for
-                  single. Upload full-size images as-is — theme and logo stay in your brand
-                  kit across visits.
-                </p>
-              )}
-              {!isCatalog && (
-                <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-relaxed">
-                  Multi-select products for bulk. Shared reference/portrait applies to every item.
-                  Regenerate keeps this workspace — you do not need a new session.
-                </p>
-              )}
-              {workflow === "VIRTUAL_TRY_ON" && (
-                <p className="text-sm text-jewel-ink-muted mt-1.5 max-w-2xl leading-relaxed">
-                  Upload jewelry product(s) and one portrait. Choose studio model look or customer photo in
-                  Parameters.
-                </p>
-              )}
+          {/* Center canvas */}
+          <section className="flex-1 flex flex-col overflow-hidden bg-[var(--jewel-bg)] relative min-w-0 min-h-0">
+            <div className="flex flex-col p-4 xl:p-5 w-full gap-3 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              <div className="flex items-start justify-between gap-4 shrink-0">
+                <div className="min-w-0 flex items-center gap-3 flex-wrap">
+                  <Sparkles className="size-5 text-[var(--jewel-accent)]" />
+                  <h2 className="text-[20px] font-semibold text-jewel-ink tracking-tight">
+                    {workflowLabel(workflow, options)}
+                  </h2>
+                  <span className="ui-pill-pro">Pro</span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    className="ui-btn-secondary lg:hidden"
+                    onClick={() => setWorkflowSheetOpen(true)}
+                    aria-label="Open workflows"
+                  >
+                    <Menu className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn-secondary lg:hidden"
+                    onClick={() => setInspectorSheetOpen(true)}
+                    aria-label="Open parameters"
+                  >
+                    <PanelRight className="size-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex shrink-0 gap-1 lg:hidden">
-                <button
-                  type="button"
-                  className="ui-btn-secondary"
-                  onClick={() => setWorkflowSheetOpen(true)}
-                  aria-label="Open workflows"
-                >
-                  <Menu className="size-3.5" />
-                  Workflow
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn-secondary"
-                  onClick={() => setInspectorSheetOpen(true)}
-                  aria-label="Open parameters"
-                >
-                  <PanelRight className="size-3.5" />
-                  Params
-                </button>
-              </div>
-            </div>
 
-            <>
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
-                  {/* Input */}
-                  <div className="p-5 min-h-[360px] flex flex-col min-w-0">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3 shrink-0">
-                      <span className="ui-label mb-0">Input</span>
-                      {activeJob && (
+              <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0 shrink-0 items-stretch">
+                {compareMode ? (
+                  <button
+                    type="button"
+                    className="hidden md:flex absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 z-10 size-9 items-center justify-center rounded-full bg-white shadow-card border border-[var(--jewel-border)] text-[var(--jewel-accent)]"
+                    onClick={() => setCompareMode(false)}
+                    aria-pressed={true}
+                    aria-label="Exit compare mode"
+                  >
+                    <ChevronLeft className="size-4 -mr-1" />
+                    <ChevronRight className="size-4" />
+                  </button>
+                ) : null}
+
+                {/* Input card */}
+                <div className="flex h-full min-h-0 flex-col bg-white rounded-xl border border-[var(--jewel-border)] w-full overflow-hidden shadow-sm">
+                  <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 border-b border-[var(--jewel-hairline)]">
+                    <span className="text-[11px] font-semibold tracking-wide uppercase text-jewel-ink">
+                      Input
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {primaryFiles.length > 0 ? (
                         <button
                           type="button"
-                          onClick={() => setActiveJobId(null)}
-                          className="text-xs font-semibold text-blue-600 hover:underline"
+                          className="ui-btn-secondary h-8 px-2.5 text-[11px]"
+                          onClick={() => openCropForPrimary(0)}
+                          aria-label={
+                            primaryFiles.length > 1
+                              ? "Crop first image (crop others from thumbnails)"
+                              : "Crop image"
+                          }
+                          title={
+                            primaryFiles.length > 1
+                              ? "Crop image 1 — use Crop on each thumbnail for others"
+                              : "Crop image"
+                          }
                         >
-                          Edit inputs / New
+                          <Crop className="size-3.5" />
+                          Crop
                         </button>
-                      )}
+                      ) : null}
+                      <button
+                        type="button"
+                        className="ui-btn-secondary h-8 px-2.5 text-[11px]"
+                        onClick={() => {
+                          const el =
+                            document.getElementById(
+                              "studio-product-upload-empty-input",
+                            ) ||
+                            document.getElementById(
+                              "studio-product-upload-add-input",
+                            );
+                          el?.click();
+                        }}
+                      >
+                        <UploadCloud className="size-3.5" />
+                        Upload images
+                      </button>
                     </div>
-                    {optionsError && (
-                      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                        Could not load Studio options.{" "}
+                  </div>
+
+                  <div className="aspect-square w-full bg-[var(--jewel-surface-muted)] relative flex flex-col min-h-0 overflow-hidden p-3">
+                    {optionsError ? (
+                      <div className="absolute inset-x-3 top-3 z-10 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-900">
+                        Options failed.{" "}
                         <button
                           type="button"
                           className="font-bold underline"
@@ -1123,55 +1248,65 @@ export function StudioPage() {
                           Retry
                         </button>
                       </div>
-                    )}
-                    {activeJob && (
-                      <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-900">
-                        Viewing a generation. Click <strong>Edit inputs / New</strong> to change
-                        uploads, or generate again with the current form.
-                      </div>
-                    )}
+                    ) : null}
                     {needsReference ? (
-                      <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
-                        <ProductUploadGallery
-                          id="studio-product-upload"
-                        label="Product"
-                          files={primaryFiles}
-                          previews={productPreviewSrcs}
-                          error={validationErrors.productImage}
-                          onAppend={onPrimaryAppend}
-                          onReplace={onPrimaryReplace}
-                          onRemoveAt={removePrimaryAt}
-                          onClearAll={clearPrimaryFiles}
-                          onCrop={
-                            primaryFiles.length === 1
-                              ? () => openCropForPrimary(0)
-                              : undefined
-                          }
-                        />
-                        <UploadZone
-                          id="studio-reference-upload"
-                          label={needsStyleReference ? "Reference" : "Portrait"}
-                          error={validationErrors.referenceImage}
-                          previews={themePreviewSrc ? [themePreviewSrc] : []}
-                          onFiles={onReferencePick}
-                          single
-                          compact
-                          fileName={referenceFile?.name || "Saved"}
-                          onClear={() => {
-                            setReferenceFile(null);
-                            setLockedUrls((u) => ({
-                              ...u,
-                              reference: null,
-                              model: null,
-                              themeAssetId: null,
-                            }));
-                          }}
-                        />
+                      <div className="grid grid-cols-2 gap-2 flex-1 min-h-0 items-stretch">
+                        <div className="min-h-0 h-full flex flex-col">
+                          <ProductUploadGallery
+                            id="studio-product-upload"
+                            emptyTitle="Product"
+                            files={primaryFiles}
+                            previews={productPreviewSrcs}
+                            error={validationErrors.productImage}
+                            onAppend={onPrimaryAppend}
+                            onReplace={onPrimaryReplace}
+                            onRemoveAt={removePrimaryAt}
+                            onClearAll={clearPrimaryFiles}
+                            imageZoom={inputZoom}
+                            cleanPreview
+                            onCropAt={
+                              primaryFiles.length > 0 ? openCropForPrimary : undefined
+                            }
+                          />
+                        </div>
+                        <div className="min-h-0 h-full flex flex-col">
+                          <UploadZone
+                            id="studio-reference-upload"
+                            label={needsStyleReference ? "Reference" : "Portrait"}
+                            error={validationErrors.referenceImage}
+                            previews={themePreviewSrc ? [themePreviewSrc] : []}
+                            onFiles={onReferencePick}
+                            single
+                            stage
+                            fileName={referenceFile?.name || "Portrait"}
+                            onCrop={
+                              referenceFile
+                                ? () => {
+                                    const src = URL.createObjectURL(referenceFile);
+                                    setCropTarget({
+                                      kind: "reference",
+                                      src,
+                                      name: referenceFile.name,
+                                    });
+                                  }
+                                : undefined
+                            }
+                            onClear={() => {
+                              setReferenceFile(null);
+                              setLockedUrls((u) => ({
+                                ...u,
+                                reference: null,
+                                model: null,
+                                themeAssetId: null,
+                              }));
+                            }}
+                          />
+                        </div>
                       </div>
                     ) : (
                       <ProductUploadGallery
                         id="studio-product-upload"
-                        label="Product"
+                        emptyTitle="Product"
                         files={primaryFiles}
                         previews={productPreviewSrcs}
                         error={validationErrors.productImage}
@@ -1179,205 +1314,212 @@ export function StudioPage() {
                         onReplace={onPrimaryReplace}
                         onRemoveAt={removePrimaryAt}
                         onClearAll={clearPrimaryFiles}
-                        onCrop={
-                          primaryFiles.length === 1
-                            ? () => openCropForPrimary(0)
-                            : undefined
+                        imageZoom={inputZoom}
+                        cleanPreview
+                        onCropAt={
+                          primaryFiles.length > 0 ? openCropForPrimary : undefined
                         }
                       />
                     )}
                   </div>
 
-                  {/* Output */}
-                  <div className="p-5 min-h-[360px] flex flex-col bg-slate-50/30">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="ui-label mb-0">Output</span>
-                        {batchJobIds.length > 1 && batchJobIndex >= 0 && (
-                          <span className="text-[10px] font-semibold tabular-nums text-slate-500">
-                            Job {batchJobIndex + 1}/{batchJobIds.length}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {batchJobIds.length > 1 && batchJobIndex >= 0 && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={batchJobIndex <= 0}
-                              onClick={() =>
-                                setActiveJobId(batchJobIds[batchJobIndex - 1])
-                              }
-                              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                              aria-label="Previous batch job"
-                            >
-                              <ChevronLeft className="size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={batchJobIndex >= batchJobIds.length - 1}
-                              onClick={() =>
-                                setActiveJobId(batchJobIds[batchJobIndex + 1])
-                              }
-                              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                              aria-label="Next batch job"
-                            >
-                              <ChevronRight className="size-3.5" />
-                            </button>
-                          </>
-                        )}
-                      {activeJob?.status === "COMPLETED" && (
-                        <ResultsTray
-                          onRegenerate={() => regenerateMutation.mutate(activeJob.id)}
-                          regenerating={regenerateMutation.isPending}
-                          onDownload={activeOutputUrl}
-                          onFavorite={() => toggleFavorite(activeJob)}
-                          favorited={favoriteIds.has(activeJob.id)}
-                          compareActive={compareMode}
-                          onToggleCompare={() => setCompareMode((c) => !c)}
-                          mediaUrl={mediaUrl}
-                          onShare={async () => {
-                            try {
-                              const res = await api.post<{
-                                token: string;
-                                url?: string;
-                              }>("/share-links", { job_id: activeJob.id });
-                              const token = res.data.token;
-                              const shareUrl = `${window.location.origin}/share/${token}`;
-                              await navigator.clipboard.writeText(shareUrl);
-                              toast.success("Share link copied");
-                            } catch (err) {
-                              toast.error(apiErrorMessage(err, "Could not create share link"));
-                            }
-                          }}
-                        />
+                  <div className="shrink-0 border-t border-[var(--jewel-hairline)] bg-white">
+                    <div className="relative h-10 px-1">
+                      <ImageStageControls
+                        variant="bar"
+                        zoom={inputZoom}
+                        onZoomChange={setInputZoom}
+                        onFullscreen={
+                          productPreviewSrcs[0]
+                            ? () =>
+                                window.open(
+                                  productPreviewSrcs[0],
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                )
+                            : undefined
+                        }
+                      />
+                    </div>
+                    <div className="flex h-10 items-center gap-1.5 border-t border-[var(--jewel-hairline)] px-2.5">
+                      {primaryFiles.length > 1 ? (
+                        <span className="text-[11px] font-medium text-jewel-ink-muted tabular-nums">
+                          {primaryFiles.length} images
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-jewel-ink-muted">
+                          Product
+                        </span>
                       )}
-                      {(activeJob?.status === "PENDING" ||
-                        activeJob?.status === "PROCESSING") && (
+                      {primaryFiles.length > 0 ? (
                         <button
                           type="button"
-                          onClick={() => cancelMutation.mutate(activeJob.id)}
-                          disabled={cancelMutation.isPending}
-                          className="ui-btn-danger"
+                          onClick={clearPrimaryFiles}
+                          className="ml-auto text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
                         >
-                          Cancel
+                          Clear
                         </button>
-                      )}
-                      </div>
+                      ) : null}
                     </div>
+                  </div>
+                </div>
+
+                {/* Generated card */}
+                <div className="flex h-full min-h-0 flex-col bg-white rounded-xl border border-[var(--jewel-border)] w-full overflow-hidden shadow-sm">
+                  <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 border-b border-[var(--jewel-hairline)]">
+                    <span className="text-[11px] font-semibold tracking-wide uppercase text-jewel-ink">
+                      Generated
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {activeJob?.status === "COMPLETED" ? (
+                        <span className="ui-pill-success">Done</span>
+                      ) : null}
+                      {batchJobIds.length > 1 && batchJobIndex >= 0 ? (
+                        <div className="flex items-center gap-0.5">
+                          <span className="text-[10px] font-semibold tabular-nums text-jewel-ink-muted px-1">
+                            {batchJobIndex + 1}/{batchJobIds.length}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={batchJobIndex <= 0}
+                            onClick={() =>
+                              setActiveJobId(batchJobIds[batchJobIndex - 1])
+                            }
+                            className="rounded p-1 text-jewel-ink-faint hover:text-jewel-ink disabled:opacity-30"
+                            aria-label="Previous job"
+                          >
+                            <ChevronLeft className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={batchJobIndex >= batchJobIds.length - 1}
+                            onClick={() =>
+                              setActiveJobId(batchJobIds[batchJobIndex + 1])
+                            }
+                            className="rounded p-1 text-jewel-ink-faint hover:text-jewel-ink disabled:opacity-30"
+                            aria-label="Next job"
+                          >
+                            <ChevronRight className="size-3.5" />
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="aspect-square w-full bg-[var(--jewel-surface-muted)] relative flex flex-col min-h-0 overflow-hidden p-3">
                     {activeJob &&
-                      (activeJob.status === "PENDING" ||
-                        activeJob.status === "PROCESSING") && (
+                    (activeJob.status === "PENDING" ||
+                      activeJob.status === "PROCESSING") ? (
+                      <div className="flex-1 flex flex-col min-h-0 rounded-lg border border-[var(--jewel-border)] bg-white p-3">
                         <JobStageBar
                           stage={resolveJobStage(activeJob)}
                           label={jobStatusLabel(activeJob)}
                           detail={
                             activeJob.provider_metadata?.webhook_pending ||
-                            activeJob.provider_metadata?.progressStage === "waiting_on_fal"
-                              ? "Fal.ai is generating your image. This usually takes 20–60 seconds."
-                              : "Preparing request in Jewel AI…"
+                            activeJob.provider_metadata?.progressStage ===
+                              "waiting_on_fal"
+                              ? "Generating…"
+                              : "Preparing…"
                           }
                         />
-                      )}
-                    {!activeJob ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-dashed border-slate-200 bg-white">
-                        <Wand2 className="size-8 text-slate-300 mb-2" />
-                        <p className="text-sm font-semibold text-slate-700">
-                          Studio Standby
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Upload and click Generate
-                        </p>
+                        <div className="flex-1 flex items-center justify-center">
+                          <FacetMark
+                            variant="spin"
+                            size={28}
+                            className="text-[var(--jewel-accent)]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="ui-btn-ghost h-8 text-[11px] mx-auto"
+                          disabled={cancelMutation.isPending}
+                          onClick={() => cancelMutation.mutate(activeJob.id)}
+                        >
+                          {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+                        </button>
+                      </div>
+                    ) : !activeJob ? (
+                      <div className="flex-1 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--jewel-border)] bg-white text-center">
+                        <Wand2 className="size-8 text-[var(--jewel-ink-faint)]" />
+                        <span className="text-sm font-semibold text-jewel-ink">Output</span>
+                        <span className="text-[11px] text-jewel-ink-muted">
+                          Generate to preview
+                        </span>
                       </div>
                     ) : activeJob.status === "FAILED" ||
                       activeJob.status === "CANCELLED" ? (
                       <div
-                        className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-xl border border-rose-200 bg-rose-50 min-h-[240px]"
+                        className="flex-1 flex flex-col items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 text-center p-4"
                         aria-live="polite"
                       >
                         <p className="text-sm font-semibold text-rose-800">
-                          {activeJob.status === "CANCELLED"
-                            ? "Cancelled"
-                            : "Generation failed"}
+                          {activeJob.status === "CANCELLED" ? "Cancelled" : "Failed"}
                         </p>
-                        <p className="text-xs text-rose-700 mt-2 max-w-md leading-relaxed">
-                          {activeJob.error_message ||
-                            "The model could not complete this request. Try again or switch model."}
-                        </p>
-                        <div className="flex gap-2 mt-4">
+                        <div className="flex flex-wrap gap-1.5 justify-center">
                           <button
                             type="button"
                             onClick={() => retryMutation.mutate(activeJob.id)}
                             disabled={retryMutation.isPending}
-                            className="ui-btn-secondary border-rose-200 text-rose-800 hover:bg-rose-100"
+                            className="ui-btn-secondary h-8 px-2.5 text-[11px]"
                           >
-                            <RefreshCcw
-                              className={`size-3.5 ${retryMutation.isPending ? "animate-spin" : ""}`}
-                            />
-                            Retry same job
+                            Retry
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              regenerateMutation.mutate(activeJob.id)
-                            }
+                            onClick={() => regenerateMutation.mutate(activeJob.id)}
                             disabled={regenerateMutation.isPending}
-                            className="ui-btn-secondary border-rose-200 text-rose-800 hover:bg-rose-100"
+                            className="ui-btn-secondary h-8 px-2.5 text-[11px]"
                           >
-                            Duplicate &amp; run
+                            Duplicate
                           </button>
                         </div>
                       </div>
-                    ) : activeJob.status === "COMPLETED" ? (
-                      <div className="flex-1 flex flex-col gap-2 min-h-[240px]">
-                        {compareMode ? (
-                          <div className="grid flex-1 grid-cols-2 gap-2 min-h-[240px]">
-                            <div className="flex flex-col rounded-jewel-md bg-jewel-muted overflow-hidden">
-                              <span className="ui-label mb-0 px-2 pt-2">Input</span>
-                              {(activeJob.input_url || productPreviewSrcs[0]) ? (
-                                <img
-                                  src={mediaUrl(activeJob.input_url || productPreviewSrcs[0])}
-                                  alt="Input"
-                                  className="flex-1 object-contain p-2"
-                                />
-                              ) : (
-                                <span className="m-auto text-xs text-jewel-ink-muted">No input</span>
-                              )}
+                    ) : (
+                      <div className="flex-1 flex flex-col min-h-0 rounded-lg border border-[var(--jewel-border)] bg-white overflow-hidden">
+                        <div className="flex-1 relative min-h-0 flex items-center justify-center p-3">
+                          {compareMode ? (
+                            <div className="grid h-full w-full grid-cols-2 gap-2">
+                              <div className="flex items-center justify-center overflow-hidden rounded-md bg-[var(--jewel-surface-muted)]">
+                                {activeJob.input_url || productPreviewSrcs[0] ? (
+                                  <img
+                                    src={mediaUrl(
+                                      activeJob.input_url || productPreviewSrcs[0],
+                                    )}
+                                    alt="Input"
+                                    className="max-h-full max-w-full object-contain"
+                                  />
+                                ) : null}
+                              </div>
+                              <div className="flex items-center justify-center overflow-hidden rounded-md bg-[var(--jewel-surface-muted)]">
+                                {activeOutputUrl ? (
+                                  <img
+                                    src={mediaUrl(activeOutputUrl)}
+                                    alt="Output"
+                                    className="max-h-full max-w-full object-contain"
+                                    style={{ transform: `scale(${outputZoom})` }}
+                                  />
+                                ) : null}
+                              </div>
                             </div>
-                            <div className="flex flex-col rounded-jewel-md bg-slate-950 overflow-hidden">
-                              <span className="ui-label mb-0 px-2 pt-2 text-slate-400">Output</span>
-                              {activeOutputUrl ? (
-                                <img
-                                  src={mediaUrl(activeOutputUrl)}
-                                  alt="Output"
-                                  className="flex-1 object-contain p-2"
-                                />
-                              ) : (
-                                <span className="m-auto text-xs text-slate-500">No output</span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                        <div className="flex-1 flex items-center justify-center rounded-jewel-md bg-slate-950 p-3">
-                          {activeOutputUrl ? (
+                          ) : activeOutputUrl ? (
                             <img
                               src={mediaUrl(activeOutputUrl)}
                               alt="Output"
-                              className="max-h-full max-w-full object-contain rounded"
+                              className="max-h-full max-w-full object-contain animate-precious-flash"
+                              style={{ transform: `scale(${outputZoom})` }}
                             />
                           ) : (
-                            <span className="text-xs text-slate-500">No output</span>
+                            <span className="text-xs text-jewel-ink-muted">No output</span>
                           )}
                         </div>
-                        )}
-                        {outputUrls.length > 1 && (
-                          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                        {outputUrls.length > 1 ? (
+                          <div className="flex gap-1.5 overflow-x-auto border-t border-[var(--jewel-hairline)] px-2 py-1.5 shrink-0">
                             {outputUrls.map((url, i) => (
                               <button
                                 key={`${url}-${i}`}
                                 type="button"
                                 onClick={() => setOutputIndex(i)}
-                                className={`size-12 shrink-0 overflow-hidden rounded-lg border ${
+                                className={`size-10 shrink-0 overflow-hidden rounded-md border ${
                                   outputIndex === i
                                     ? "border-jewel-accent ring-2 ring-jewel-accent/20"
                                     : "border-jewel-border"
@@ -1391,41 +1533,70 @@ export function StudioPage() {
                               </button>
                             ))}
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div
-                        className="flex-1 flex flex-col items-center justify-center text-center p-6 rounded-jewel-md border border-jewel-accent-soft bg-jewel-accent-soft/40 min-h-[240px]"
-                        aria-live="polite"
-                      >
-                        <RefreshCcw className="size-6 text-jewel-accent animate-spin mb-3" />
-                        <p className="text-sm font-semibold text-jewel-ink">
-                          {jobStatusLabel(activeJob)}
-                        </p>
+                        ) : null}
                       </div>
                     )}
                   </div>
+
+                  <div className="shrink-0 border-t border-[var(--jewel-hairline)] bg-white">
+                    <div className="relative h-10 px-1">
+                      <ImageStageControls
+                        variant="bar"
+                        zoom={outputZoom}
+                        onZoomChange={setOutputZoom}
+                        onFullscreen={
+                          activeOutputUrl
+                            ? () =>
+                                window.open(
+                                  mediaUrl(activeOutputUrl),
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                )
+                            : undefined
+                        }
+                      />
+                    </div>
+                    <div className="flex h-10 items-center border-t border-[var(--jewel-hairline)] px-2.5 min-w-0">
+                      {activeJob?.status === "COMPLETED" ? (
+                        <ResultsTray
+                          onRegenerate={() =>
+                            regenerateMutation.mutate(activeJob.id)
+                          }
+                          regenerating={regenerateMutation.isPending}
+                          onDownload={activeOutputUrl}
+                          onFavorite={() => void toggleFavorite(activeJob)}
+                          favorited={favoriteIds.has(activeJob.id)}
+                          onShare={async () => {
+                            try {
+                              const res = await api.post<{ token: string }>(
+                                "/share-links",
+                                { job_id: activeJob.id },
+                              );
+                              const shareUrl = `${window.location.origin}/share/${res.data.token}`;
+                              await navigator.clipboard.writeText(shareUrl);
+                              toast.success("Share link copied");
+                            } catch (err) {
+                              toast.error(
+                                apiErrorMessage(
+                                  err as Error,
+                                  "Could not create share link",
+                                ),
+                              );
+                            }
+                          }}
+                          compareActive={compareMode}
+                          onToggleCompare={() => setCompareMode((c) => !c)}
+                          mediaUrl={mediaUrl}
+                        />
+                      ) : (
+                        <span className="text-[11px] font-medium text-jewel-ink-muted">
+                          Output
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <ActionDock
-                label={
-                  generateBlockedByBatch
-                    ? "Batch running — wait or queue another"
-                    : isBulk
-                      ? `Ready to generate ${primaryFiles.length} images`
-                      : lockedUrls.assetId && !primaryFiles.length
-                        ? "Ready — using loaded product asset"
-                        : "Ready when product is set"
-                }
-                hint={uploadProgress}
-                batchBlocked={generateBlockedByBatch}
-                onForceBatch={() => setBatchForceAllow(true)}
-                onGenerate={() => generateMutation.mutate()}
-                generating={generateMutation.isPending || Boolean(uploadProgress)}
-                disabled={generateBlockedByBatch}
-                bulkCount={isBulk ? primaryFiles.length : undefined}
-              />
 
               {lastBatchId && (
                 <BatchProgressPanel
@@ -1440,18 +1611,28 @@ export function StudioPage() {
                 />
               )}
 
-              {/* Session tray */}
-              <div className="ui-card p-4">
-                <p className="ui-label mb-3 flex items-center gap-1.5">
-                  <History className="size-3.5" /> Recent
-                  {sessionJobs.length > 0 && (
-                    <span className="normal-case tracking-normal font-medium text-jewel-ink-muted">
-                      · {sessionJobs.length} in session
-                      {activeJobs.length > 0 ? ` · ${activeJobs.length} active` : ""}
-                    </span>
-                  )}
-                </p>
-                <div className="flex gap-2 overflow-x-auto pb-1">
+              {/* Recent generations */}
+              <div className="ui-card p-4 shrink-0 overflow-hidden">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="ui-label mb-0 flex items-center gap-1.5">
+                    <Clock className="size-3.5" /> Recent Generations
+                    {sessionJobs.length > 0 && (
+                      <span className="normal-case tracking-normal font-medium text-jewel-ink-muted">
+                        · {sessionJobs.length} in session
+                        {activeJobs.length > 0
+                          ? ` · ${activeJobs.length} active`
+                          : ""}
+                      </span>
+                    )}
+                  </p>
+                  <Link
+                    to="/history"
+                    className="text-[12px] font-semibold text-[var(--jewel-accent)] hover:underline"
+                  >
+                    View All
+                  </Link>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
                   {[
                     ...sessionJobs,
                     ...recentJobs.filter(
@@ -1463,9 +1644,23 @@ export function StudioPage() {
                       <button
                         key={job.id}
                         type="button"
-                        onClick={() => setActiveJobId(job.id)}
+                        onClick={() => {
+                          setActiveJobId(job.id);
+                          setOutputIndex(0);
+                          setInputZoom(1);
+                          setOutputZoom(1);
+                          if (primaryFiles.length === 0) {
+                            setLockedUrls((u) => ({
+                              ...u,
+                              input: job.input_url || u.input,
+                              reference: job.reference_url || u.reference,
+                              model: job.model_url || u.model,
+                              assetId: job.asset_id || u.assetId,
+                            }));
+                          }
+                        }}
                         aria-label={`${jobStatusLabel(job)} ${job.workflow || ""}`.trim()}
-                        className={`relative size-14 shrink-0 rounded-lg overflow-hidden border ${
+                        className={`relative size-14 shrink-0 rounded-lg overflow-hidden border transition duration-150 hover:-translate-y-0.5 hover:shadow-card ${
                           activeJobId === job.id
                             ? "border-jewel-accent ring-2 ring-jewel-accent/20"
                             : "border-jewel-border"
@@ -1478,334 +1673,58 @@ export function StudioPage() {
                             className="w-full h-full object-cover"
                           />
                         )}
+                        {favoriteIds.has(job.id) && (
+                          <span className="absolute top-1 right-1 rounded-full bg-white/90 p-0.5 shadow-sm">
+                            <Heart className="size-2.5 fill-[var(--jewel-precious)] text-[var(--jewel-precious)]" />
+                          </span>
+                        )}
                       </button>
                     ))}
+                  <Link
+                    to="/history"
+                    className="flex size-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-jewel-border text-jewel-ink-faint hover:text-[var(--jewel-accent)] hover:border-[var(--jewel-accent)] transition-colors"
+                    aria-label="View all history"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Link>
                 </div>
               </div>
-            </>
-          </section>
 
-          {/* Parameters — desktop inspector */}
-            <aside className="hidden space-y-4 lg:sticky lg:top-[4.5rem] lg:block">
-            <div className="ui-card p-4 space-y-4">
-                <p className="ui-label flex items-center gap-1.5 mb-0">
-                  <Settings className="size-3.5" /> Essentials
-                </p>
-              {workflow === "VIRTUAL_TRY_ON" && (
-                <div>
-                  <label className="ui-label">Try-On Mode</label>
-                  <select
-                    value={tryOnPreset}
-                    onChange={(e) =>
-                      setTryOnPreset(e.target.value as "studio" | "customer")
-                    }
-                    className="ui-input"
-                  >
-                    <option value="studio">Studio model look</option>
-                    <option value="customer">Customer photo</option>
-                  </select>
-                </div>
-              )}
-              {isCatalog && (
-                <div>
-                  <label className="ui-label">Catalog Mode</label>
-                  <select
-                    value={catalogMode}
-                    onChange={(e) =>
-                      setCatalogMode(
-                        e.target.value as "modern" | "reference_mirror" | "style_mood",
-                      )
-                    }
-                    className="ui-input"
-                  >
-                    <option value="modern">Modern catalog (auto environment)</option>
-                    <option value="reference_mirror">Match reference environment</option>
-                    <option value="style_mood">Match lighting / mood only</option>
-                  </select>
-                </div>
-              )}
-              <MultiSelectDropdown
-                label="Jewelry Type"
-                options={options?.jewelryTypes ?? ["Ring"]}
-                selectedValues={jewelryTypes}
-                onChange={setJewelryTypes}
-              />
-              {jewelryTypes.length > 1 && (
-                <p className="text-[11px] text-jewel-ink-muted -mt-1 leading-relaxed">
-                  Applies each selected type ({jewelryTypes.join(", ")}).
-                </p>
-              )}
-              <div>
-                <label className="ui-label" htmlFor="studio-prompt">
-                  Optional instructions
-                </label>
-                <textarea
-                  id="studio-prompt"
-                  value={promptText}
-                  onChange={(e) => setPromptText(e.target.value)}
-                  placeholder="Lighting, mood, sparkles…"
-                  rows={2}
-                  className="ui-input h-auto min-h-[2.75rem] py-2"
+              <div className="lg:hidden sticky bottom-3 z-20">
+                <ActionDock
+                  className="lg:hidden"
+                  label={
+                    generateBlockedByBatch
+                      ? "Batch running — wait or queue another"
+                      : isBulk
+                        ? `Ready to generate ${primaryFiles.length} images`
+                        : lockedUrls.assetId && !primaryFiles.length
+                          ? "Ready — using loaded product asset"
+                          : "Ready when product is set"
+                  }
+                  hint={uploadProgress}
+                  batchBlocked={generateBlockedByBatch}
+                  onForceBatch={() => setBatchForceAllow(true)}
+                  onGenerate={() => generateMutation.mutate()}
+                  generating={
+                    generateMutation.isPending || Boolean(uploadProgress)
+                  }
+                  disabled={generateBlockedByBatch}
+                  bulkCount={isBulk ? primaryFiles.length : undefined}
                 />
-              </div>
-
-              <button
-                type="button"
-                className="flex w-full items-center justify-between text-left text-xs font-semibold text-jewel-ink-muted hover:text-jewel-ink"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((o) => !o)}
-              >
-                Advanced
-                <ChevronDown className={`size-3.5 transition ${advancedOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {advancedOpen && (
-              <div className="space-y-4 border-t border-jewel-border pt-3">
-              {isCatalog && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="ui-label mb-0">Brand kit</p>
-                    {(lockedUrls.reference ||
-                      lockedUrls.logo ||
-                      referenceFile ||
-                      logoFile) && (
-                      <button
-                        type="button"
-                        onClick={clearBrandAssets}
-                        className="text-[10px] font-semibold text-slate-500 hover:text-slate-800"
-                      >
-                        Clear saved
-                      </button>
-                    )}
-                  </div>
-                  {(lockedUrls.reference || lockedUrls.logo) &&
-                    !referenceFile &&
-                    !logoFile && (
-                      <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1.5">
-                        Using saved theme/logo — Change anytime below.
-                      </p>
-                    )}
-                  <UploadZone
-                    id="studio-theme-ref"
-                    label={
-                      isBulk
-                        ? "Theme / style (required for bulk)"
-                        : "Theme / style (optional)"
-                    }
-                    error={validationErrors.referenceImage}
-                    previews={themePreviewSrc ? [themePreviewSrc] : []}
-                    onFiles={onReferencePick}
-                    single
-                    compact
-                    fileName={referenceFile?.name || "Saved theme"}
-                    hint={isBulk ? "Required for bulk" : "Optional · full size OK"}
-                    onClear={() => {
-                      setReferenceFile(null);
-                      patchBrandKit({
-                        themeAssetId: null,
-                        themeUrl: null,
-                        themeName: null,
-                      });
-                      setLockedUrls((u) => ({
-                        ...u,
-                        reference: null,
-                        themeAssetId: null,
-                      }));
-                    }}
-                  />
-                  <UploadZone
-                    id="studio-logo-upload"
-                    label="Shop logo (reference — model places it)"
-                    previews={logoPreviewSrc ? [logoPreviewSrc] : []}
-                    onFiles={onLogoPick}
-                    single
-                    compact
-                    fileName={logoFile?.name || "Saved logo"}
-                    hint="Sent as a reference image when the model supports multi-image"
-                    onClear={() => {
-                      setLogoFile(null);
-                      patchBrandKit({
-                        logoAssetId: null,
-                        logoUrl: null,
-                        logoName: null,
-                      });
-                      setLockedUrls((u) => ({
-                        ...u,
-                        logo: null,
-                        logoAssetId: null,
-                      }));
-                    }}
-                  />
-                  {(hasThemeAttached || hasLogoAttached) && (
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Sent to the model:{" "}
-                      {plannedSlots.map((s) => s.label).join(" · ")}
-                      {logoUsesComposeFallback
-                        ? " · Logo fallback: under output"
-                        : ""}
-                    </p>
-                  )}
-                  {logoUsesComposeFallback && (
-                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 leading-relaxed">
-                      This model only accepts a single image. Logo will be added
-                      under the output (fallback). Choose a multi-image edit
-                      model for in-frame logo placement.
-                    </p>
-                  )}
-                </div>
-              )}
-              {!isCatalog && (
-                <UploadZone
-                  id="studio-logo-upload-single"
-                  label="Shop logo (reference — model places it)"
-                  previews={logoPreviewSrc ? [logoPreviewSrc] : []}
-                  onFiles={onLogoPick}
-                  single
-                  compact
-                  fileName={logoFile?.name || "Saved logo"}
-                  hint="Optional · model places it when multi-image is supported"
-                  onClear={() => {
-                    setLogoFile(null);
-                    patchBrandKit({
-                      logoAssetId: null,
-                      logoUrl: null,
-                      logoName: null,
-                    });
-                    setLockedUrls((u) => ({
-                      ...u,
-                      logo: null,
-                      logoAssetId: null,
-                    }));
-                  }}
-                />
-              )}
-              {!isCatalog && logoUsesComposeFallback && (
-                <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 leading-relaxed">
-                  Logo will be added under the output for this model (fallback).
-                </p>
-              )}
-              {(options?.lightingStyles?.length ?? 0) > 0 && (
-                <div>
-                  <label className="ui-label">Lighting style</label>
-                  <select
-                    value={lightingStyle}
-                    onChange={(e) => setLightingStyle(e.target.value)}
-                    className="ui-input"
-                  >
-                    <option value="">Default</option>
-                    {options!.lightingStyles!.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {workflowVariantLabel && workflowVariants.length > 0 && (
-                <div>
-                  <label className="ui-label">{workflowVariantLabel}</label>
-                  <select
-                    value={workflowVariantKey}
-                    onChange={(e) => setWorkflowVariantKey(e.target.value)}
-                    className="ui-input"
-                  >
-                    {workflowVariants.map((v) => (
-                      <option key={v.variant_key} value={v.variant_key}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {stylePresets.length > 0 && (
-                <div>
-                  <label className="ui-label">Style Preset</label>
-                  <select
-                    value={stylePresetId}
-                    onChange={(e) => setStylePresetId(e.target.value)}
-                    className="ui-input"
-                  >
-                    <option value="">None</option>
-                    {stylePresets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              </div>
-              )}
-
-              <div className="space-y-2.5 border-t border-jewel-border pt-3">
-                <p className="ui-label mb-0">Model</p>
-                {showAspectRatio && (
-                  <select
-                    value={aspectRatio}
-                    onChange={(e) => setAspectRatio(e.target.value)}
-                    className="ui-input"
-                    aria-label="Aspect ratio"
-                  >
-                    {(options?.aspectRatios ?? ["1:1"]).map((r) => (
-                      <option key={r} value={r}>
-                        Aspect {r}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {showPersonGeneration && (
-                  <select
-                    value={personGeneration}
-                    onChange={(e) => setPersonGeneration(e.target.value)}
-                    className="ui-input"
-                    aria-label="Person generation"
-                  >
-                    <option value="DONT_ALLOW">No people</option>
-                    <option value="ALLOW_ADULT">Allow adults</option>
-                    <option value="ALLOW_ALL">Allow all</option>
-                  </select>
-                )}
-                {showNumberOfImages && (
-                  <select
-                    value={numberOfImages}
-                    onChange={(e) => setNumberOfImages(Number(e.target.value))}
-                    className="ui-input"
-                    aria-label="Number of images"
-                  >
-                    {[1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>
-                        {n} image{n > 1 ? "s" : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <ModelSelector
-                  workflow={apiWorkflow}
-                  hasInput={inputImageCount > 0}
-                  imageCount={inputImageCount}
-                  selectedEndpointId={modelEndpointId}
-                  modelParams={modelParams}
-                  onModelChange={(endpointId, model) => {
-                    setModelEndpointId(endpointId);
-                    setSelectedModel(model);
-                  }}
-                  onParamsChange={setModelParams}
-                />
-                {is4kSelected && (
-                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-jewel-md px-3 py-2 leading-relaxed">
-                    4K is slower and costs more. Prefer 1K for catalog/bulk.
-                  </p>
-                )}
               </div>
             </div>
-            {activeJobs.length > 0 && (
-              <p className="text-[11px] text-center text-jewel-ink-muted">
-                {activeJobs.length} running — queue more after upload finishes
-              </p>
-            )}
+          </section>
+
+          {/* Right inspector */}
+          <aside className="hidden w-[280px] xl:w-[300px] shrink-0 overflow-hidden p-0 lg:flex lg:flex-col bg-white border-l border-[var(--jewel-border)] min-h-0 self-stretch h-full">
+            <div className="flex h-full min-h-0 flex-col p-3 xl:p-4">
+              {inspectorPanel}
+            </div>
           </aside>
         </div>
       </main>
+
       <Sheet
         open={workflowSheetOpen}
         onClose={() => setWorkflowSheetOpen(false)}
@@ -1820,18 +1739,19 @@ export function StudioPage() {
               <button
                 key={item.id}
                 type="button"
+                title={item.title || item.label}
                 onClick={() => {
                   selectWorkflow(item.id);
                   setWorkflowSheetOpen(false);
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-jewel-md px-3 py-2.5 text-left text-[13px] ${
+                className={`flex w-full min-w-0 items-center gap-2.5 rounded-jewel-md px-3 py-2.5 text-left text-[13px] ${
                   active
-                    ? "bg-jewel-accent text-white font-semibold"
+                    ? "bg-[var(--jewel-accent-soft)] text-[var(--jewel-accent)] font-semibold"
                     : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
                 }`}
               >
                 <Icon className="size-3.5 shrink-0" />
-                {item.label}
+                <span className="min-w-0 leading-snug">{item.title || item.label}</span>
               </button>
             );
           })}
@@ -1843,38 +1763,7 @@ export function StudioPage() {
         title="Parameters"
         side="right"
       >
-        <div className="space-y-3">
-          <MultiSelectDropdown
-            label="Jewelry Type"
-            options={options?.jewelryTypes ?? ["Ring"]}
-            selectedValues={jewelryTypes}
-            onChange={setJewelryTypes}
-          />
-          <div>
-            <label className="ui-label" htmlFor="studio-prompt-mobile">
-              Optional instructions
-            </label>
-            <textarea
-              id="studio-prompt-mobile"
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              rows={2}
-              className="ui-input h-auto min-h-[2.75rem] py-2"
-            />
-          </div>
-          <ModelSelector
-            workflow={apiWorkflow}
-            hasInput={inputImageCount > 0}
-            imageCount={inputImageCount}
-            selectedEndpointId={modelEndpointId}
-            modelParams={modelParams}
-            onModelChange={(endpointId, model) => {
-              setModelEndpointId(endpointId);
-              setSelectedModel(model);
-            }}
-            onParamsChange={setModelParams}
-          />
-        </div>
+        <div className="h-[min(80vh,720px)] min-h-0">{inspectorPanel}</div>
       </Sheet>
       {cropTarget && (
         <ImageCropModal

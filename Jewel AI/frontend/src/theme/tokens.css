@@ -1,26 +1,48 @@
-/* Jewel AI design tokens — see docs/ux/JEWEL_STUDIO_UX_SYSTEM.md */
+/* Jewel AI — Reference design identity (violet brand + CTA) */
 :root {
-  --jewel-bg: #f4f5f7;
+  /* Foundation */
+  --jewel-bg: #f8f8fb;
+  --jewel-bg-admin: #f8f8fb;
   --jewel-surface: #ffffff;
-  --jewel-surface-muted: #eef0f3;
-  --jewel-ink: #0f1419;
-  --jewel-ink-muted: #5c6570;
-  --jewel-border: #d8dde3;
-  --jewel-accent: #1f4b8f;
-  --jewel-accent-hover: #183a70;
-  --jewel-accent-soft: #e8eef7;
-  --jewel-metal: #a67c52;
-  --jewel-success: #059669;
-  --jewel-warning: #d97706;
-  --jewel-danger: #e11d48;
+  --jewel-surface-muted: #f8f8fb;
+  --jewel-ink: #111827;
+  --jewel-ink-muted: #6b7280;
+  --jewel-ink-faint: #9ca3af;
+  --jewel-border: #e5e7eb;
+  --jewel-hairline: #f3f4f6;
 
+  /* Brand violet */
+  --jewel-accent: #7c3aed;
+  --jewel-accent-hover: #6d28d9;
+  --jewel-accent-soft: #f3eeff;
+
+  /* Two distinct gradients */
+  --jewel-grad-brand: linear-gradient(to bottom right, #7c3aed, #4f46e5);
+  --jewel-grad-cta: linear-gradient(to right, #7c3aed, #ec4899);
+
+  /* Status */
+  --jewel-success: #059669;
+  --jewel-success-soft: #ecfdf5;
+  --jewel-warning: #f59e0b;
+  --jewel-danger: #ef4444;
+
+  --jewel-metal: #7c3aed;
+  --jewel-precious: #a67c52;
+  --jewel-precious-soft: #f5efe6;
+
+  /* Shapes */
   --jewel-radius-sm: 6px;
   --jewel-radius-md: 10px;
-  --jewel-radius-lg: 16px;
+  --jewel-radius-lg: 14px;
+  --jewel-radius-xl: 18px;
 
-  --jewel-shadow-sticky: 0 1px 2px rgba(15, 20, 25, 0.04), 0 4px 16px rgba(15, 20, 25, 0.06);
+  --jewel-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --jewel-shadow-sticky: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --jewel-shadow-cta: 0 2px 8px rgba(236, 72, 153, 0.25);
 
-  /* Back-compat aliases used by older references */
+  --jewel-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+
+  /* App aliases */
   --app-bg: var(--jewel-bg);
   --app-surface: var(--jewel-surface);
   --app-ink: var(--jewel-ink);

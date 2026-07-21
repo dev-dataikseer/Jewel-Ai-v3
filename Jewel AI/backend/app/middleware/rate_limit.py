@@ -85,23 +85,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
+        # Prod: Redis is a hard dependency for all rate buckets (incl. auth).
+        # Redis blip → 429 rather than per-instance memory bypass.
+        prod_fail_closed = bool(settings.is_production)
         if method == "POST":
             if path.endswith("/auth/login") or path.endswith("/auth/refresh"):
                 key = f"{_rate_limit_key(request)}:auth"
-                # Multi-worker prod: memory fallback is bypassable — require Redis.
-                auth_fail_closed = bool(settings.is_production)
-                if not _allow(key, AUTH_LIMIT, AUTH_WINDOW, fail_closed=auth_fail_closed):
+                if not _allow(key, AUTH_LIMIT, AUTH_WINDOW, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Too many auth attempts")
             elif path.endswith("/jobs/bulk") or path.endswith("/assets/bulk-upload"):
                 key = f"{_rate_limit_key(request)}:bulk"
-                if not _allow(key, BULK_LIMIT):
+                if not _allow(key, BULK_LIMIT, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")
             elif path.endswith("/jobs") or "/assets/upload" in path:
                 key = f"{_rate_limit_key(request)}:jobs"
-                if not _allow(key, LIMIT):
+                if not _allow(key, LIMIT, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")
             elif "/providers/fal/webhook/" in path:
                 key = f"webhook:{request.client.host if request.client else 'unknown'}"
-                if not _allow(key, WEBHOOK_LIMIT):
+                if not _allow(key, WEBHOOK_LIMIT, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Webhook rate limit exceeded")
         return await call_next(request)

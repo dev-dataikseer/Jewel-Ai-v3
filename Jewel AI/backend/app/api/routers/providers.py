@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.deps import RequireAdmin
 from app.auth.security import decode_webhook_token, encrypt_secret
@@ -13,6 +14,28 @@ from app.schemas.common import ProviderOut, ProviderUpdate
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/providers", tags=["providers"])
+
+
+def extract_fal_webhook_request_id(payload: dict) -> str | None:
+    """Pull fal request id from common webhook payload shapes."""
+    if not isinstance(payload, dict):
+        return None
+    for key in ("request_id", "requestId", "gateway_request_id"):
+        val = payload.get(key)
+        if val:
+            return str(val)
+    nested = payload.get("payload")
+    if isinstance(nested, dict):
+        for key in ("request_id", "requestId"):
+            val = nested.get(key)
+            if val:
+                return str(val)
+    return None
+
+
+def _expected_fal_request_id(job: GenerationJob) -> str | None:
+    meta = job.provider_metadata or {}
+    return meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id")
 
 
 def _provider_out(p: Provider) -> ProviderOut:
@@ -36,12 +59,19 @@ def list_providers(user: RequireAdmin, db: Session = Depends(get_db)):
 
 
 @router.patch("/{name}")
-def update_provider(name: str, body: ProviderUpdate, user: RequireAdmin, db: Session = Depends(get_db)):
+def update_provider(
+    name: str,
+    body: ProviderUpdate,
+    user: RequireAdmin,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     if name.upper() != "FAL":
         raise HTTPException(status_code=404, detail="Provider not found")
     prov = db.query(Provider).filter(Provider.name == name.upper()).first()
     if not prov:
         raise HTTPException(status_code=404, detail="Provider not found")
+    before = {"model_name": prov.model_name, "is_active": prov.is_active, "priority": prov.priority}
     if body.model_name is not None:
         prov.model_name = body.model_name
     if body.api_key:
@@ -54,6 +84,24 @@ def update_provider(name: str, body: ProviderUpdate, user: RequireAdmin, db: Ses
         prov.priority = body.priority
     if body.base_url is not None:
         prov.base_url = body.base_url
+    from app.services.audit import write_audit
+
+    write_audit(
+        db,
+        actor_user_id=user.id,
+        action="provider.update",
+        entity_type="provider",
+        entity_id=prov.name,
+        before=before,
+        after={
+            "model_name": prov.model_name,
+            "is_active": prov.is_active,
+            "priority": prov.priority,
+            "api_key_rotated": bool(body.api_key),
+            "admin_key_rotated": bool(body.admin_api_key),
+        },
+        request_id=getattr(request.state, "request_id", None),
+    )
     db.commit()
     return _provider_out(prov)
 
@@ -75,29 +123,48 @@ async def provider_health(user: RequireAdmin, db: Session = Depends(get_db)):
     return await check_all_provider_health(db)
 
 
-@router.post("/fal/webhook/{job_id}")
-async def fal_webhook(
-    job_id: str,
-    request: Request,
-    token: str = Query(..., alias="token"),
-    db: Session = Depends(get_db),
-):
-    if not decode_webhook_token(token, job_id):
-        raise HTTPException(status_code=401, detail="Invalid webhook token")
-
-    payload = await request.json()
-    job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+def _fal_webhook_sync(db: Session, job_id: str, payload: dict) -> dict:
+    """Sync DB + accept path for fal webhooks (runs in threadpool from async route)."""
+    # Row lock so concurrent fal retries cannot double-accept finalize.
+    job = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.id == job_id)
+        .with_for_update()
+        .first()
+    )
     if not job:
         return {"status": "ignored"}
     if job.status == "COMPLETED":
-        return {"status": "ignored", "reason": "already_completed"}
+        return {"status": "already_processed", "reason": "already_completed"}
     if job.status != "PROCESSING":
         return {"status": "ignored", "reason": "not_processing"}
+
+    expected_req = _expected_fal_request_id(job)
+    if not expected_req:
+        logger.warning(
+            "webhook_not_ready_missing_fal_request_id",
+            extra={"extra_fields": {"job_id": job_id}},
+        )
+        raise HTTPException(status_code=409, detail="Job not ready for webhook")
+
+    payload_req = extract_fal_webhook_request_id(payload)
+    if not payload_req or payload_req != str(expected_req):
+        logger.warning(
+            "webhook_request_id_mismatch",
+            extra={
+                "extra_fields": {
+                    "job_id": job_id,
+                    "expected": expected_req,
+                    "got": payload_req,
+                }
+            },
+        )
+        raise HTTPException(status_code=403, detail="request_id mismatch")
 
     status = payload.get("status")
     if status == "OK":
         if (job.provider_metadata or {}).get("webhook_completed"):
-            return {"status": "ignored", "reason": "already_processed"}
+            return {"status": "already_processed", "reason": "already_processed"}
 
         # Mark accepted so stuck sweep won't re-queue while finalize runs.
         meta = dict(job.provider_metadata or {})
@@ -115,7 +182,7 @@ async def fal_webhook(
         # on "Waiting on fal.ai" forever after fal already finished.
         def _run() -> None:
             try:
-                asyncio.run(_finalize_fal_webhook_async(job_id, payload if isinstance(payload, dict) else {}))
+                asyncio.run(_finalize_fal_webhook_async(job_id, payload))
             except Exception as exc:
                 logger.error("Webhook finalize thread failed for %s: %s", job_id, exc)
 
@@ -126,7 +193,7 @@ async def fal_webhook(
             from app.services.queue_dispatch import celery_worker_available
 
             if celery_worker_available():
-                finalize_fal_webhook.delay(job_id, payload if isinstance(payload, dict) else {})
+                finalize_fal_webhook.delay(job_id, payload)
         except Exception as exc:
             logger.debug("Celery finalize enqueue skipped for %s: %s", job_id, exc)
 
@@ -147,3 +214,20 @@ async def fal_webhook(
                     logger.error("Batch update after webhook ERROR failed for %s: %s", job_id, exc)
 
     return {"status": "ok"}
+
+
+@router.post("/fal/webhook/{job_id}")
+async def fal_webhook(
+    job_id: str,
+    request: Request,
+    token: str = Query(..., alias="token"),
+    db: Session = Depends(get_db),
+):
+    if not decode_webhook_token(token, job_id):
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+
+    return await run_in_threadpool(_fal_webhook_sync, db, job_id, payload)

@@ -1,13 +1,18 @@
 from datetime import datetime, timedelta, timezone
+import io
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from PIL import Image
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.auth.deps import RequireAdmin, RequireUser
+from app.auth.deps import RequireAdmin, RequireUser, get_current_user
 from app.database import get_db
-from app.models import Asset, Batch, Favorite, GenerationJob, RateEntry, ShareLink, User
-from app.schemas.common import RateEntryCreate, ShareLinkCreate
+from app.models import Asset, Batch, Favorite, GenerationJob, ShareLink, User
+from app.schemas.common import ShareLinkCreate
+from app.api.routers.storage_files import authorize_upload_path
+from app.storage.local import storage
 
 router = APIRouter(tags=["admin"])
 
@@ -286,60 +291,6 @@ def admin_usage(
     }
 
 
-@router.get("/rates")
-def list_rates(user: RequireUser, db: Session = Depends(get_db)):
-    return db.query(RateEntry).order_by(RateEntry.created_at.desc()).all()
-
-
-@router.post("/rates")
-def create_rate(body: RateEntryCreate, user: RequireAdmin, db: Session = Depends(get_db)):
-    entry = RateEntry(**body.model_dump())
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    return entry
-
-
-@router.delete("/rates/{rate_id}")
-def delete_rate(rate_id: str, user: RequireAdmin, db: Session = Depends(get_db)):
-    entry = db.query(RateEntry).filter(RateEntry.id == rate_id).first()
-    if not entry:
-        raise HTTPException(status_code=404)
-    db.delete(entry)
-    db.commit()
-    return {"success": True}
-
-
-@router.get("/rates/live")
-async def live_rates(user: RequireUser):
-    import httpx
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/GC=F,XAG=F",
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            data = resp.json()
-        results = {}
-        for item in data.get("chart", {}).get("result", []):
-            symbol = item.get("meta", {}).get("symbol", "")
-            price = item.get("meta", {}).get("regularMarketPrice")
-            if symbol == "GC=F":
-                results["gold_usd_oz"] = price
-            elif symbol == "XAG=F":
-                results["silver_usd_oz"] = price
-        pkr_rate = 278.0
-        return {
-            "gold_pkr_per_gram": round((results.get("gold_usd_oz", 0) / 31.1035) * pkr_rate, 2),
-            "silver_pkr_per_gram": round((results.get("silver_usd_oz", 0) / 31.1035) * pkr_rate, 2),
-            "raw": results,
-            "currency": "PKR",
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @router.get("/favorites")
 def list_favorites(user: RequireUser, db: Session = Depends(get_db)):
     favs = (
@@ -399,6 +350,40 @@ def get_project(project_id: str, user: RequireUser, db: Session = Depends(get_db
     return {"project": project, "jobs": jobs}
 
 
+def _share_link_owned_query(db: Session, user_id: str):
+    return (
+        db.query(ShareLink)
+        .join(GenerationJob, GenerationJob.id == ShareLink.job_id)
+        .filter(GenerationJob.user_id == user_id)
+    )
+
+
+@router.get("/share-links")
+def list_share_links(
+    user: RequireUser,
+    db: Session = Depends(get_db),
+    job_id: str | None = None,
+):
+    """List share links owned by the current user (via job ownership)."""
+    q = _share_link_owned_query(db, user.id)
+    if job_id:
+        q = q.filter(ShareLink.job_id == job_id)
+    links = q.order_by(ShareLink.created_at.desc()).limit(100).all()
+    return {
+        "items": [
+            {
+                "id": link.id,
+                "job_id": link.job_id,
+                "token": link.token,
+                "expires_at": link.expires_at,
+                "views": link.views,
+                "created_at": link.created_at,
+            }
+            for link in links
+        ]
+    }
+
+
 @router.post("/share-links")
 def create_share_link(body: ShareLinkCreate, user: RequireUser, db: Session = Depends(get_db)):
     job = (
@@ -419,7 +404,62 @@ def create_share_link(body: ShareLinkCreate, user: RequireUser, db: Session = De
     db.add(link)
     db.commit()
     db.refresh(link)
-    return {"token": link.token, "expires_at": link.expires_at}
+    return {
+        "id": link.id,
+        "token": link.token,
+        "expires_at": link.expires_at,
+        "job_id": link.job_id,
+    }
+
+
+@router.delete("/share-links/{share_id}")
+def revoke_share_link(share_id: str, user: RequireUser, db: Session = Depends(get_db)):
+    link = _share_link_owned_query(db, user.id).filter(ShareLink.id == share_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Share link not found")
+    db.delete(link)
+    db.commit()
+    return {"ok": True, "id": share_id}
+
+
+@router.get("/media/thumb")
+def media_thumb(
+    path: str = Query(..., description="Upload object key or /uploads/... path"),
+    max_size: int = Query(400, ge=32, le=400, alias="max", description="Max edge length in pixels"),
+    exp: str | None = Query(None),
+    sig: str | None = Query(None),
+    user: User | None = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Resize an owned/signed upload for gallery thumbnails (max 400px). Auth or signed URL required."""
+    file_path = path.lstrip("/")
+    if file_path.startswith("uploads/"):
+        file_path = file_path[len("uploads/") :]
+    authorize_upload_path(file_path, exp, sig, user, db)
+    try:
+        data, _content_type = storage.read_upload(file_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found") from None
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img = img.convert("RGBA") if img.mode in ("P", "LA") else img
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            if img.mode == "RGBA":
+                img.save(buf, format="WEBP", quality=82, method=4)
+                media_type = "image/webp"
+            else:
+                img.save(buf, format="JPEG", quality=82, optimize=True)
+                media_type = "image/jpeg"
+            return Response(
+                content=buf.getvalue(),
+                media_type=media_type,
+                headers={"Cache-Control": "private, max-age=3600"},
+            )
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Could not decode image") from exc
 
 
 @router.get("/pipelines/{workflow}/assemble")

@@ -7,7 +7,11 @@ import logging
 
 from PIL import Image
 
+from app.pipeline.validator import MAX_IMAGE_PIXELS
+
 logger = logging.getLogger(__name__)
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
 def composite_logo_beneath(
@@ -27,6 +31,9 @@ def composite_logo_beneath(
     try:
         product = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
         logo = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+    except Image.DecompressionBombError:
+        logger.warning("logo_compose rejected decompression bomb")
+        return image_bytes
     except Exception:
         return image_bytes
 

@@ -5,6 +5,8 @@ import type { Job, JobsListResponse } from "@/types";
 
 const TERMINAL = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 const POLL_MS = 2500;
+/** Slow poll while the tab is hidden to cut background traffic. */
+const POLL_HIDDEN_MS = 15000;
 
 type StreamHandlers = {
   onUpdate?: (job: Job) => void;
@@ -54,6 +56,13 @@ async function fetchJobsBatch(jobIds: string[]): Promise<Job[]> {
   return res.data.items;
 }
 
+function pollIntervalMs(): number {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    return POLL_HIDDEN_MS;
+  }
+  return POLL_MS;
+}
+
 export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
   const queryClient = useQueryClient();
   const handlersRef = useRef(handlers);
@@ -65,7 +74,8 @@ export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
 
     let cancelled = false;
     let source: EventSource | null = null;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let polling = false;
     const seen = new Map<string, string>();
 
     const handleJob = (job: Job) => {
@@ -82,27 +92,56 @@ export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
         return job != null && TERMINAL.has(job.status);
       });
 
+    const clearPoll = () => {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const scheduleNext = () => {
+      clearPoll();
+      if (!polling || cancelled) return;
+      pollTimer = setTimeout(() => {
+        void pollJobs();
+      }, pollIntervalMs());
+    };
+
     const pollJobs = async () => {
-      if (cancelled) return;
+      if (cancelled || !polling) return;
       try {
+        // When hidden, still poll slowly so state is fresh on return; visible uses POLL_MS.
         const results = await fetchJobsBatch(activeIds);
         for (const job of results) {
           handleJob(job);
         }
         if (allTerminal(results)) {
           handlersRef.current.onDone?.();
-          if (pollTimer) clearInterval(pollTimer);
-          pollTimer = null;
+          polling = false;
+          clearPoll();
+          return;
         }
       } catch {
         /* retry on next interval */
       }
+      scheduleNext();
     };
 
     const startPolling = () => {
-      if (pollTimer) return;
+      if (polling) return;
+      polling = true;
       void pollJobs();
-      pollTimer = setInterval(pollJobs, POLL_MS);
+    };
+
+    const onVisibility = () => {
+      if (!polling || cancelled) return;
+      // Reschedule at the cadence for the new visibility state.
+      clearPoll();
+      if (document.visibilityState === "visible") {
+        void pollJobs();
+      } else {
+        scheduleNext();
+      }
     };
 
     const connectSse = async () => {
@@ -140,12 +179,15 @@ export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
       };
     };
 
+    document.addEventListener("visibilitychange", onVisibility);
     void connectSse();
 
     return () => {
       cancelled = true;
+      polling = false;
+      document.removeEventListener("visibilitychange", onVisibility);
       source?.close();
-      if (pollTimer) clearInterval(pollTimer);
+      clearPoll();
     };
   }, [jobIds.join(","), queryClient]);
 }

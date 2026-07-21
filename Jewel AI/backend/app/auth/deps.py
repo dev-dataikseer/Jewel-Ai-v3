@@ -3,6 +3,7 @@ from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.security import decode_token
 from app.database import get_db
@@ -11,6 +12,13 @@ from app.models import User
 bearer_scheme = HTTPBearer(auto_error=False)
 
 ROLE_HIERARCHY = {"user": 1, "admin": 2, "operator": 1, "viewer": 1}
+
+
+def _lookup_active_user(db: Session, user_id: str) -> User | None:
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and not user.is_active:
+        return None
+    return user
 
 
 async def get_current_user(
@@ -22,10 +30,7 @@ async def get_current_user(
     payload = decode_token(credentials.credentials)
     if not payload or payload.get("type") != "access":
         return None
-    user = db.query(User).filter(User.id == payload["sub"]).first()
-    if user and not user.is_active:
-        return None
-    return user
+    return await run_in_threadpool(_lookup_active_user, db, payload["sub"])
 
 
 async def require_user(user: Annotated[User | None, Depends(get_current_user)]) -> User:

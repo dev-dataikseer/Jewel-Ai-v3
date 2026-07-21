@@ -151,13 +151,9 @@ def _backfill_layers(db: Session) -> None:
 def seed_prompts(db: Session) -> None:
     """Create empty master/subject shells only — all prompt text is authored in Admin UI."""
     for wf in WORKFLOWS:
-        if wf["id"] == "RATE_TOOLS":
-            continue
         _ensure_master_template(db, wf["id"], wf.get("label", wf["id"]))
 
     for wf in WORKFLOWS:
-        if wf["id"] == "RATE_TOOLS":
-            continue
         for jt in JEWELRY_TYPES:
             _ensure_subject(db, wf["id"], jt)
 

@@ -9,9 +9,6 @@ const StudioPage = lazy(() =>
 const HistoryPage = lazy(() =>
   import("@/pages/HistoryPage").then((m) => ({ default: m.HistoryPage })),
 );
-const RatesPage = lazy(() =>
-  import("@/pages/RatesPage").then((m) => ({ default: m.RatesPage })),
-);
 const AdminPage = lazy(() =>
   import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
@@ -80,14 +77,7 @@ export default function App() {
             </AuthGuard>
           }
         />
-        <Route
-          path="/rates"
-          element={
-            <AuthGuard>
-              <RatesPage />
-            </AuthGuard>
-          }
-        />
+        <Route path="/presets" element={<Navigate to="/" replace />} />
         <Route
           path="/admin"
           element={
@@ -96,6 +86,7 @@ export default function App() {
             </AdminGuard>
           }
         />
+        <Route path="/rates" element={<Navigate to="/" replace />} />
         <Route path="/share/:token" element={<SharePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

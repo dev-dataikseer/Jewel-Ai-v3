@@ -413,6 +413,59 @@ def migrate_provider_admin_key_column(engine: Engine) -> None:
         log.info("Ensured providers.encrypted_admin_api_key (sqlite)")
 
 
+def migrate_mfa_and_audit(engine: Engine) -> None:
+    """Add MFA columns on users + audit_logs table for non-Alembic boots."""
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        inspector = inspect(engine)
+        if dialect == "postgresql":
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS encrypted_totp_secret BYTEA"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_backup_hashes JSON"))
+        else:
+            _add_column_if_missing(conn, inspector, "users", "totp_enabled", "BOOLEAN DEFAULT 0")
+            _add_column_if_missing(conn, inspector, "users", "encrypted_totp_secret", "BLOB")
+            _add_column_if_missing(conn, inspector, "users", "totp_backup_hashes", "JSON")
+        inspector = inspect(engine)
+        if not inspector.has_table("audit_logs"):
+            if dialect == "sqlite":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE audit_logs (
+                            id VARCHAR(36) NOT NULL PRIMARY KEY,
+                            actor_user_id VARCHAR(36),
+                            action VARCHAR(128) NOT NULL,
+                            entity_type VARCHAR(64) NOT NULL,
+                            entity_id VARCHAR(64),
+                            before JSON,
+                            after JSON,
+                            request_id VARCHAR(64),
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS audit_logs (
+                            id VARCHAR(36) PRIMARY KEY,
+                            actor_user_id VARCHAR(36) REFERENCES users(id),
+                            action VARCHAR(128) NOT NULL,
+                            entity_type VARCHAR(64) NOT NULL,
+                            entity_id VARCHAR(64),
+                            before JSON,
+                            after JSON,
+                            request_id VARCHAR(64),
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                        )
+                        """
+                    )
+                )
+
+
 def migrate_generation_job_runtime_columns(engine: Engine) -> None:
     """Add V4 job runtime columns missing from older SQLite DBs."""
     inspector = inspect(engine)

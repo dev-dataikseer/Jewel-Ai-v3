@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { api } from "@/lib/api";
 import type { StylePreset } from "@/types";
 
@@ -11,6 +12,7 @@ type Props = {
 
 export function StylePresetsAdmin({ workflows }: Props) {
   const queryClient = useQueryClient();
+  const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [workflow, setWorkflow] = useState("");
   const [description, setDescription] = useState("");
@@ -57,8 +59,8 @@ export function StylePresetsAdmin({ workflows }: Props) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-          Style Presets
+        <h2 className="text-sm font-semibold text-slate-800">
+          Style presets
         </h2>
         <p className="mt-1 text-xs text-slate-500">
           Presets append prompt text in Studio. Optional workflow scope.
@@ -71,6 +73,7 @@ export function StylePresetsAdmin({ workflows }: Props) {
             New preset
           </p>
           <input
+            ref={nameRef}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Name"
@@ -83,7 +86,7 @@ export function StylePresetsAdmin({ workflows }: Props) {
           >
             <option value="">All workflows</option>
             {workflows
-              .filter((w) => w.id !== "RATE_TOOLS" && w.id !== "BULK_GENERATION")
+              .filter((w) => w.id !== "BULK_GENERATION")
               .map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.label}
@@ -119,7 +122,20 @@ export function StylePresetsAdmin({ workflows }: Props) {
           </p>
           {isLoading && <p className="text-xs text-slate-500">Loading…</p>}
           {!isLoading && presets.length === 0 && (
-            <p className="text-xs text-slate-500">No presets yet.</p>
+            <EmptyState
+              compact
+              title="No presets yet"
+              description="Create a preset on the left to append style text in Studio."
+              action={
+                <button
+                  type="button"
+                  className="ui-btn-primary"
+                  onClick={() => nameRef.current?.focus()}
+                >
+                  Create preset
+                </button>
+              }
+            />
           )}
           <ul className="max-h-[360px] space-y-2 overflow-y-auto">
             {presets.map((p) => (

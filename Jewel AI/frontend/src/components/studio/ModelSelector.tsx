@@ -64,7 +64,7 @@ export function ModelSelector({
   onModelChange,
   onParamsChange,
 }: Props) {
-  const { data: models = [], isLoading, isError, error } = useQuery({
+  const { data: models = [], isLoading, isError } = useQuery({
     queryKey: ["models", "image_edit", workflow, hasInput],
     queryFn: async () =>
       (
@@ -146,28 +146,15 @@ export function ModelSelector({
   }, [models, selectedEndpointId, modelParams, onParamsChange]);
 
   if (isLoading) {
-    return <p className="text-xs text-slate-400">Loading models…</p>;
+    return <p className="text-xs text-slate-400">Loading…</p>;
   }
 
   if (isError) {
-    const raw =
-      (error as { friendlyMessage?: unknown })?.friendlyMessage ||
-      (error as Error)?.message;
-    const msg = typeof raw === "string" ? raw : "Could not load models";
-    return (
-      <p className="text-xs text-rose-600">
-        {msg}. Check that the API is running and you are logged in.
-      </p>
-    );
+    return <p className="text-xs text-rose-600">Models unavailable</p>;
   }
 
   if (models.length === 0) {
-    return (
-      <p className="text-xs text-amber-600">
-        No models in catalog. Open Admin → Providers and confirm FAL_KEY is set,
-        then restart the API.
-      </p>
-    );
+    return <p className="text-xs text-amber-600">No models</p>;
   }
 
   const current =
@@ -183,7 +170,6 @@ export function ModelSelector({
   return (
     <div className="space-y-3">
       <div>
-        <label className="ui-label">AI Model</label>
         <select
           value={selectedEndpointId || current?.endpoint_id || ""}
           onChange={(e) => {
@@ -194,98 +180,35 @@ export function ModelSelector({
             }
           }}
           className="ui-input text-xs font-semibold"
+          aria-label="Model"
         >
-          {models.map((m, i) => {
-            const badge = m.ui?.badge ? ` [${m.ui.badge}]` : "";
+          {models.map((m) => {
+            const badge = m.ui?.badge ? ` · ${m.ui.badge}` : "";
             return (
               <option key={m.endpoint_id} value={m.endpoint_id}>
-                {i + 1}. {m.display_name}
+                {m.display_name}
                 {badge}
               </option>
             );
           })}
         </select>
-        {current && (
-          <div className="mt-1.5 space-y-0.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {current.ui?.badge && (
-                <span className="inline-flex rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-100">
-                  {current.ui.badge}
-                </span>
-              )}
-              {current.ui?.provider_label && (
-                <span className="text-[10px] font-medium text-slate-500">
-                  {current.ui.provider_label}
-                </span>
-              )}
-              {typeof current.ui?.max_images === "number" && (
-                <span className="text-[10px] text-slate-400">
-                  max {current.ui.max_images} imgs
-                </span>
-              )}
-              {typeof (current.limits?.max_prompt_chars ?? current.ui?.max_prompt_chars) ===
-                "number" && (
-                <span
-                  className="text-[10px] text-slate-400"
-                  title={
-                    current.limits?.official_prompt_note ||
-                    (current.limits?.official_max_prompt_chars
-                      ? `Official max ${current.limits.official_max_prompt_chars} chars (${current.limits.official_prompt_status || "documented"})`
-                      : "Recommended packing budget (not always an official API hard limit)")
-                  }
-                >
-                  prompt ~
-                  {current.limits?.max_prompt_chars ?? current.ui?.max_prompt_chars}{" "}
-                  chars
-                  {current.limits?.official_max_prompt_chars
-                    ? ` / official ${current.limits.official_max_prompt_chars}`
-                    : current.limits?.official_prompt_status === "undocumented"
-                      ? " (undocumented official)"
-                      : ""}
-                </span>
-              )}
-            </div>
-            <p
-              className="text-[10px] text-slate-400 font-mono truncate"
-              title={current.endpoint_id}
-            >
-              {current.endpoint_id}
-            </p>
-            {(current.ui?.pricing_note || current.model_info?.pricing) && (
-              <p className="text-[10px] text-slate-500">
-                {current.ui?.pricing_note || current.model_info?.pricing}
-              </p>
-            )}
-            {current.model_info?.key_strengths && (
-              <p
-                className="text-[10px] text-slate-500 line-clamp-2"
-                title={current.model_info.key_strengths}
-              >
-                {current.model_info.key_strengths}
-              </p>
-            )}
-          </div>
-        )}
-        {missingImage && (
+        {missingImage ? (
           <p className="mt-1 text-[10px] text-amber-600">
-            Upload at least {minImages} image
-            {minImages > 1 ? "s" : ""} to generate with this model.
+            Need {minImages}+ image{minImages > 1 ? "s" : ""}
           </p>
-        )}
-        {overMax && (
-          <p className="mt-1 text-[10px] text-amber-600">
-            This model accepts at most {maxImages} images.
-          </p>
-        )}
+        ) : null}
+        {overMax ? (
+          <p className="mt-1 text-[10px] text-amber-600">Max {maxImages} images</p>
+        ) : null}
       </div>
-      {current && (
+      {current ? (
         <DynamicParamForm
           schema={current.input_schema}
           values={modelParams}
           defaults={current.default_params}
           onChange={onParamsChange}
         />
-      )}
+      ) : null}
     </div>
   );
 }

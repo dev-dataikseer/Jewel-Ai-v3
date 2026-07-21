@@ -1,104 +1,125 @@
 import { Link, useLocation } from "react-router-dom";
-import { BarChart3, Gem, History, LogOut, Settings, Sparkles, User } from "lucide-react";
+import {
+  ChevronDown,
+  History,
+  Settings,
+  Sparkles,
+  User,
+} from "lucide-react";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { FalCreditsWidget } from "@/components/FalCreditsWidget";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { useAuth } from "@/hooks/useAuth";
 
 type Props = {
   subtitle?: string;
+  footerModel?: string | null;
   children: React.ReactNode;
 };
 
-export function AppLayout({ subtitle = "Production Suite", children }: Props) {
+export function AppLayout({
+  subtitle = "AI Creative Suite",
+  footerModel,
+  children,
+}: Props) {
   const { user, logout, isAdmin } = useAuth();
   const location = useLocation();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-40 border-b border-jewel-border bg-jewel-surface/90 backdrop-blur-md">
-        <div className="mx-auto flex h-[3.75rem] max-w-[1600px] w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          {/* Brand + credits status (left) — balance sits with identity, not after Admin */}
-          <div className="flex min-w-0 items-center gap-3">
-            <Link to="/" className="flex min-w-0 items-center gap-3 hover:opacity-90 transition-opacity">
-              <div
-                className="grid size-9 shrink-0 place-items-center rounded-jewel-md text-white"
-                style={{ backgroundColor: "var(--jewel-accent)" }}
-              >
-                <Gem className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-[15px] font-semibold text-jewel-ink leading-none">
+    <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-[var(--jewel-bg)]">
+      <OfflineBanner />
+      <header className="shrink-0 z-40 bg-white border-b border-[var(--jewel-border)]">
+        <div className="mx-auto flex h-[3.75rem] w-full items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8 min-w-0">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-6">
+            <Link to="/" className="flex min-w-0 items-center gap-2.5 hover:opacity-90 transition-opacity">
+              <BrandMark size={36} className="shrink-0 rounded-[10px] shadow-sm" />
+              <div className="min-w-0 hidden xs:flex sm:flex flex-col justify-center">
+                <p className="truncate text-[15px] font-bold text-[var(--jewel-ink)] leading-none">
                   Jewel AI Studio
-                </h1>
-                <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-jewel-ink-muted">
+                </p>
+                <p className="mt-1 truncate text-[11px] font-medium text-[var(--jewel-ink-muted)] leading-none">
                   {subtitle}
                 </p>
               </div>
             </Link>
-            {user && (
-              <div className="hidden sm:block">
-                <FalCreditsWidget />
-              </div>
-            )}
           </div>
 
-          {/* Primary nav + account (right) */}
-          <nav className="flex shrink-0 items-center gap-0.5 sm:gap-1" aria-label="Primary">
+          <nav className="flex min-w-0 shrink items-center gap-0.5 sm:gap-1 h-full overflow-x-auto" aria-label="Primary">
             <NavLink to="/" active={location.pathname === "/"} label="Studio">
-              <Sparkles className="size-3.5" />
+              <Sparkles className="size-3.5 stroke-[1.75]" />
               <span className="hidden sm:inline">Studio</span>
             </NavLink>
             <NavLink to="/history" active={location.pathname === "/history"} label="History">
-              <History className="size-3.5" />
+              <History className="size-3.5 stroke-[1.75]" />
               <span className="hidden sm:inline">History</span>
             </NavLink>
-            <NavLink to="/rates" active={location.pathname === "/rates"} label="Rates">
-              <BarChart3 className="size-3.5" />
-              <span className="hidden sm:inline">Rates</span>
-            </NavLink>
             {isAdmin && (
-              <NavLink to="/admin" active={location.pathname === "/admin"} label="Admin">
-                <Settings className="size-3.5" />
+              <NavLink to="/admin" active={location.pathname.startsWith("/admin")} label="Admin">
+                <Settings className="size-3.5 stroke-[1.75]" />
                 <span className="hidden sm:inline">Admin</span>
               </NavLink>
             )}
+          </nav>
 
-            <div className="ml-1 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden />
-
-            {/* Mobile: credits near account actions */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {user && (
-              <div className="sm:hidden">
+              <div className="hidden md:block">
                 <FalCreditsWidget />
               </div>
             )}
 
+            <div className="hidden sm:block h-6 w-px bg-[var(--jewel-border)]" />
+
             {user ? (
-              <div className="ml-1 flex items-center gap-1">
-                <span className="hidden max-w-[140px] truncate px-2 text-[12px] text-slate-500 lg:inline">
-                  {user.email}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  aria-label="Logout"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-100"
-                >
-                  <LogOut className="size-3.5" />
-                  <span className="hidden sm:inline">Logout</span>
-                </button>
-              </div>
-            ) : (
-              <Link
-                to="/login"
-                aria-label="Login"
-                className="ml-1 inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-100"
+              <button
+                type="button"
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0"
+                onClick={() => void logout()}
+                aria-label="Account menu — sign out"
               >
-                <User className="size-3.5" /> Login
+                <div className="size-8 rounded-full bg-[var(--jewel-accent-soft)] flex items-center justify-center text-[var(--jewel-accent)] font-bold text-[13px] border border-[color-mix(in_srgb,var(--jewel-accent)_25%,transparent)]">
+                  {user.email?.[0]?.toUpperCase() || "U"}
+                </div>
+                <div className="hidden xl:flex flex-col items-start">
+                  <span className="text-[13px] font-bold text-[var(--jewel-ink)] leading-none max-w-[9rem] truncate">
+                    {user.email}
+                  </span>
+                  <span className="text-[11px] text-[var(--jewel-ink-muted)] mt-1 leading-none">
+                    {isAdmin ? "Studio Admin" : "User"}
+                  </span>
+                </div>
+                <ChevronDown className="size-3.5 text-[var(--jewel-ink-faint)] ml-0.5 hidden sm:block" />
+              </button>
+            ) : (
+              <Link to="/login" className="ui-btn-ghost h-8 px-2.5 text-[13px]">
+                <User className="size-3.5 stroke-[1.75]" /> Login
               </Link>
             )}
-          </nav>
+          </div>
         </div>
       </header>
-      {children}
+
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{children}</div>
+
+      <footer className="ui-footer-bar shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="ui-status-dot ui-status-dot--ok" />
+          All systems operational
+        </div>
+        <div className="hidden sm:block h-3 w-px bg-[var(--jewel-border)]" />
+        <div className="hidden sm:flex items-center gap-1.5">
+          <span className="ui-status-dot ui-status-dot--ok" />
+          API: Healthy
+        </div>
+        {footerModel ? (
+          <>
+            <div className="hidden md:block h-3 w-px bg-[var(--jewel-border)]" />
+            <div className="hidden md:block truncate">Model: {footerModel}</div>
+          </>
+        ) : null}
+        <div className="hidden sm:block h-3 w-px bg-[var(--jewel-border)]" />
+        <div>v2.3.0</div>
+      </footer>
     </div>
   );
 }
@@ -118,11 +139,15 @@ function NavLink({
     <Link
       to={to}
       aria-label={label}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors ${
-        active ? "ui-nav-active" : "text-jewel-ink-muted hover:bg-jewel-muted hover:text-jewel-ink"
+      aria-current={active ? "page" : undefined}
+      className={`relative inline-flex h-full items-center gap-1.5 px-3 text-[13px] transition-colors ${
+        active
+          ? "ui-nav-active"
+          : "text-[var(--jewel-ink-muted)] hover:text-[var(--jewel-ink)] font-medium"
       }`}
     >
       {children}
+      {active ? <span className="ui-nav-facet" aria-hidden /> : null}
     </Link>
   );
 }

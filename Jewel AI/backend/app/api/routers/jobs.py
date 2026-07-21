@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -21,6 +21,12 @@ from app.schemas.common import BatchOut, BulkJobCreate, JobCreate, JobOut, Share
 from app.services.queue_dispatch import enqueue_image_job, enqueue_image_jobs
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _request_id(request: Request | None) -> str | None:
+    if request is None:
+        return None
+    return getattr(getattr(request, "state", None), "request_id", None)
 
 
 def _enforce_daily_job_limit(db: Session, user: User, additional: int = 1) -> None:
@@ -196,6 +202,7 @@ def _validate_job_model(db: Session, data: dict, workflow: str, image_count: int
 def create_job(
     body: JobCreate,
     user: RequireUser,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     data = whitelist_job_fields(body.model_dump())
@@ -230,6 +237,9 @@ def create_job(
         raise HTTPException(status_code=400, detail="asset_id is required and must belong to you")
 
     _enforce_daily_job_limit(db, user, 1)
+    from app.services.credits import debit_credits
+
+    debit_credits(db, user.id, amount=1, description="job_create")
 
     if workflow == "VIRTUAL_TRY_ON" and not (body.model_url or body.reference_url):
         raise HTTPException(
@@ -306,7 +316,7 @@ def create_job(
     db.add(job)
     db.commit()
     db.refresh(job)
-    enqueue_image_job(job.id)
+    enqueue_image_job(job.id, request_id=_request_id(request))
     return _job_to_out(job)
 
 
@@ -314,6 +324,7 @@ def create_job(
 def create_bulk_jobs(
     body: BulkJobCreate,
     user: RequireUser,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     workflow = _resolve_bulk_workflow(body.workflow, try_on_mode=getattr(body, "try_on_mode", None))
@@ -385,6 +396,9 @@ def create_bulk_jobs(
     assets = [assets_by_id[aid] for aid in ordered_ids]
 
     _enforce_daily_job_limit(db, user, len(assets))
+    from app.services.credits import debit_credits
+
+    debit_credits(db, user.id, amount=len(assets), description="bulk_job_create")
 
     logo_url = body.logo_url
     if body.logo_asset_id:
@@ -463,7 +477,7 @@ def create_bulk_jobs(
     from app.services.queue_dispatch import celery_worker_available
 
     queue_mode = "celery" if celery_worker_available() else "inline"
-    enqueue_image_jobs([j.id for j in jobs], stagger_ms=250)
+    enqueue_image_jobs([j.id for j in jobs], stagger_ms=250, request_id=_request_id(request))
     return {
         "batchId": batch.id,
         "jobIds": [j.id for j in jobs],
@@ -800,7 +814,7 @@ def get_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
 
 
 @router.post("/{job_id}/regenerate", response_model=JobOut)
-def regenerate_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
+def regenerate_job(job_id: str, user: RequireUser, request: Request, db: Session = Depends(get_db)):
     original = _get_user_job(db, job_id, user)
     if not original:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -835,12 +849,12 @@ def regenerate_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)
     db.add(job)
     db.commit()
     db.refresh(job)
-    enqueue_image_job(job.id)
+    enqueue_image_job(job.id, request_id=_request_id(request))
     return _job_to_out(job)
 
 
 @router.post("/{job_id}/retry", response_model=JobOut)
-def retry_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
+def retry_job(job_id: str, user: RequireUser, request: Request, db: Session = Depends(get_db)):
     """Re-queue a FAILED/CANCELLED job in place (same id, same settings)."""
     job = _get_user_job(db, job_id, user)
     if not job:
@@ -860,7 +874,7 @@ def retry_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
     job.provider_metadata = _stamp_timing(dict(job.provider_metadata or {}), "queued")
     db.commit()
     db.refresh(job)
-    enqueue_image_job(job.id)
+    enqueue_image_job(job.id, request_id=_request_id(request))
     return _job_to_out(job)
 
 

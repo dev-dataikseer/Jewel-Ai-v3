@@ -13,7 +13,7 @@ type ResultsTrayProps = {
   mediaUrl: (url: string) => string;
 };
 
-/** Post-complete actions: primary Download + Regenerate; Share/Save in overflow. */
+/** Single-row actions for the Generated card footer. */
 export function ResultsTray({
   onRegenerate,
   regenerating,
@@ -28,76 +28,84 @@ export function ResultsTray({
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {onToggleCompare && (
+    <div className="flex items-center gap-1.5 w-full min-w-0">
+      {onToggleCompare ? (
         <button
           type="button"
           onClick={onToggleCompare}
           aria-pressed={compareActive}
-          className={`ui-btn-secondary ${compareActive ? "ui-nav-active border-transparent" : ""}`}
+          className={`ui-btn-secondary h-8 shrink-0 px-2.5 text-[11px] ${
+            compareActive ? "ui-nav-active border-transparent" : ""
+          }`}
         >
           <Columns2 className="size-3.5" />
           Compare
         </button>
-      )}
+      ) : null}
       <button
         type="button"
         onClick={onRegenerate}
         disabled={regenerating}
         aria-label="Regenerate image"
-        className="ui-btn-secondary"
+        className="ui-btn-secondary h-8 shrink-0 px-2.5 text-[11px]"
       >
         <RefreshCcw className={`size-3.5 ${regenerating ? "animate-spin" : ""}`} />
-        Regenerate
+        Regen
       </button>
-      {onDownload && (
+      {onDownload ? (
         <a
           href={mediaUrl(onDownload)}
           download
           target="_blank"
           rel="noreferrer"
           aria-label="Download generated image"
-          className="ui-btn-primary h-9 px-3 text-xs"
+          className="ui-btn-primary h-8 shrink-0 px-2.5 text-[11px] whitespace-nowrap"
         >
           <Download className="size-3.5" />
           Download
         </a>
-      )}
-      <div className="relative">
+      ) : null}
+      <div className="relative ml-auto shrink-0">
         <button
           type="button"
           aria-label="More actions"
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((o) => !o)}
-          className="ui-btn-ghost h-9 w-9 p-0"
+          className="ui-btn-ghost h-8 w-8 p-0"
         >
           <MoreHorizontal className="size-4" />
         </button>
-        {moreOpen && (
-          <div className="absolute right-0 z-20 mt-1 min-w-[140px] rounded-jewel-md border border-jewel-border bg-jewel-surface py-1 shadow-sticky">
+        {moreOpen ? (
+          <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[128px] rounded-lg border border-[var(--jewel-border)] bg-white py-1 shadow-card">
             <button
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-jewel-muted"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-[var(--jewel-surface-muted)]"
               onClick={() => {
                 onFavorite();
                 setMoreOpen(false);
               }}
             >
-              <Heart className={`size-3.5 ${favorited ? "fill-jewel-danger text-jewel-danger" : ""}`} />
+              <Heart
+                className={`size-3.5 ${
+                  favorited
+                    ? "fill-[var(--jewel-precious)] text-[var(--jewel-precious)]"
+                    : ""
+                }`}
+              />
               {favorited ? "Unsave" : "Save"}
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-jewel-muted"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-[var(--jewel-surface-muted)]"
               onClick={() => {
                 onShare();
                 setMoreOpen(false);
               }}
             >
-              Share link
+              Share
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

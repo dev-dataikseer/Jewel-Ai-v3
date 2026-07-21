@@ -14,6 +14,8 @@ class TokenResponse(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    otp: Optional[str] = None
+    backup_code: Optional[str] = None
 
 
 class RefreshRequest(BaseModel):
@@ -61,7 +63,7 @@ class JobCreate(BaseModel):
 
 class BulkJobCreate(BaseModel):
     workflow: str = "CATALOG_IMAGE"
-    asset_ids: list[str]
+    asset_ids: list[str] = Field(..., min_length=1, max_length=50)
     jewelry_type: str = "Ring"
     batch_name: Optional[str] = None
     aspect_ratio: str = "1:1"
@@ -151,26 +153,6 @@ class AssetOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PromptTestRequest(BaseModel):
-    workflow: str
-    jewelry_type: Optional[str] = "Ring"
-    prompt_text: Optional[str] = None
-    metal_type: Optional[str] = None
-    gemstone_target_color: Optional[str] = None
-    background_style: Optional[str] = None
-    lighting_style: Optional[str] = None
-    style_preset_id: Optional[str] = None
-    model_endpoint_id: Optional[str] = None
-    model_params: dict[str, Any] = Field(default_factory=dict)
-    image_url: Optional[str] = None
-
-
-class PromptTestResponse(BaseModel):
-    prompt: str
-    negative_prompt: str
-    debug: dict[str, Any]
-
-
 class ProviderOut(BaseModel):
     id: str
     name: str
@@ -193,19 +175,6 @@ class ProviderUpdate(BaseModel):
     is_active: Optional[bool] = None
     priority: Optional[int] = None
     base_url: Optional[str] = None
-
-
-class RateEntryCreate(BaseModel):
-    rate_type: str
-    value: float
-    metal_type: Optional[str] = None
-    diamond_shape: Optional[str] = None
-    diamond_color: Optional[str] = None
-    diamond_clarity: Optional[str] = None
-    carat: Optional[str] = None
-    currency: str = "PKR"
-    city: Optional[str] = None
-    notes: Optional[str] = None
 
 
 class ShareLinkCreate(BaseModel):

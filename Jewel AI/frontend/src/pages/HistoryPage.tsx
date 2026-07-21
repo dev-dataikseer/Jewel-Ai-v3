@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useInfiniteQuery,
@@ -6,13 +6,16 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Expand, Gem, Heart, History, RefreshCcw } from "lucide-react";
+import { Expand, Gem, Heart, RefreshCcw } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { GenerationDetailModal } from "@/components/history/GenerationDetailModal";
-import { api, mediaUrl } from "@/lib/api";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FacetMark } from "@/components/ui/FacetMark";
+import { api, thumbUrl } from "@/lib/api";
 import type { Job, JobsListResponse } from "@/types";
-import { HISTORY_WORKFLOW_FILTERS, label } from "@/types";
+import { HISTORY_WORKFLOW_FILTERS, label, workflowLabel } from "@/types";
 
 type StatusFilter = "ALL" | "COMPLETED" | "PENDING" | "FAILED" | "FAVORITES";
 
@@ -30,11 +33,31 @@ function statusBadgeClass(status: string) {
   }
 }
 
+function useGridColumns() {
+  const [cols, setCols] = useState(2);
+  useEffect(() => {
+    const update = () => {
+      const w = window.innerWidth;
+      if (w >= 1024) setCols(6);
+      else if (w >= 768) setCols(4);
+      else if (w >= 640) setCols(3);
+      else setCols(2);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return cols;
+}
+
 export function HistoryPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [workflowFilter, setWorkflowFilter] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const cols = useGridColumns();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
 
   const { data: favoriteIds = [] } = useQuery({
     queryKey: ["favorites"],
@@ -82,6 +105,41 @@ export function HistoryPage() {
     const all = data?.pages.flatMap((p) => p.items) ?? [];
     return all.map((j) => ({ ...j, favorite: favSet.has(j.id) }));
   }, [data?.pages, favSet]);
+
+  const rowCount = Math.ceil(jobs.length / cols) || 0;
+  const rowSize = useMemo(() => {
+    if (typeof window === "undefined") return 200;
+    const maxW = Math.min(window.innerWidth - 32, 1300);
+    const gap = 16;
+    const cell = (maxW - gap * (cols - 1)) / cols;
+    return cell + gap;
+  }, [cols]);
+
+  useLayoutEffect(() => {
+    if (listRef.current) {
+      setScrollMargin(listRef.current.offsetTop);
+    }
+  }, [jobs.length, isLoading, isError]);
+
+  const virtualizer = useWindowVirtualizer({
+    count: rowCount,
+    estimateSize: () => rowSize,
+    overscan: 4,
+    scrollMargin,
+  });
+
+  useEffect(() => {
+    virtualizer.measure();
+  }, [rowSize, cols, scrollMargin, virtualizer]);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  useEffect(() => {
+    const last = virtualItems[virtualItems.length - 1];
+    if (!last || !hasNextPage || isFetchingNextPage) return;
+    if (last.index >= rowCount - 3) {
+      void fetchNextPage();
+    }
+  }, [virtualItems, hasNextPage, isFetchingNextPage, rowCount, fetchNextPage]);
 
   const selectedJobWithFavorite = useMemo(() => {
     if (!selectedJob) return null;
@@ -159,18 +217,16 @@ export function HistoryPage() {
   };
 
   return (
-    <AppLayout subtitle="Studio Generations">
+    <AppLayout subtitle="AI Creative Suite">
       <main className="mx-auto max-w-[1300px] w-full px-4 lg:px-8 py-8 flex-1">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-slate-900 tracking-tight">
-              Generations Gallery
-            </h2>
-            <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
+        <div className="mb-6">
+          <div className="mb-4">
+            <h2 className="ui-page-title">Generations Gallery</h2>
+            <p className="ui-page-subtitle">
               Browse renders and open any job back in Studio.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ui-card-muted flex flex-wrap items-center gap-2 border border-[var(--jewel-hairline)] px-3 py-2.5">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -199,71 +255,103 @@ export function HistoryPage() {
               type="button"
               onClick={refresh}
               disabled={isRefetching}
+              aria-busy={isRefetching}
               className="ui-btn-secondary"
             >
-              <RefreshCcw
-                className={`size-3.5 ${isRefetching ? "animate-spin" : ""}`}
-              />
-              Refresh
+              {isRefetching ? (
+                <FacetMark variant="spin" size={14} className="text-[var(--jewel-accent)]" />
+              ) : (
+                <RefreshCcw className="size-3.5 stroke-[1.75]" />
+              )}
+              {isRefetching ? "Refreshing…" : "Refresh"}
             </button>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-500">
-            <Gem className="size-8 animate-pulse text-blue-600 mb-3" />
-            <p className="text-sm font-medium">Loading history...</p>
-          </div>
+          <EmptyState
+            loading
+            title="Loading history"
+            description="Fetching your recent generations…"
+          />
         ) : isError ? (
-          <div className="ui-card border-dashed p-12 text-center">
-            <p className="font-semibold text-slate-700">Could not load history</p>
-            <p className="text-sm text-slate-500 mt-1">
-              {(error as { friendlyMessage?: string })?.friendlyMessage ||
-                "Check your connection and try again."}
-            </p>
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              className="ui-btn-secondary mt-4"
-            >
-              Retry
-            </button>
-          </div>
+          <EmptyState
+            title="Could not load history"
+            description={
+              (error as { friendlyMessage?: string })?.friendlyMessage ||
+              "Check your connection and try again."
+            }
+            action={
+              <button type="button" onClick={() => void refetch()} className="ui-btn-secondary">
+                Retry
+              </button>
+            }
+          />
         ) : jobs.length === 0 ? (
-          <div className="ui-card border-dashed p-12 text-center">
-            <History className="size-8 text-slate-300 mx-auto mb-2" />
-            <p className="font-semibold text-slate-700">No generations found</p>
-            <Link
-              to="/"
-              className="text-sm font-medium text-jewel-accent hover:underline mt-2 inline-block"
-            >
-              Open Studio to generate
-            </Link>
-          </div>
+          <EmptyState
+            title="No generations found"
+            description="Open Studio to create your first render."
+            action={
+              <Link to="/" className="ui-btn-primary">
+                Open Studio
+              </Link>
+            }
+          />
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {jobs.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  onOpen={() => setSelectedJob(job)}
-                  onToggleFavorite={toggleFavorite}
-                />
-              ))}
+            <div
+              ref={listRef}
+              className="relative w-full"
+              style={{ height: `${virtualizer.getTotalSize()}px` }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const start = virtualRow.index * cols;
+                const rowJobs = jobs.slice(start, start + cols);
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={virtualizer.measureElement}
+                    className="absolute left-0 top-0 w-full"
+                    style={{
+                      transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                    }}
+                  >
+                    <div
+                      className="grid gap-4"
+                      style={{
+                        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {rowJobs.map((job) => (
+                        <JobCard
+                          key={job.id}
+                          job={job}
+                          onOpen={() => setSelectedJob(job)}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            {hasNextPage && (
+            {isFetchingNextPage && (
+              <div className="pt-6 flex justify-center items-center gap-2 text-xs text-jewel-ink-muted">
+                <FacetMark variant="spin" size={16} className="text-[var(--jewel-accent)]" />
+                Loading more…
+                Loading more…
+              </div>
+            )}
+            {hasNextPage && !isFetchingNextPage && (
               <div className="pt-8 flex justify-center">
                 <button
                   type="button"
                   onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
                   className="ui-btn-secondary h-10 px-6 text-sm"
                 >
-                  <RefreshCcw
-                    className={`size-4 ${isFetchingNextPage ? "animate-spin" : ""}`}
-                  />
-                  {isFetchingNextPage ? "Loading..." : "Load More"}
+                  <RefreshCcw className="size-4" />
+                  Load More
                 </button>
               </div>
             )}
@@ -303,6 +391,12 @@ function JobCard({
     month: "short",
     day: "numeric",
   });
+  const wf = workflowLabel(job.workflow);
+  const role = job.output_url ? "output" : "input";
+  const alt = `${wf} ${role}`;
+  const isFresh =
+    job.status === "COMPLETED" &&
+    Date.now() - new Date(job.created_at).getTime() < 15 * 60 * 1000;
 
   return (
     <div
@@ -315,16 +409,22 @@ function JobCard({
           onOpen();
         }
       }}
-      className="group relative aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
+      className={`ui-card--interactive group relative aspect-square rounded-2xl overflow-hidden border bg-slate-100 shadow-sm hover:-translate-y-0.5 ${
+        isFresh
+          ? "border-[var(--jewel-precious)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--jewel-precious)_40%,transparent)]"
+          : "border-[var(--jewel-border)]"
+      }`}
     >
       {imageUrl && !imgFailed ? (
         <img
-          src={mediaUrl(imageUrl)}
-          alt=""
+          src={thumbUrl(imageUrl, 400)}
+          alt={alt}
           loading="lazy"
           decoding="async"
           onError={() => setImgFailed(true)}
-          className="absolute inset-0 w-full h-full object-contain p-2 group-hover:scale-[1.03] transition-transform duration-300"
+          className={`absolute inset-0 w-full h-full object-contain p-2 group-hover:scale-[1.03] transition-transform duration-300 ${
+            job.status === "FAILED" ? "grayscale opacity-60" : ""
+          }`}
         />
       ) : imageUrl && imgFailed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400">
@@ -333,25 +433,44 @@ function JobCard({
         </div>
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400">
-          <RefreshCcw className="size-4 animate-spin text-blue-500 mb-1" />
-          <span className="text-[10px] font-semibold">Rendering...</span>
+          {job.status === "FAILED" ? (
+            <FacetMark variant="outline" size={28} className="mb-1 text-[var(--jewel-danger)]" />
+          ) : (
+            <FacetMark variant="spin" size={28} className="mb-1" />
+          )}
+          <span className="text-[10px] font-semibold">
+            {job.status === "FAILED" ? "Failed" : "Rendering..."}
+          </span>
         </div>
       )}
 
-      <span
-        className={`absolute top-2 left-2 z-20 inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border backdrop-blur-sm ${statusBadgeClass(job.status)}`}
-      >
-        {job.status === "PROCESSING" ? "PENDING" : job.status}
-      </span>
-      {job.batch_id && (
-        <Link
-          to={`/?batchId=${job.batch_id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute top-2 left-2 mt-6 z-20 inline-flex rounded-md border border-blue-200 bg-blue-50/95 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-700 backdrop-blur-sm hover:bg-blue-100"
+      {job.status === "FAILED" && imageUrl && !imgFailed ? (
+        <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none">
+          <span
+            className="grid place-items-center rounded-md p-1.5 shadow-sm"
+            style={{ backgroundColor: "color-mix(in srgb, var(--jewel-danger) 92%, black)" }}
+          >
+            <FacetMark variant="outline" size={18} className="text-white" aria-hidden />
+          </span>
+        </div>
+      ) : null}
+
+      <div className="absolute top-2 left-2 z-20 flex flex-col gap-1.5 items-start">
+        <span
+          className={`inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border backdrop-blur-sm ${statusBadgeClass(job.status)}`}
         >
-          Batch
-        </Link>
-      )}
+          {job.status === "PROCESSING" ? "PENDING" : job.status}
+        </span>
+        {job.batch_id && (
+          <Link
+            to={`/?batchId=${job.batch_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex rounded-md border border-blue-200 bg-blue-50/95 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-700 backdrop-blur-sm hover:bg-blue-100"
+          >
+            Batch
+          </Link>
+        )}
+      </div>
 
       <button
         type="button"
@@ -362,9 +481,15 @@ function JobCard({
         aria-label={job.favorite ? "Remove from favorites" : "Add to favorites"}
         className="absolute top-2 right-2 z-20 inline-flex size-7 items-center justify-center rounded-full bg-white/90 text-slate-600 border border-slate-200 shadow-sm hover:bg-white transition-colors"
       >
-        <Heart
-          className={`size-3.5 ${job.favorite ? "fill-red-500 text-red-500" : ""}`}
-        />
+        {job.favorite ? (
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: "var(--jewel-precious)" }}
+            aria-hidden
+          />
+        ) : (
+          <Heart className="size-3.5" />
+        )}
       </button>
 
       <div className="absolute inset-0 bg-slate-900/75 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3 text-white z-10">

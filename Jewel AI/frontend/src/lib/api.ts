@@ -3,38 +3,81 @@ import axios, { type AxiosError } from "axios";
 export const API_BASE = "/api";
 const UPLOAD_TIMEOUT_MS = 120_000;
 
-const ACCESS_KEY = "jewel_access_token";
-const REFRESH_KEY = "jewel_refresh_token";
+const LEGACY_ACCESS_KEY = "jewel_access_token";
+const LEGACY_REFRESH_KEY = "jewel_refresh_token";
+const CSRF_COOKIE = "jewel_csrf";
+
+/** Access token kept in memory only (not localStorage) to reduce XSS exfil risk. */
+let memoryAccessToken: string | null = null;
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  return memoryAccessToken;
 }
 
+export function getCsrfToken(): string | null {
+  return readCookie(CSRF_COOKIE);
+}
+
+/** @deprecated Refresh lives in httpOnly cookie; kept for logout body fallback. */
 export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+  return null;
 }
 
-export function setTokens(access: string, refresh: string) {
-  localStorage.setItem(ACCESS_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+export function setTokens(access: string, _refresh?: string) {
+  memoryAccessToken = access;
+  // Clear any legacy localStorage tokens from older clients.
+  try {
+    localStorage.removeItem(LEGACY_ACCESS_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_KEY);
+  } catch {
+    /* ignore */
+  }
   window.dispatchEvent(new Event("jewel-auth-change"));
 }
 
 export function clearTokens() {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  memoryAccessToken = null;
+  try {
+    localStorage.removeItem(LEGACY_ACCESS_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_KEY);
+  } catch {
+    /* ignore */
+  }
   window.dispatchEvent(new Event("jewel-auth-change"));
+}
+
+// Migrate away from legacy localStorage on boot.
+try {
+  const legacy = localStorage.getItem(LEGACY_ACCESS_KEY);
+  if (legacy) {
+    memoryAccessToken = legacy;
+    localStorage.removeItem(LEGACY_ACCESS_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_KEY);
+  }
+} catch {
+  /* ignore */
 }
 
 export const api = axios.create({
   baseURL: API_BASE,
   timeout: 30_000,
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const csrf = getCsrfToken();
+  if (csrf) {
+    config.headers["X-CSRF-Token"] = csrf;
   }
   const url = config.url || "";
   if (url.includes("/assets/upload") || url.includes("/assets/bulk-upload")) {
@@ -46,10 +89,15 @@ api.interceptors.request.use((config) => {
 let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
-  const refresh = getRefreshToken();
-  if (!refresh) return null;
   try {
-    const res = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refresh });
+    const res = await axios.post(
+      `${API_BASE}/auth/refresh`,
+      {},
+      {
+        withCredentials: true,
+        headers: { "X-CSRF-Token": getCsrfToken() || "" },
+      },
+    );
     const { access_token, refresh_token } = res.data;
     setTokens(access_token, refresh_token);
     return access_token;
@@ -91,7 +139,7 @@ export function formatApiDetail(detail: unknown): string | undefined {
       layer_errors?: unknown;
     };
     if (Array.isArray(row.layer_errors)) {
-      return row.layer_errors.filter((x) => typeof x === "string").join("; ");
+      return row.layer_errors.filter((x) => typeof x === "string").join("; ") as string;
     }
     if (typeof row.message === "string") {
       return typeof row.field === "string" && row.field
@@ -117,7 +165,7 @@ api.interceptors.response.use(
     const isAuthMeBootstrap = requestUrl.includes("/auth/me") && !getAccessToken();
 
     if (error.response?.status === 401 && original && !original.headers["X-Retry"]) {
-      if (isAuthMeBootstrap || requestUrl.includes("/auth/login")) {
+      if (isAuthMeBootstrap || requestUrl.includes("/auth/login") || requestUrl.includes("/auth/refresh")) {
         return Promise.reject(error);
       }
       if (!refreshPromise) {
@@ -153,4 +201,30 @@ export function mediaUrl(url?: string | null) {
   if (url.startsWith("/uploads/") || url.startsWith("/api/")) return url;
   if (url.startsWith("uploads/")) return `/${url}`;
   return url;
+}
+
+/** Gallery thumbnail via Pillow resize endpoint (falls back to full mediaUrl). */
+export function thumbUrl(url?: string | null, max = 400) {
+  if (!url) return "";
+  const resolved = mediaUrl(url);
+  if (resolved.startsWith("http://") || resolved.startsWith("https://")) {
+    try {
+      const parsed = new URL(resolved);
+      if (!parsed.pathname.startsWith("/uploads/")) return resolved;
+      const filePath = parsed.pathname.replace(/^\/uploads\//, "");
+      const params = new URLSearchParams(parsed.search);
+      params.set("path", filePath);
+      params.set("max", String(max));
+      return `/api/media/thumb?${params.toString()}`;
+    } catch {
+      return resolved;
+    }
+  }
+  const [pathPart, query = ""] = resolved.split("?");
+  if (!pathPart.startsWith("/uploads/")) return resolved;
+  const filePath = pathPart.replace(/^\/uploads\//, "");
+  const params = new URLSearchParams(query);
+  params.set("path", filePath);
+  params.set("max", String(max));
+  return `/api/media/thumb?${params.toString()}`;
 }

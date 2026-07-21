@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Loader2, RefreshCw } from "lucide-react";
+import { Activity, RefreshCw } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FacetMark } from "@/components/ui/FacetMark";
 import { api } from "@/lib/api";
 import type { UsageAnalytics } from "@/types";
 
@@ -30,6 +33,7 @@ function statusClass(status: string) {
 }
 
 export function UsageMonitor() {
+  const navigate = useNavigate();
   const [days, setDays] = useState(30);
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["admin", "usage", days],
@@ -45,10 +49,10 @@ export function UsageMonitor() {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Activity className="size-4 text-blue-600" />
+          <Activity className="size-4 text-[var(--jewel-accent)]" />
           <div>
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Usage Monitor</h2>
-            <p className="text-[11px] text-slate-500">
+            <h2 className="ui-card-title">Usage monitor</h2>
+            <p className="text-[11px] text-[var(--jewel-ink-muted)]">
               Job states, models, and estimated catalog cost — fal.ai remains the billing source of truth.
             </p>
           </div>
@@ -67,10 +71,16 @@ export function UsageMonitor() {
           <button
             type="button"
             onClick={() => refetch()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700"
+            disabled={isFetching}
+            aria-busy={isFetching}
+            className="ui-btn-secondary h-9"
           >
-            {isFetching ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-            Refresh
+            {isFetching ? (
+              <FacetMark variant="spin" size={14} className="text-[var(--jewel-accent)]" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            {isFetching ? "Refreshing…" : "Refresh"}
           </button>
         </div>
       </div>
@@ -83,7 +93,7 @@ export function UsageMonitor() {
         <p className="text-sm text-slate-500">Loading usage…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="ui-stats-strip">
             {[
               ["Jobs (all)", summary.total_jobs],
               ["Completed", summary.completed],
@@ -92,53 +102,94 @@ export function UsageMonitor() {
               ["Est. cost (window)", money(summary.estimated_cost_usd_window)],
               ["Est. cost (all)", money(summary.estimated_cost_usd_all_time)],
             ].map(([name, value]) => (
-              <div key={String(name)} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{name}</p>
-                <p className="text-xl font-bold text-slate-800 mt-1">{value}</p>
+              <div key={String(name)} className="ui-stats-strip__cell">
+                <p className="text-[11px] text-[var(--jewel-ink-muted)]">{name}</p>
+                <p className="mt-1 text-lg font-semibold font-mono-data text-jewel-ink">{value}</p>
               </div>
             ))}
           </div>
 
           {data.live_jobs.length > 0 && (
             <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-blue-800 mb-2">Live queue</p>
+              <p className="text-xs font-semibold text-blue-800 mb-2">Live queue</p>
               <div className="space-y-1.5">
                 {data.live_jobs.map((j) => (
-                  <div key={j.id} className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                  <Link
+                    key={j.id}
+                    to={`/?jobId=${j.id}`}
+                    className="ui-row--interactive flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-700 -mx-1"
+                  >
                     <span className={`rounded border px-1.5 py-0.5 font-semibold ${statusClass(j.status)}`}>{j.status}</span>
                     <span className="font-medium">{j.workflow}</span>
                     <span className="text-slate-500">{shortModel(j.model)}</span>
                     <span className="text-slate-400">{j.user_email || "—"}</span>
                     <span className="font-mono text-[10px] text-slate-400">{j.id.slice(0, 8)}</span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-semibold text-slate-700 mb-3">Daily volume ({days}d)</p>
+          <div className="ui-card p-5">
+            <p className="ui-card-title mb-3">Daily volume ({days}d)</p>
             {data.by_day.length === 0 ? (
-              <p className="text-xs text-slate-500">No jobs in this window.</p>
+              <EmptyState
+                compact
+                title="No jobs in this window"
+                description="Volume will appear once generations run."
+              />
+            ) : data.by_day.filter((d) => d.total > 0).length < 5 ? (
+              <EmptyState
+                compact
+                title="Not enough volume yet"
+                description="Need a few more active days before the chart is useful. Counts still show in the tables below."
+              />
             ) : (
-              <div className="flex items-end gap-1 h-28">
-                {data.by_day.map((d) => {
-                  const px = Math.max(4, Math.round((d.total / maxDay) * 96));
-                  return (
-                  <div key={d.date} className="flex-1 min-w-0 flex flex-col justify-end items-center gap-1 h-full" title={`${d.date}: ${d.total} jobs, ${money(d.estimated_cost_usd)}`}>
-                    <div
-                      className="w-full rounded-t bg-blue-500/80"
-                      style={{ height: `${px}px` }}
-                    />
-                    <span className="text-[9px] text-slate-400 truncate w-full text-center">{d.date.slice(5)}</span>
+              <div className="space-y-2">
+                <div className="flex items-end gap-1 h-28 relative">
+                  <div
+                    className="absolute inset-0 flex flex-col justify-between pointer-events-none py-1"
+                    aria-hidden
+                  >
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} style={{ borderTop: "1px solid var(--jewel-hairline)" }} />
+                    ))}
                   </div>
-                  );
-                })}
+                  {data.by_day.map((d) => {
+                    const px = Math.max(4, Math.round((d.total / maxDay) * 96));
+                    return (
+                      <div
+                        key={d.date}
+                        className="relative z-[1] flex-1 min-w-0 flex flex-col justify-end items-center h-full"
+                        title={`${d.date}: ${d.total} jobs, ${money(d.estimated_cost_usd)}`}
+                      >
+                        <div
+                          className="w-full rounded-t"
+                          style={{
+                            height: `${px}px`,
+                            background:
+                              "linear-gradient(180deg, color-mix(in srgb, var(--jewel-accent) 50%, white) 0%, var(--jewel-accent) 24%, var(--jewel-accent) 100%)",
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-1">
+                  {data.by_day.map((d) => (
+                    <span
+                      key={`lbl-${d.date}`}
+                      className="flex-1 min-w-0 text-[9px] text-[var(--jewel-ink-faint)] truncate text-center font-mono-data"
+                    >
+                      {d.date.slice(5)}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <TableCard title="By model">
               <thead>
                 <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
@@ -150,8 +201,11 @@ export function UsageMonitor() {
                 </tr>
               </thead>
               <tbody>
-                {data.by_model.map((m) => (
-                  <tr key={m.model} className="border-t border-slate-100 text-xs">
+                {data.by_model.map((m, i) => (
+                  <tr
+                    key={m.model}
+                    className={`border-t border-slate-100 text-xs ${i % 2 === 1 ? "bg-[var(--jewel-surface-muted)]" : ""}`}
+                  >
                     <td className="py-2 pr-2">
                       <p className="font-semibold text-slate-800 truncate max-w-[220px]" title={m.model}>
                         {shortModel(m.model)}
@@ -185,8 +239,11 @@ export function UsageMonitor() {
                 </tr>
               </thead>
               <tbody>
-                {data.by_workflow.map((w) => (
-                  <tr key={w.workflow} className="border-t border-slate-100 text-xs">
+                {data.by_workflow.map((w, i) => (
+                  <tr
+                    key={w.workflow}
+                    className={`border-t border-slate-100 text-xs ${i % 2 === 1 ? "bg-[var(--jewel-surface-muted)]" : ""}`}
+                  >
                     <td className="py-2 font-semibold text-slate-800">{w.workflow}</td>
                     <td className="py-2">{w.total}</td>
                     <td className="py-2 text-emerald-700">{w.completed}</td>
@@ -208,8 +265,11 @@ export function UsageMonitor() {
                 </tr>
               </thead>
               <tbody>
-                {data.by_user.map((u) => (
-                  <tr key={u.user_id || u.email} className="border-t border-slate-100 text-xs">
+                {data.by_user.map((u, i) => (
+                  <tr
+                    key={u.user_id || u.email}
+                    className={`border-t border-slate-100 text-xs ${i % 2 === 1 ? "bg-[var(--jewel-surface-muted)]" : ""}`}
+                  >
                     <td className="py-2 font-semibold text-slate-800 truncate max-w-[200px]">{u.email}</td>
                     <td className="py-2">{u.total}</td>
                     <td className="py-2 text-emerald-700">{u.completed}</td>
@@ -237,8 +297,20 @@ export function UsageMonitor() {
                 </tr>
               </thead>
               <tbody>
-                {data.recent_jobs.map((j) => (
-                  <tr key={j.id} className="border-t border-slate-100 align-top">
+                {data.recent_jobs.map((j, i) => (
+                  <tr
+                    key={j.id}
+                    className={`ui-row--interactive border-t border-slate-100 align-top ${i % 2 === 1 ? "bg-[var(--jewel-surface-muted)]" : ""}`}
+                    tabIndex={0}
+                    role="link"
+                    onClick={() => navigate(`/?jobId=${j.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/?jobId=${j.id}`);
+                      }
+                    }}
+                  >
                     <td className="py-2">
                       <span className={`rounded border px-1.5 py-0.5 font-semibold ${statusClass(j.status)}`}>{j.status}</span>
                     </td>
@@ -254,8 +326,26 @@ export function UsageMonitor() {
                     <td className="py-2 text-slate-500">
                       {j.duration_ms != null ? `${(j.duration_ms / 1000).toFixed(1)}s` : "—"}
                     </td>
-                    <td className="py-2 text-rose-600 max-w-[220px] truncate" title={j.error_message || undefined}>
-                      {j.error_message || "—"}
+                    <td
+                      className="py-2 text-rose-600 max-w-[220px]"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      {j.error_message ? (
+                        <details>
+                          <summary className="cursor-pointer truncate max-w-[220px] list-none">
+                            <span className="underline-offset-2 hover:underline">
+                              {j.error_message.slice(0, 80)}
+                              {j.error_message.length > 80 ? "…" : ""}
+                            </span>
+                          </summary>
+                          <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-[10px] font-mono text-rose-700">
+                            {j.error_message}
+                          </pre>
+                        </details>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -270,8 +360,8 @@ export function UsageMonitor() {
 
 function TableCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm overflow-x-auto">
-      <p className="text-sm font-semibold text-slate-700 mb-3">{title}</p>
+    <div className="ui-card p-5 overflow-x-auto">
+      <p className="ui-card-title mb-3">{title}</p>
       <table className="w-full">{children}</table>
     </div>
   );

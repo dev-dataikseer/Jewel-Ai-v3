@@ -48,6 +48,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default="user")
     team_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("teams.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    encrypted_totp_secret: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    totp_backup_hashes: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -56,6 +59,20 @@ class User(Base):
     team: Mapped[Optional[Team]] = relationship(back_populates="users")
     jobs: Mapped[list["GenerationJob"]] = relationship(back_populates="user")
     assets: Mapped[list["Asset"]] = relationship(back_populates="user")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(128), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    before: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    after: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class StylePreset(Base):
