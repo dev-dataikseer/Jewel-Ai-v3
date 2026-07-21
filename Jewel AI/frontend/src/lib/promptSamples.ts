@@ -1,13 +1,29 @@
 /**
- * Sample prompt templates for Admin download.
- * Placeholders must match the prompt assembler (see docs/Modals/Prompts).
+ * Fill-in paste templates for Admin → Prompts → Download sample.
+ * Keep {{PLACEHOLDERS}} exactly — the engine fills them at generate time.
  */
 
-export const SAMPLE_MASTER_PROMPT = `ROLE: You are a master commercial jewelry photographer and luxury retoucher.
+export const SAMPLE_MASTER_PROMPT = `================================================================================
+CATALOG / IMAGE WORKFLOW — MASTER PROMPT TEMPLATE
+Admin → Prompts → Workflow = Catalog (or similar) → Prompt = Master prompt
+================================================================================
+HOW TO USE
+1) Copy the PASTE BLOCK below (between >>> and <<<)
+2) Replace text inside [BRACKETS] with your words — OR use the ready example
+3) Do NOT delete lines that look like {{THIS}}
+4) Paste into Admin and click Save
 
-CAMERA: 100mm macro lens, f/11 aperture, edge-to-edge sharpness on the jewelry piece from Image 1. Editorial print quality, high resolution.
+PLACEHOLDERS IN THIS TEMPLATE (leave exactly as written)
+  {{SUBTYPE_BLOCK}}     = jewelry-type text (Ring, Necklace, …) inserted automatically
+  {{EXECUTION_BLOCK}}   = Catalog mode (modern / match reference / match mood)
+  {{BRANDING_CLAUSE}}    = logo + theme rules inserted automatically
 
-LIGHTING: Soft, diffused studio lighting from large overhead softboxes with subtle fill. Generate a dense, physically accurate contact shadow directly beneath the jewelry piece from Image 1.
+>>>
+ROLE: [YOUR ROLE — e.g. master commercial jewelry photographer and luxury retoucher]
+
+CAMERA: [YOUR CAMERA — e.g. 100mm macro, f/11, sharp jewelry from Image 1, soft background]
+
+LIGHTING: [YOUR LIGHTING — e.g. soft softboxes + accurate contact shadow under Image 1]
 
 {{SUBTYPE_BLOCK}}
 
@@ -15,61 +31,87 @@ LIGHTING: Soft, diffused studio lighting from large overhead softboxes with subt
 
 {{BRANDING_CLAUSE}}
 
-INSTRUCTION: Keep Image 1 jewelry identity locked. Do not redesign metalwork, gemstones, proportions, or camera angle unless the workflow explicitly requires a controlled change.
+INSTRUCTION: [YOUR RULES — e.g. keep Image 1 jewelry identity locked]
 
-NEGATIVE PROMPT: 3d render, CGI, plastic texture, warped band, distorted facets, floating object, missing contact shadow, cluttered background, watermark collision.
+NEGATIVE PROMPT: [AVOID — e.g. 3d render, CGI, plastic, warped band, floating object, missing shadow]
+<<<
 
-────────────────────────────────────────────────────────
-PLACEHOLDER GUIDE (do not delete these if your workflow uses them)
-────────────────────────────────────────────────────────
-{{SUBTYPE_BLOCK}}          → Replaced with the selected jewelry-type text (Ring, Necklace, …)
-{{EXECUTION_BLOCK}}        → Catalog mode: modern / match reference / match mood
-{{BRANDING_CLAUSE}}         → Logo × theme/reference branding rules
-{{CHOSEN_ENVIRONMENT}}     → One line from the environment pool (when used in a fragment)
-{{PLACEMENT_ANATOMY}}      → Try-on body placement for the jewelry type
-{{TRYON_MODE_CLAUSE}}       → Extra rules when Try-on mode = Customer
-{{USER_CUSTOM_INSTRUCTION}} → Studio free-text the user typed
-{{USER_ADDITION_TEXT}}      → Same family as custom instruction (alias)
-{{LOGO_IMAGE_INDEX}}        → Image slot number for the logo
-{{THEME_LINE}} / {{LOGO_LINE}} → Optional attachment lines
+READY EXAMPLE (paste as-is, then tweak wording):
+>>>
+ROLE: You are a master commercial jewelry photographer and luxury retoucher.
 
-SECTION TIP
-Use clear section labels (ROLE:, CAMERA:, LIGHTING:, INSTRUCTION:, NEGATIVE PROMPT:).
-The engine can derive layers from these headings when you save.
-Leave {{PLACEHOLDERS}} exactly as written — the system fills them at generate time.
+CAMERA: 100mm macro lens, f/11 aperture, edge-to-edge sharpness on the jewelry piece from Image 1, shallow depth of field on the background. Editorial print quality.
+
+LIGHTING: Soft diffused studio lighting from large softboxes. Dense, physically accurate contact shadow beneath the jewelry from Image 1. Realistic metal reflections without overexposure.
+
+{{SUBTYPE_BLOCK}}
+
+{{EXECUTION_BLOCK}}
+
+{{BRANDING_CLAUSE}}
+
+NEGATIVE PROMPT: 3d render, CGI, plastic texture, warped band, distorted facets, floating object, missing contact shadow, cluttered background, neon colors, watermark collision, redesigned jewelry.
+<<<
 `;
 
-export const SAMPLE_JEWELRY_PROMPT = `The ring's shank rests flat against the supporting surface at its true point of contact. Generate a tight, dark contact shadow directly beneath the band, not a diffuse ambient shadow.
+export const SAMPLE_JEWELRY_PROMPT = `================================================================================
+JEWELRY-TYPE PROMPT TEMPLATE (Ring / Necklace / Bracelet / …)
+Admin → Prompts → same Workflow → Prompt = Ring (or Necklace, …)
+================================================================================
+HOW TO USE
+1) This is SHORT — only 1–4 sentences about how THIS piece sits in the frame
+2) No ROLE / CAMERA / LIGHTING here (those live in Master)
+3) Usually NO {{PLACEHOLDERS}} — the Master uses {{SUBTYPE_BLOCK}} to pull this text in
+4) Paste into Admin and Save — then do the next jewelry type
 
-────────────────────────────────────────────────────────
-JEWELRY-TYPE PROMPT TIPS
-────────────────────────────────────────────────────────
-• Write 1–4 sentences about how THIS jewelry type sits in the frame.
-• Focus on contact points, shadows, scale, and physics — not a full studio brief.
-• Master workflow prompts already cover ROLE / CAMERA / LIGHTING.
-• Do not invent new {{PLACEHOLDERS}} here unless you know the assembler injects them.
-• Example topics: band contact, pendant hang, earring gravity, clasp orientation.
+FILL-IN:
+>>>
+The [PIECE]'s [PART] rests / hangs / sits [CONTACT WITH SURFACE OR BODY]. Generate a tight, dark contact shadow [WHERE]. Preserve exact scale and detail from Image 1.
+<<<
+
+RING EXAMPLE:
+>>>
+The ring's shank rests flat against the supporting surface at its true point of contact. Generate a tight, dark contact shadow directly beneath the band, not a diffuse ambient shadow.
+<<<
+
+NECKLACE EXAMPLE:
+>>>
+The necklace hangs with natural gravity from Image 1. Links and pendant keep true proportions. Soft contact shadow only where the chain or pendant truly meets a surface.
+<<<
+
+EARRING EXAMPLE:
+>>>
+The earring hangs with correct gravity and orientation from Image 1. Preserve post/hook geometry. Contact shadow only where metal meets skin or display surface.
+<<<
 `;
 
-export const SAMPLE_TRYON_PROMPT = `ROLE: You are a jewelry compositing specialist placing a real piece onto a person photo.
+export const SAMPLE_TRYON_PROMPT = `================================================================================
+VIRTUAL TRY-ON — MASTER PROMPT TEMPLATE
+Admin → Prompts → Workflow = Try-On → Prompt = Master prompt
+================================================================================
+HOW TO USE
+1) Copy PASTE BLOCK — keep {{PLACEMENT_ANATOMY}} and {{TRYON_MODE_CLAUSE}}
+2) Paste → Save
+
+PLACEHOLDERS (leave exactly as written)
+  {{PLACEMENT_ANATOMY}}  = where the piece sits on the body for the jewelry type
+  {{TRYON_MODE_CLAUSE}}   = extra rules when Studio Try-on mode = Customer
+
+>>>
+ROLE: You are a jewelry compositing specialist placing a real piece onto a person photo.
 
 INSTRUCTION: Place the jewelry piece from Image 1 onto the person in Image 2, {{PLACEMENT_ANATOMY}}. Match the jewelry's scale, perspective, and lighting to the person's pose and the scene's light direction. Do not alter the person's face, body, pose, skin tone, or existing clothing. Do not alter the jewelry piece itself beyond the perspective and lighting match required to seat it naturally on the body.
 
 {{TRYON_MODE_CLAUSE}}
 
 NEGATIVE PROMPT: warped jewelry to fit body contour, resized jewelry disproportionate to body scale, changed person identity, changed pose, floating jewelry not touching skin, missing contact shadow where jewelry meets skin.
-
-────────────────────────────────────────────────────────
-TRY-ON PLACEHOLDERS
-────────────────────────────────────────────────────────
-{{PLACEMENT_ANATOMY}}  → Where the piece sits on the body for the jewelry type
-{{TRYON_MODE_CLAUSE}}   → Extra preserve rules when mode = Customer photo
+<<<
 `;
 
 export function sampleFilename(kind: "master" | "jewelry" | "tryon"): string {
-  if (kind === "jewelry") return "jewel-ai-sample-jewelry-prompt.txt";
-  if (kind === "tryon") return "jewel-ai-sample-tryon-prompt.txt";
-  return "jewel-ai-sample-master-prompt.txt";
+  if (kind === "jewelry") return "jewel-ai-TEMPLATE-jewelry-type.txt";
+  if (kind === "tryon") return "jewel-ai-TEMPLATE-tryon-master.txt";
+  return "jewel-ai-TEMPLATE-catalog-master.txt";
 }
 
 export function sampleBodyFor(

@@ -89,6 +89,20 @@ async def upload_asset(
     return _asset_out(asset)
 
 
+@router.get("/{asset_id}", response_model=AssetOut)
+def get_asset(
+    asset_id: str,
+    user: RequireUser,
+    db: Session = Depends(get_db),
+):
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return _asset_out(asset)
+
+
 @router.post("/bulk-upload", response_model=list[AssetOut])
 async def bulk_upload(
     user: RequireUser,

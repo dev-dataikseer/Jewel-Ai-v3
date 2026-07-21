@@ -141,37 +141,35 @@ export function ProductUploadGallery({
           </label>
         ) : isSingle ? (
           <div className="absolute inset-0 flex flex-col">
-            {(onCropAt && hasFiles) || (!cleanPreview && hasFiles) ? (
-              <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--jewel-hairline)] px-2 bg-white/95">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-jewel-ink-muted">
-                  {emptyTitle}
-                </span>
-                <div className="flex items-center gap-0.5">
-                  {onCropAt && hasFiles ? (
-                    <button
-                      type="button"
-                      onClick={() => onCropAt(0)}
-                      className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
-                      aria-label="Crop image"
-                      title="Crop"
-                    >
-                      <Crop className="size-3.5" />
-                      Crop
-                    </button>
-                  ) : null}
-                  {!cleanPreview && hasFiles ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAt(0)}
-                      className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label="Remove image"
-                    >
-                      <X className="size-3.5" strokeWidth={2.5} />
-                    </button>
-                  ) : null}
-                </div>
+            <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--jewel-hairline)] px-2 bg-white/95">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-jewel-ink-muted">
+                {emptyTitle}
+              </span>
+              <div className="flex items-center gap-0.5">
+                {onCropAt && hasFiles ? (
+                  <button
+                    type="button"
+                    onClick={() => onCropAt(0)}
+                    className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
+                    aria-label="Crop image"
+                    title="Crop"
+                  >
+                    <Crop className="size-3.5" />
+                    Crop
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={onClearAll}
+                  className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label="Clear image"
+                  title="Clear"
+                >
+                  <X className="size-3.5" strokeWidth={2.5} />
+                  Clear
+                </button>
               </div>
-            ) : null}
+            </div>
             <div className="relative min-h-0 flex-1 flex items-center justify-center p-3">
               <img
                 src={previews[0]}

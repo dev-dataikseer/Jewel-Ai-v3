@@ -270,6 +270,49 @@ export function StudioPage() {
     }
   }, []);
 
+  // Refresh signed theme/logo URLs so previews survive page switches
+  useEffect(() => {
+    if (!sessionHydrated.current) return;
+    const themeId = lockedUrls.themeAssetId;
+    const logoId = lockedUrls.logoAssetId;
+    if (!themeId && !logoId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [themeRes, logoRes] = await Promise.all([
+          themeId
+            ? api.get<Asset>(`/assets/${themeId}`).catch(() => null)
+            : Promise.resolve(null),
+          logoId
+            ? api.get<Asset>(`/assets/${logoId}`).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+        if (themeRes?.data?.original_url) {
+          const themeUrl = themeRes.data.original_url;
+          patchBrandKit({ themeUrl, themeAssetId: themeId });
+          setLockedUrls((u) =>
+            u.themeAssetId === themeId ? { ...u, reference: themeUrl } : u,
+          );
+        }
+        if (logoRes?.data?.original_url) {
+          const logoUrl = logoRes.data.original_url;
+          patchBrandKit({ logoUrl, logoAssetId: logoId });
+          setLockedUrls((u) =>
+            u.logoAssetId === logoId ? { ...u, logo: logoUrl } : u,
+          );
+        }
+      } catch {
+        /* keep cached URLs */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only re-run when asset ids change (not on every signed URL refresh)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedUrls.themeAssetId, lockedUrls.logoAssetId]);
+
   // Persist session draft (settings + job ids — not File blobs)
   useEffect(() => {
     if (!sessionHydrated.current) return;
@@ -558,17 +601,15 @@ export function StudioPage() {
           ? await uploadOne(referenceFile, needsModelReference ? "portrait" : "theme")
           : null;
         const logoAsset = logoFile ? await uploadOne(logoFile, "logo") : null;
-        const logoStorageUrl = logoAsset
-          ? String(logoAsset.original_url || "").split("?")[0] || logoAsset.original_url
-          : lockedUrls.logo || null;
+        const logoStorageUrl = (
+          (logoAsset?.original_url || lockedUrls.logo || "") as string
+        ).split("?")[0] || null;
         const selectedVariant = workflowVariants.find(
           (v) => v.variant_key === workflowVariantKey,
         );
 
         if (referenceAsset) {
-          const themeUrl =
-            String(referenceAsset.original_url || "").split("?")[0] ||
-            referenceAsset.original_url;
+          const themeUrl = referenceAsset.original_url;
           patchBrandKit({
             themeAssetId: referenceAsset.id,
             themeUrl,
@@ -581,8 +622,7 @@ export function StudioPage() {
           }));
         }
         if (logoAsset) {
-          const url =
-            String(logoAsset.original_url || "").split("?")[0] || logoAsset.original_url;
+          const url = logoAsset.original_url;
           patchBrandKit({
             logoAssetId: logoAsset.id,
             logoUrl: url,
@@ -822,6 +862,13 @@ export function StudioPage() {
     setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
   };
 
+  const clearGenerated = () => {
+    setActiveJobId(null);
+    setCompareMode(false);
+    setOutputZoom(1);
+    setOutputIndex(0);
+  };
+
   const openCropForPrimary = (index = 0) => {
     const file = primaryFiles[index];
     if (!file) return;
@@ -834,7 +881,47 @@ export function StudioPage() {
     if (!file) return;
     setValidationErrors((e) => ({ ...e, referenceImage: "" }));
     setReferenceFile(file);
-    setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+    // Keep local File preview until upload finishes; clear stale locked URL
+    if (needsModelReference) {
+      setLockedUrls((u) => ({ ...u, reference: null, model: null }));
+    } else {
+      setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+    }
+    void (async () => {
+      try {
+        const asset = await uploadOne(
+          file,
+          needsModelReference ? "portrait" : "theme",
+        );
+        const url = asset.original_url;
+        if (needsModelReference) {
+          setLockedUrls((u) => ({
+            ...u,
+            reference: url,
+            model: url,
+          }));
+        } else {
+          patchBrandKit({
+            themeAssetId: asset.id,
+            themeUrl: url,
+            themeName: file.name,
+          });
+          setLockedUrls((u) => ({
+            ...u,
+            reference: url,
+            themeAssetId: asset.id,
+          }));
+        }
+        // Drop local File once durable URL is saved (survives page switches)
+        setReferenceFile(null);
+      } catch (err) {
+        toast.error(
+          apiErrorMessage(err as Error, "Could not save theme/portrait image"),
+        );
+      } finally {
+        setUploadProgress(null);
+      }
+    })();
   };
 
   const onLogoPick = (files: FileList | null) => {
@@ -842,6 +929,27 @@ export function StudioPage() {
     if (!file) return;
     setLogoFile(file);
     setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+    void (async () => {
+      try {
+        const asset = await uploadOne(file, "logo");
+        const url = asset.original_url;
+        patchBrandKit({
+          logoAssetId: asset.id,
+          logoUrl: url,
+          logoName: file.name,
+        });
+        setLockedUrls((u) => ({
+          ...u,
+          logo: url,
+          logoAssetId: asset.id,
+        }));
+        setLogoFile(null);
+      } catch (err) {
+        toast.error(apiErrorMessage(err as Error, "Could not save logo image"));
+      } finally {
+        setUploadProgress(null);
+      }
+    })();
   };
 
   const onCropConfirm = (file: File) => {
@@ -855,11 +963,20 @@ export function StudioPage() {
       });
       setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
     } else if (cropTarget.kind === "reference") {
-      setReferenceFile(file);
-      setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+      URL.revokeObjectURL(cropTarget.src);
+      setCropTarget(null);
+      // Reuse pick path so cropped theme/portrait is uploaded + persisted
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      onReferencePick(dt.files);
+      return;
     } else {
-      setLogoFile(file);
-      setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+      URL.revokeObjectURL(cropTarget.src);
+      setCropTarget(null);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      onLogoPick(dt.files);
+      return;
     }
     URL.revokeObjectURL(cropTarget.src);
     setCropTarget(null);
@@ -1351,7 +1468,7 @@ export function StudioPage() {
                           Product
                         </span>
                       )}
-                      {primaryFiles.length > 0 ? (
+                      {primaryFiles.length > 0 || productPreviewSrcs.length > 0 ? (
                         <button
                           type="button"
                           onClick={clearPrimaryFiles}
@@ -1371,6 +1488,16 @@ export function StudioPage() {
                       Generated
                     </span>
                     <div className="flex items-center gap-1.5">
+                      {activeJob ? (
+                        <button
+                          type="button"
+                          onClick={clearGenerated}
+                          className="text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
+                          title="Clear generated preview"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
                       {activeJob?.status === "COMPLETED" ? (
                         <span className="ui-pill-success">Done</span>
                       ) : null}
@@ -1558,36 +1685,53 @@ export function StudioPage() {
                     </div>
                     <div className="flex h-10 items-center border-t border-[var(--jewel-hairline)] px-2.5 min-w-0">
                       {activeJob?.status === "COMPLETED" ? (
-                        <ResultsTray
-                          onRegenerate={() =>
-                            regenerateMutation.mutate(activeJob.id)
-                          }
-                          regenerating={regenerateMutation.isPending}
-                          onDownload={activeOutputUrl}
-                          onFavorite={() => void toggleFavorite(activeJob)}
-                          favorited={favoriteIds.has(activeJob.id)}
-                          onShare={async () => {
-                            try {
-                              const res = await api.post<{ token: string }>(
-                                "/share-links",
-                                { job_id: activeJob.id },
-                              );
-                              const shareUrl = `${window.location.origin}/share/${res.data.token}`;
-                              await navigator.clipboard.writeText(shareUrl);
-                              toast.success("Share link copied");
-                            } catch (err) {
-                              toast.error(
-                                apiErrorMessage(
-                                  err as Error,
-                                  "Could not create share link",
-                                ),
-                              );
+                        <>
+                          <ResultsTray
+                            onRegenerate={() =>
+                              regenerateMutation.mutate(activeJob.id)
                             }
-                          }}
-                          compareActive={compareMode}
-                          onToggleCompare={() => setCompareMode((c) => !c)}
-                          mediaUrl={mediaUrl}
-                        />
+                            regenerating={regenerateMutation.isPending}
+                            onDownload={activeOutputUrl}
+                            onFavorite={() => void toggleFavorite(activeJob)}
+                            favorited={favoriteIds.has(activeJob.id)}
+                            onShare={async () => {
+                              try {
+                                const res = await api.post<{ token: string }>(
+                                  "/share-links",
+                                  { job_id: activeJob.id },
+                                );
+                                const shareUrl = `${window.location.origin}/share/${res.data.token}`;
+                                await navigator.clipboard.writeText(shareUrl);
+                                toast.success("Share link copied");
+                              } catch (err) {
+                                toast.error(
+                                  apiErrorMessage(
+                                    err as Error,
+                                    "Could not create share link",
+                                  ),
+                                );
+                              }
+                            }}
+                            compareActive={compareMode}
+                            onToggleCompare={() => setCompareMode((c) => !c)}
+                            mediaUrl={mediaUrl}
+                          />
+                          <button
+                            type="button"
+                            onClick={clearGenerated}
+                            className="ml-auto shrink-0 text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      ) : activeJob ? (
+                        <button
+                          type="button"
+                          onClick={clearGenerated}
+                          className="ml-auto text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
+                        >
+                          Clear
+                        </button>
                       ) : (
                         <span className="text-[11px] font-medium text-jewel-ink-muted">
                           Output

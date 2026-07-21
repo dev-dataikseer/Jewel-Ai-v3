@@ -195,7 +195,8 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
         <div className="min-w-0">
           <h2 className="ui-card-title">Prompts</h2>
           <p className="mt-0.5 text-[12px] text-jewel-ink-muted">
-            Paste structured prompt text, then save. Download a sample first if you need the format.
+            Download a fill-in template, copy the PASTE BLOCK, replace [BRACKETS], keep{" "}
+            {"{{placeholders}}"}, then Save.
           </p>
         </div>
         <button
@@ -291,7 +292,7 @@ export function PromptEditor({ workflows, jewelryTypes }: Props) {
             placeholder={
               isLoading
                 ? "Loading…"
-                : "Paste your prompt here. Use ROLE / CAMERA / LIGHTING sections and {{PLACEHOLDERS}} as in the sample file."
+                : "Paste your PASTE BLOCK here. Keep {{PLACEHOLDERS}}. Download sample for fill-in templates."
             }
             rows={18}
             spellCheck={false}

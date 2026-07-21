@@ -3,6 +3,7 @@ import { FacetMark } from "@/components/ui/FacetMark";
 import { ModelSelector } from "@/components/studio/ModelSelector";
 import { MultiSelectDropdown } from "@/components/ui/MultiSelectDropdown";
 import { UploadZone } from "@/components/studio/UploadZone";
+import { loadBrandKit } from "@/lib/brandKit";
 import type { ConfigOptions, ModelDefinition, StylePreset } from "@/types";
 import { workflowLabel } from "@/types";
 
@@ -82,7 +83,8 @@ function ReferencesSection(props: Props) {
   } = props;
 
   const hasSaved =
-    lockedUrls.reference || lockedUrls.logo || referenceFile || logoFile;
+    lockedUrls.reference || lockedUrls.logo || referenceFile || logoFile || themePreviewSrc || logoPreviewSrc;
+  const kit = loadBrandKit();
 
   return (
     <div className="space-y-2">
@@ -108,7 +110,7 @@ function ReferencesSection(props: Props) {
             onFiles={onReferencePick}
             single
             compact
-            fileName={referenceFile?.name || "Theme"}
+            fileName={referenceFile?.name || kit?.themeName || "Theme"}
             onClear={clearTheme}
           />
           <UploadZone
@@ -118,7 +120,7 @@ function ReferencesSection(props: Props) {
             onFiles={onLogoPick}
             single
             compact
-            fileName={logoFile?.name || "Logo"}
+            fileName={logoFile?.name || kit?.logoName || "Logo"}
             onClear={clearLogo}
           />
         </>
@@ -130,7 +132,7 @@ function ReferencesSection(props: Props) {
           onFiles={onLogoPick}
           single
           compact
-          fileName={logoFile?.name || "Logo"}
+          fileName={logoFile?.name || kit?.logoName || "Logo"}
           onClear={clearLogo}
         />
       )}
