@@ -36,7 +36,7 @@ from seeds.run_seeds import run_all_seeds
 settings = get_settings()
 setup_logging()
 
-APP_VERSION = "4.2.0"
+APP_VERSION = "4.3.0"
 
 
 def _init_sentry() -> None:
@@ -339,8 +339,16 @@ if STATIC_DIR.is_dir():
             raise HTTPException(status_code=404, detail="Not found")
         candidate = STATIC_DIR / full_path
         if candidate.is_file():
+            # Fingerprinted JS/CSS under /assets can be cached; HTML must revalidate
             return FileResponse(candidate)
         index = STATIC_DIR / "index.html"
         if index.is_file():
-            return FileResponse(index)
+            return FileResponse(
+                index,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
         raise HTTPException(status_code=404, detail="Not found")

@@ -118,7 +118,7 @@ export function AppLayout({
           </>
         ) : null}
         <div className="hidden sm:block h-3 w-px bg-[var(--jewel-border)]" />
-        <div>v4.2.0</div>
+        <div>v4.3.0</div>
       </footer>
     </div>
   );
