@@ -178,12 +178,25 @@ class FalAdapter:
                     arguments=arguments,
                     webhook_url=webhook_url,
                 )
-            return client.subscribe(
+            # Capture request_id via on_enqueue (subscribe result payload often omits it).
+            captured: dict[str, str] = {}
+
+            def _on_enqueue(request_id: str) -> None:
+                if request_id:
+                    captured["request_id"] = str(request_id)
+
+            out = client.subscribe(
                 endpoint,
                 arguments=arguments,
                 with_logs=False,
                 client_timeout=FAL_CLIENT_TIMEOUT,
+                on_enqueue=_on_enqueue,
             )
+            if isinstance(out, dict) and captured.get("request_id"):
+                out.setdefault("_fal_request_id", captured["request_id"])
+            elif captured.get("request_id"):
+                return {"_fal_wrapped_result": out, "_fal_request_id": captured["request_id"]}
+            return out
 
         fal_http_t0 = time.perf_counter()
         try:
@@ -214,7 +227,7 @@ class FalAdapter:
                 note=(
                     "webhook_submit = queue accept only; GPU time is in fal dashboard"
                     if webhook_url
-                    else "subscribe = queue wait + GPU + result fetch inside this call"
+                    else "subscribe = queue wait + GPU inside this call"
                 ),
             )
 
@@ -263,12 +276,24 @@ class FalAdapter:
             )
 
         config = (model_def.config or {}) if model_def else {}
-        img_urls = parse_image_urls(result if isinstance(result, dict) else {}, spec, config)
+        # Unwrap optional request_id carrier from subscribe path
+        subscribe_req_id = None
+        if isinstance(result, dict):
+            subscribe_req_id = result.pop("_fal_request_id", None) or result.get("request_id")
+            if "_fal_wrapped_result" in result:
+                result = result["_fal_wrapped_result"]
+
+        parse_payload = result if isinstance(result, dict) else {}
+        img_urls = parse_image_urls(parse_payload, spec, config)
         if not img_urls:
             raise RuntimeError(
                 f"fal.ai returned no images for {endpoint}. "
-                f"Response keys: {list(result.keys()) if isinstance(result, dict) else type(result)}"
+                f"Response keys: {list(parse_payload.keys()) if isinstance(parse_payload, dict) else type(result)}"
             )
+
+        from app.services.job_timing import extract_fal_inference_seconds
+
+        inference_s = extract_fal_inference_seconds(parse_payload)
 
         logger.info(
             "fal subscribe complete",
@@ -277,6 +302,8 @@ class FalAdapter:
                     "job_id": request.job_id,
                     "endpoint": endpoint,
                     "image_count": len(img_urls),
+                    "fal_request_id": subscribe_req_id,
+                    "fal_inference_time": inference_s,
                 }
             },
         )
@@ -284,9 +311,11 @@ class FalAdapter:
             log_event(
                 "T2_fal_subscribe_complete",
                 job_id=request.job_id,
+                fal_request_id=str(subscribe_req_id) if subscribe_req_id else None,
                 endpoint=endpoint,
                 T2_fal_api_ms=fal_http_ms,
                 fal_mode=fal_mode,
+                fal_inference_time=inference_s,
             )
 
         fetch_t0 = time.perf_counter()
@@ -297,6 +326,13 @@ class FalAdapter:
             all_bytes.append(await safe_fetch_image_bytes(img_url, timeout=FETCH_TIMEOUT))
 
         cdn_fetch_ms = int(round((time.perf_counter() - fetch_t0) * 1000)) if latency_trace_enabled() else None
+        if latency_trace_enabled() and cdn_fetch_ms is not None:
+            log_event(
+                "T3_cdn_fetch",
+                job_id=request.job_id,
+                fal_request_id=str(subscribe_req_id) if subscribe_req_id else None,
+                fal_cdn_fetch_ms=cdn_fetch_ms,
+            )
 
         cost = model_def.cost_per_call if model_def and model_def.cost_per_call else (spec.cost_per_call if spec else 0.1)
         latency_meta = {
@@ -307,19 +343,30 @@ class FalAdapter:
         }
         if cdn_fetch_ms is not None:
             latency_meta["fal_cdn_fetch_ms"] = cdn_fetch_ms
+        meta_out: dict[str, Any] = {
+            "fal_result_keys": list(parse_payload.keys()) if isinstance(parse_payload, dict) else [],
+            "all_image_urls": img_urls,
+            "all_image_bytes": all_bytes[1:] if len(all_bytes) > 1 else [],
+            "family": spec.family if spec else None,
+            "latencyTrace": latency_meta,
+            "metrics": parse_payload.get("metrics") if isinstance(parse_payload, dict) else None,
+        }
+        if subscribe_req_id:
+            meta_out["fal_request_id"] = subscribe_req_id
+        if inference_s is not None:
+            meta_out["fal_inference_time"] = inference_s
         return GenerationResult(
             image_bytes=all_bytes[0] if all_bytes else None,
             provider=self.name,
             model=endpoint,
             cost=cost or 0.1,
-            usage={"endpoint": endpoint, "arguments_keys": list(arguments.keys()), "image_count": len(all_bytes)},
-            metadata={
-                "fal_result_keys": list(result.keys()) if isinstance(result, dict) else [],
-                "all_image_urls": img_urls,
-                "all_image_bytes": all_bytes[1:] if len(all_bytes) > 1 else [],
-                "family": spec.family if spec else None,
-                "latencyTrace": latency_meta,
+            usage={
+                "endpoint": endpoint,
+                "arguments_keys": list(arguments.keys()),
+                "image_count": len(all_bytes),
+                "request_id": subscribe_req_id,
             },
+            metadata=meta_out,
         )
 
     async def health_check(self) -> ProviderStatus:

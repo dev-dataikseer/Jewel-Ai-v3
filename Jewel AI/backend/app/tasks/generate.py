@@ -331,6 +331,8 @@ async def _process_job_async(job_id: str) -> None:
 
         from uuid import uuid4
 
+        # Subscribe path: fal call finished — stamp before local logo/storage I/O
+        timing["fal_result_received"] = datetime.now(timezone.utc).isoformat()
         post_t0 = time.perf_counter() if latency_trace_enabled() else None
         image_bytes = result.image_bytes
         logo_mode = packet.logo_mode
@@ -362,17 +364,33 @@ async def _process_job_async(job_id: str) -> None:
             "statusHint": None,
             "logoApplied": logo_mode if logo_url else "none",
         }
-        # Sync path: fal returned inline — capture inference_time if present
-        from app.services.job_timing import extract_fal_inference_seconds, record_job_eta_sample
+        # Sync path: fal returned inline — capture inference_time / request_id / latencyTrace
+        from app.services.job_timing import (
+            attach_duration_splits,
+            extract_fal_inference_seconds,
+            record_job_eta_sample,
+        )
 
         sync_payload = result.metadata or {}
-        inference = extract_fal_inference_seconds(sync_payload) or extract_fal_inference_seconds(
-            {"metrics": sync_payload.get("metrics"), "payload": sync_payload}
+        if sync_payload.get("latencyTrace"):
+            merged["latencyTrace"] = {
+                **dict(merged.get("latencyTrace") or {}),
+                **dict(sync_payload["latencyTrace"]),
+            }
+        inference = (
+            sync_payload.get("fal_inference_time")
+            or extract_fal_inference_seconds(sync_payload)
+            or extract_fal_inference_seconds(
+                {"metrics": sync_payload.get("metrics"), "payload": sync_payload}
+            )
         )
         if inference is not None:
             merged["fal_inference_time"] = inference
-        if result.metadata and result.metadata.get("fal_request_id"):
-            merged["fal_request_id"] = result.metadata["fal_request_id"]
+        if sync_payload.get("fal_request_id"):
+            merged["fal_request_id"] = sync_payload["fal_request_id"]
+        elif (result.usage or {}).get("request_id"):
+            merged["fal_request_id"] = result.usage["request_id"]
+        merged = attach_duration_splits(merged)
         job.status = "COMPLETED"
         job.output_url = output_url
         job.output_urls = extra_urls if extra_urls else None

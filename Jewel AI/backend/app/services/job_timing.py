@@ -92,7 +92,11 @@ def extract_fal_inference_seconds(data: Any) -> float | None:
 
 
 def compute_duration_splits(meta: dict[str, Any] | None) -> dict[str, int | None]:
-    """Derive prep / fal / finalize ms from timing + fal_inference_time."""
+    """Derive prep / fal / finalize ms from timing + fal_inference_time.
+
+    Webhook path: fal_queued → fal_webhook_received (+ inference from metrics).
+    Subscribe path: fal_submit → fal_result_received (wall = queue+GPU); finalize after.
+    """
     meta = meta or {}
     timing = dict(meta.get("timing") or {})
 
@@ -105,6 +109,7 @@ def compute_duration_splits(meta: dict[str, Any] | None) -> dict[str, int | None
     prompt_ready = timing.get("prompt_ready")
     fal_queued = timing.get("fal_queued") or timing.get("fal_submit")
     fal_webhook_received = timing.get("fal_webhook_received")
+    fal_result_received = timing.get("fal_result_received")
     storage_saved = timing.get("storage_saved")
     completed = timing.get("completed") or storage_saved
 
@@ -121,21 +126,50 @@ def compute_duration_splits(meta: dict[str, Any] | None) -> dict[str, int | None
         except (ValueError, TypeError):
             pass
 
-    finalize_end = storage_saved or completed
-    finalize_ms = _ms_between(fal_webhook_received, finalize_end)
+    # Prefer latencyTrace.T2_fal_api_ms (subscribe wall clock) when present
+    lt = meta.get("latencyTrace") or {}
+    t2_ms = lt.get("T2_fal_api_ms")
+    if isinstance(t2_ms, (int, float)) and t2_ms > 0 and fal_inference_ms is None:
+        # Not pure GPU — wall including queue; still useful as fal_wall proxy
+        pass
 
+    finalize_end = storage_saved or completed
+    finalize_ms: int | None = None
     fal_queue_wait_ms: int | None = None
-    span = _ms_between(fal_queued, fal_webhook_received)
-    if span is not None:
-        if fal_inference_ms is not None:
-            fal_queue_wait_ms = max(0, span - fal_inference_ms)
-        else:
-            fal_queue_wait_ms = span
+    fal_wall_ms: int | None = None
+
+    if fal_webhook_received:
+        finalize_ms = _ms_between(fal_webhook_received, finalize_end)
+        span = _ms_between(fal_queued, fal_webhook_received)
+        fal_wall_ms = span
+        if span is not None:
+            if fal_inference_ms is not None:
+                fal_queue_wait_ms = max(0, span - fal_inference_ms)
+            else:
+                fal_queue_wait_ms = span
+    elif fal_result_received:
+        # Subscribe / in-process path
+        finalize_ms = _ms_between(fal_result_received, finalize_end)
+        fal_wall_ms = _ms_between(fal_queued, fal_result_received)
+        if isinstance(t2_ms, (int, float)) and t2_ms > 0:
+            fal_wall_ms = int(t2_ms)
+        if fal_wall_ms is not None and fal_inference_ms is not None:
+            fal_queue_wait_ms = max(0, fal_wall_ms - fal_inference_ms)
+        elif fal_wall_ms is not None:
+            # Without GPU metric, entire subscribe wall is "fal wait" (queue+GPU)
+            fal_queue_wait_ms = fal_wall_ms
+    else:
+        # Legacy subscribe jobs: no fal_result_received — attribute
+        # fal_submit → storage_saved as fal wall (blended with finalize).
+        fal_wall_ms = _ms_between(fal_queued, finalize_end)
+        if fal_wall_ms is not None and fal_inference_ms is None:
+            fal_queue_wait_ms = fal_wall_ms
 
     return {
         "prep_ms": prep_ms,
         "fal_inference_ms": fal_inference_ms,
         "fal_queue_wait_ms": fal_queue_wait_ms,
+        "fal_wall_ms": fal_wall_ms,
         "finalize_ms": finalize_ms,
         "worker_total_ms": worker_total_ms,
     }

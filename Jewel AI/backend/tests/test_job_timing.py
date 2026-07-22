@@ -43,6 +43,48 @@ def test_compute_duration_splits():
     assert splits["fal_queue_wait_ms"] == 6000
     assert splits["finalize_ms"] == 3000
     assert splits["worker_total_ms"] == 19000
+    assert splits["fal_wall_ms"] == 10000
+
+
+def test_compute_duration_splits_subscribe_path():
+    meta = {
+        "fal_inference_time": 20.0,
+        "latencyTrace": {"T2_fal_api_ms": 45000},
+        "timing": {
+            "worker_started": "2026-07-21T10:00:00+00:00",
+            "prompt_ready": "2026-07-21T10:00:01+00:00",
+            "fal_submit": "2026-07-21T10:00:01+00:00",
+            "fal_result_received": "2026-07-21T10:00:50+00:00",
+            "storage_saved": "2026-07-21T10:00:52+00:00",
+            "completed": "2026-07-21T10:00:52+00:00",
+        },
+    }
+    splits = compute_duration_splits(meta)
+    assert splits["prep_ms"] == 1000
+    assert splits["fal_inference_ms"] == 20000
+    assert splits["fal_wall_ms"] == 45000  # from latencyTrace
+    assert splits["fal_queue_wait_ms"] == 25000  # 45s wall - 20s GPU
+    assert splits["finalize_ms"] == 2000
+    assert splits["worker_total_ms"] == 52000
+
+
+def test_compute_duration_splits_legacy_subscribe_blended():
+    """Historical jobs: fal_submit → storage_saved with no fal_result_received."""
+    meta = {
+        "timing": {
+            "worker_started": "2026-07-21T10:00:00+00:00",
+            "prompt_ready": "2026-07-21T10:00:00.100000+00:00",
+            "fal_submit": "2026-07-21T10:00:00.100000+00:00",
+            "storage_saved": "2026-07-21T10:02:00+00:00",
+            "completed": "2026-07-21T10:02:00+00:00",
+        },
+    }
+    splits = compute_duration_splits(meta)
+    assert splits["prep_ms"] == 100
+    assert splits["fal_inference_ms"] is None
+    assert splits["finalize_ms"] is None
+    assert splits["fal_queue_wait_ms"] == 119900
+    assert splits["worker_total_ms"] == 120000
 
 
 def test_eta_sample_prefers_fal_inference():
