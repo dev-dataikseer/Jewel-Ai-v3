@@ -14,10 +14,29 @@ import urllib.request
 from io import BytesIO
 from pathlib import Path
 
-BASE = os.environ.get("BASE_URL", "https://jewel-ai.up.railway.app").rstrip("/")
+BASE = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 EMAIL = os.environ.get("EMAIL", "studio@jewelai.com")
 PASSWORD = os.environ.get("PASSWORD", "studio123")
 OUT = Path(__file__).resolve().parent / "_latency_test_matrix.json"
+
+
+def _assert_generation_allowed() -> None:
+    """Refuse to burn fal credits on production unless explicitly opted in."""
+    host = BASE.lower()
+    is_prodish = any(
+        x in host
+        for x in ("railway.app", "jewel-ai", "https://")
+    ) and "127.0.0.1" not in host and "localhost" not in host
+    if is_prodish and os.environ.get("ALLOW_PROD_FAL_GENERATION", "").strip() != "1":
+        print(
+            "REFUSING to create generation jobs against production.\n"
+            f"  BASE_URL={BASE}\n"
+            "This script spends fal.ai credits. Re-run only if you intend to:\n"
+            "  ALLOW_PROD_FAL_GENERATION=1 BASE_URL=... python scripts/run_latency_test_matrix.py\n"
+            "Prefer local: BASE_URL=http://127.0.0.1:8000",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
 # 1x1 JPEG
 TINY_JPEG = bytes(
@@ -284,6 +303,7 @@ def create_and_wait(token: str, body: dict, timeout_s: int = 600) -> dict:
 
 
 def main() -> int:
+    _assert_generation_allowed()
     token = login()
     asset_id = os.environ.get("ASSET_ID")
     upload_ms = None

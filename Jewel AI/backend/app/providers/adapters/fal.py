@@ -184,6 +184,31 @@ class FalAdapter:
             def _on_enqueue(request_id: str) -> None:
                 if request_id:
                     captured["request_id"] = str(request_id)
+                    # Persist immediately so a crash/redeploy cannot resubmit and double-bill.
+                    if request.job_id:
+                        try:
+                            from datetime import datetime, timezone
+
+                            from app.database import SessionLocal
+                            from app.models import GenerationJob
+
+                            db_early = SessionLocal()
+                            try:
+                                job_early = (
+                                    db_early.query(GenerationJob)
+                                    .filter(GenerationJob.id == request.job_id)
+                                    .first()
+                                )
+                                if job_early:
+                                    meta_early = dict(job_early.provider_metadata or {})
+                                    meta_early["fal_request_id"] = str(request_id)
+                                    meta_early["fal_enqueued_at"] = datetime.now(timezone.utc).isoformat()
+                                    job_early.provider_metadata = meta_early
+                                    db_early.commit()
+                            finally:
+                                db_early.close()
+                        except Exception:
+                            pass
 
             out = client.subscribe(
                 endpoint,
