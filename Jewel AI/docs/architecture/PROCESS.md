@@ -246,6 +246,7 @@ Backend phase splits and batch wall-clock are live. Optional follow-up (not done
 ## 7. Related docs
 
 - [Issues.md](./Issues.md) — gap status  
+- [LATENCY_INVESTIGATION_REPORT.md](./LATENCY_INVESTIGATION_REPORT.md) — 2026-07-22 production FAL vs app bottleneck  
 - [PROMPT_PIPELINE.md](./PROMPT_PIPELINE.md) — how prompts are built  
 - [BACKEND.md](./BACKEND.md) — services, routers, workers  
 - [jewel_ai_prompt_engine_architecture.md](./jewel_ai_prompt_engine_architecture.md) — catalog execution modes  
