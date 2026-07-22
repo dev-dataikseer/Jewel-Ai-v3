@@ -36,7 +36,7 @@ from seeds.run_seeds import run_all_seeds
 settings = get_settings()
 setup_logging()
 
-APP_VERSION = "4.0.0"
+APP_VERSION = "4.1.0"
 
 
 def _init_sentry() -> None:
