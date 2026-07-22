@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,12 @@ from app.providers.types import GenerationRequest
 from app.storage.local import storage
 from app.tasks.celery_app import celery_app
 from app.config import get_settings
+from app.services.latency_trace import (
+    emit_summary,
+    enabled as latency_trace_enabled,
+    log_event,
+    merge_job_trace,
+)
 
 logger = get_logger(__name__)
 STUCK_MINUTES = 15
@@ -69,6 +76,8 @@ def _mark_job_failed_terminal(job_id: str, message: str) -> None:
 async def _process_job_async(job_id: str) -> None:
     db = SessionLocal()
     prompt = ""
+    worker_timer = time.perf_counter() if latency_trace_enabled() else None
+    prep_t0 = worker_timer
     try:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
         if not job:
@@ -137,6 +146,29 @@ async def _process_job_async(job_id: str) -> None:
         meta["progressStage"] = "composing_prompt"
         job.provider_metadata = meta
         db.commit()
+        if latency_trace_enabled():
+            trace = dict(meta.get("latencyTrace") or {})
+            api_enqueued = trace.get("t0_api_enqueued_at")
+            celery_queue_ms = None
+            if api_enqueued:
+                try:
+                    t_enqueue = datetime.fromisoformat(str(api_enqueued).replace("Z", "+00:00"))
+                    celery_queue_ms = max(0, int((now - t_enqueue).total_seconds() * 1000))
+                except Exception:
+                    pass
+            log_event(
+                "worker_started",
+                job_id=job_id,
+                celery_queue_ms=celery_queue_ms,
+            )
+            merge_job_trace(
+                db,
+                job_id,
+                {
+                    "worker_started_at": now.isoformat(),
+                    "celery_queue_ms": celery_queue_ms,
+                },
+            )
         _mark_batch_started(db, job.batch_id)
 
         preset_addon = None
@@ -196,6 +228,11 @@ async def _process_job_async(job_id: str) -> None:
         prompt = final.text
         timing["prompt_ready"] = datetime.now(timezone.utc).isoformat()
         timing["fal_submit"] = datetime.now(timezone.utc).isoformat()
+        t1_prep_ms = None
+        if latency_trace_enabled() and prep_t0 is not None:
+            t1_prep_ms = int(round((time.perf_counter() - prep_t0) * 1000))
+            log_event("T1_prep_complete", job_id=job_id, T1_prep_ms=t1_prep_ms)
+            merge_job_trace(db, job_id, {"T1_prep_ms": t1_prep_ms})
         meta = {
             **(job.provider_metadata or meta),
             "timing": timing,
@@ -220,6 +257,16 @@ async def _process_job_async(job_id: str) -> None:
         )
 
         result, chain = await route_generation(db, request)
+        t2_fal_ms = None
+        t2_fal_mode = None
+        fal_req_id = None
+        if latency_trace_enabled():
+            lt = (result.metadata or {}).get("latencyTrace") or {}
+            t2_fal_ms = lt.get("T2_fal_api_ms")
+            t2_fal_mode = lt.get("T2_fal_mode")
+            fal_req_id = (result.metadata or {}).get("fal_request_id") or (result.usage or {}).get(
+                "request_id"
+            )
 
         db.refresh(job)
         if job.status == "CANCELLED":
@@ -259,10 +306,32 @@ async def _process_job_async(job_id: str) -> None:
             job.final_prompt = prompt
             job.provider_metadata = merged
             db.commit()
+            if latency_trace_enabled():
+                trace = dict(meta.get("latencyTrace") or {})
+                emit_summary(
+                    job_id=job_id,
+                    fal_request_id=str(fal_req) if fal_req else None,
+                    t0_api_ms=trace.get("T0_api_ms"),
+                    celery_queue_ms=trace.get("celery_queue_ms"),
+                    t1_prep_ms=t1_prep_ms or trace.get("T1_prep_ms"),
+                    t2_fal_api_ms=t2_fal_ms,
+                    t2_fal_mode=t2_fal_mode or "webhook_submit",
+                    extra={"path": "webhook_pending"},
+                )
+                merge_job_trace(
+                    db,
+                    job_id,
+                    {
+                        "fal_request_id": str(fal_req) if fal_req else None,
+                        "T2_fal_api_ms": t2_fal_ms,
+                        "T2_fal_mode": t2_fal_mode or "webhook_submit",
+                    },
+                )
             return
 
         from uuid import uuid4
 
+        post_t0 = time.perf_counter() if latency_trace_enabled() else None
         image_bytes = result.image_bytes
         logo_mode = packet.logo_mode
         logo_url = packet.logo_url
@@ -313,6 +382,30 @@ async def _process_job_async(job_id: str) -> None:
         job.cost = result.cost
         job.provider_metadata = merged
         db.commit()
+
+        t3_post_ms = None
+        if latency_trace_enabled() and post_t0 is not None:
+            t3_post_ms = int(round((time.perf_counter() - post_t0) * 1000))
+            trace = dict(merged.get("latencyTrace") or {})
+            emit_summary(
+                job_id=job_id,
+                fal_request_id=str(fal_req_id) if fal_req_id else None,
+                t0_api_ms=trace.get("T0_api_ms"),
+                celery_queue_ms=trace.get("celery_queue_ms"),
+                t1_prep_ms=t1_prep_ms or trace.get("T1_prep_ms"),
+                t2_fal_api_ms=t2_fal_ms,
+                t2_fal_mode=t2_fal_mode,
+                t3_post_ms=t3_post_ms,
+                extra={"path": "subscribe_sync"},
+            )
+            merge_job_trace(
+                db,
+                job_id,
+                {
+                    "T3_post_ms": t3_post_ms,
+                    "fal_request_id": str(fal_req_id) if fal_req_id else None,
+                },
+            )
 
         try:
             record_job_eta_sample(job, merged)
@@ -661,6 +754,8 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
     from app.security.url_fetch import safe_fetch_image_bytes
     from app.storage.local import storage
 
+    finalize_t0 = time.perf_counter() if latency_trace_enabled() else None
+
     if not _acquire_webhook_finalize_lease(job_id):
         logger.info(
             "Skip webhook finalize — lease held",
@@ -762,6 +857,28 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
         }
         job.provider_metadata = merged
         db.commit()
+        if latency_trace_enabled() and finalize_t0 is not None:
+            t3_post_ms = int(round((time.perf_counter() - finalize_t0) * 1000))
+            trace = dict(meta.get("latencyTrace") or {})
+            fal_req = meta.get("fal_request_id") or got
+            log_event(
+                "T3_webhook_finalize",
+                job_id=job_id,
+                fal_request_id=str(fal_req) if fal_req else None,
+                T3_post_ms=t3_post_ms,
+            )
+            emit_summary(
+                job_id=job_id,
+                fal_request_id=str(fal_req) if fal_req else None,
+                t0_api_ms=trace.get("T0_api_ms"),
+                celery_queue_ms=trace.get("celery_queue_ms"),
+                t1_prep_ms=trace.get("T1_prep_ms"),
+                t2_fal_api_ms=trace.get("T2_fal_api_ms"),
+                t2_fal_mode=trace.get("T2_fal_mode") or "webhook_submit",
+                t3_post_ms=t3_post_ms,
+                extra={"path": "webhook_finalize"},
+            )
+            merge_job_trace(db, job_id, {"T3_post_ms": t3_post_ms})
         try:
             record_job_eta_sample(job, merged)
         except Exception:

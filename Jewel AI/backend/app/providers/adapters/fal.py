@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from fal_client import SyncClient
 
 from app.config import get_settings
 from app.logging_config import get_logger
+from app.services.latency_trace import enabled as latency_trace_enabled
+from app.services.latency_trace import log_event
 from app.models import ModelDefinition
 from app.providers.model_catalog.builders.base import _merge_params as _merge_params_impl
 from app.providers.model_catalog.builders import build_arguments
@@ -111,15 +114,23 @@ class FalAdapter:
     ) -> GenerationResult:
         endpoint = request.model_endpoint_id or self.model_name
         spec = _spec_for(endpoint, model_def)
+        image_prep_ms: int | None = None
 
         if spec:
+            prep_t0 = time.perf_counter()
             prepared = await prepare_images(spec, list(request.image_urls or []), self.api_key)
             fal_urls = prepared.fal_urls
+            if latency_trace_enabled():
+                image_prep_ms = int(round((time.perf_counter() - prep_t0) * 1000))
         else:
             fal_urls = []
+            prep_t0 = time.perf_counter()
             for url in request.image_urls or []:
                 fal_urls.append(await ensure_fal_url(url, self.api_key))
+            if latency_trace_enabled():
+                image_prep_ms = int(round((time.perf_counter() - prep_t0) * 1000))
 
+        build_t0 = time.perf_counter()
         arguments = build_arguments(
             request,
             fal_urls,
@@ -127,6 +138,9 @@ class FalAdapter:
             model_def=model_def,
             endpoint=endpoint,
         )
+        build_args_ms: int | None = None
+        if latency_trace_enabled():
+            build_args_ms = int(round((time.perf_counter() - build_t0) * 1000))
         logger.info(
             "fal.ai request",
             extra={
@@ -171,10 +185,38 @@ class FalAdapter:
                 client_timeout=FAL_CLIENT_TIMEOUT,
             )
 
+        fal_http_t0 = time.perf_counter()
         try:
             result = await asyncio.to_thread(_run)
         except Exception as exc:
+            if latency_trace_enabled():
+                log_event(
+                    "T2_fal_api_error",
+                    job_id=request.job_id,
+                    endpoint=endpoint,
+                    fal_http_ms=int(round((time.perf_counter() - fal_http_t0) * 1000)),
+                    error=str(exc)[:300],
+                )
             raise RuntimeError(f"fal.ai call failed ({endpoint}): {exc}") from exc
+
+        fal_http_ms = int(round((time.perf_counter() - fal_http_t0) * 1000))
+        fal_mode = "webhook_submit" if webhook_url else "subscribe"
+        if latency_trace_enabled():
+            log_event(
+                "T2_fal_api",
+                job_id=request.job_id,
+                endpoint=endpoint,
+                fal_mode=fal_mode,
+                T2_fal_api_ms=fal_http_ms,
+                fal_image_prep_ms=image_prep_ms,
+                fal_build_args_ms=build_args_ms,
+                image_count=len(fal_urls),
+                note=(
+                    "webhook_submit = queue accept only; GPU time is in fal dashboard"
+                    if webhook_url
+                    else "subscribe = queue wait + GPU + result fetch inside this call"
+                ),
+            )
 
         if webhook_url:
             req_id = (
@@ -192,6 +234,15 @@ class FalAdapter:
                     }
                 },
             )
+            if latency_trace_enabled():
+                log_event(
+                    "T2_fal_request_id",
+                    job_id=request.job_id,
+                    fal_request_id=str(req_id) if req_id else None,
+                    endpoint=endpoint,
+                    T2_fal_api_ms=fal_http_ms,
+                    fal_mode=fal_mode,
+                )
             cost = model_def.cost_per_call if model_def and model_def.cost_per_call else 0.1
             return GenerationResult(
                 image_bytes=None,
@@ -199,7 +250,15 @@ class FalAdapter:
                 model=endpoint,
                 cost=cost,
                 usage={"endpoint": endpoint, "arguments_keys": list(arguments.keys()), "request_id": req_id},
-                metadata={"fal_request_id": req_id},
+                metadata={
+                    "fal_request_id": req_id,
+                    "latencyTrace": {
+                        "T2_fal_api_ms": fal_http_ms,
+                        "T2_fal_mode": fal_mode,
+                        "fal_image_prep_ms": image_prep_ms,
+                        "fal_build_args_ms": build_args_ms,
+                    },
+                },
                 is_webhook_pending=True,
             )
 
@@ -221,14 +280,33 @@ class FalAdapter:
                 }
             },
         )
+        if latency_trace_enabled():
+            log_event(
+                "T2_fal_subscribe_complete",
+                job_id=request.job_id,
+                endpoint=endpoint,
+                T2_fal_api_ms=fal_http_ms,
+                fal_mode=fal_mode,
+            )
 
+        fetch_t0 = time.perf_counter()
         all_bytes: list[bytes] = []
         from app.security.url_fetch import safe_fetch_image_bytes
 
         for img_url in img_urls:
             all_bytes.append(await safe_fetch_image_bytes(img_url, timeout=FETCH_TIMEOUT))
 
+        cdn_fetch_ms = int(round((time.perf_counter() - fetch_t0) * 1000)) if latency_trace_enabled() else None
+
         cost = model_def.cost_per_call if model_def and model_def.cost_per_call else (spec.cost_per_call if spec else 0.1)
+        latency_meta = {
+            "T2_fal_api_ms": fal_http_ms,
+            "T2_fal_mode": fal_mode,
+            "fal_image_prep_ms": image_prep_ms,
+            "fal_build_args_ms": build_args_ms,
+        }
+        if cdn_fetch_ms is not None:
+            latency_meta["fal_cdn_fetch_ms"] = cdn_fetch_ms
         return GenerationResult(
             image_bytes=all_bytes[0] if all_bytes else None,
             provider=self.name,
@@ -240,6 +318,7 @@ class FalAdapter:
                 "all_image_urls": img_urls,
                 "all_image_bytes": all_bytes[1:] if len(all_bytes) > 1 else [],
                 "family": spec.family if spec else None,
+                "latencyTrace": latency_meta,
             },
         )
 

@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -207,6 +208,10 @@ def create_job(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    from app.services.latency_trace import enabled as latency_trace_enabled
+    from app.services.latency_trace import log_event, merge_job_trace
+
+    t0_api = time.perf_counter() if latency_trace_enabled() else None
     data = whitelist_job_fields(body.model_dump())
     validate_job_create(data)
     try:
@@ -318,6 +323,24 @@ def create_job(
     db.add(job)
     db.commit()
     db.refresh(job)
+    if latency_trace_enabled() and t0_api is not None:
+        t0_api_ms = int(round((time.perf_counter() - t0_api) * 1000))
+        enqueued_at = datetime.now(timezone.utc).isoformat()
+        merge_job_trace(
+            db,
+            job.id,
+            {
+                "T0_api_ms": t0_api_ms,
+                "t0_api_enqueued_at": enqueued_at,
+            },
+        )
+        log_event(
+            "T0_api_received",
+            job_id=job.id,
+            T0_api_ms=t0_api_ms,
+            workflow=workflow,
+            request_id=_request_id(request),
+        )
     enqueue_image_job(job.id, request_id=_request_id(request))
     return _job_to_out(job)
 
