@@ -37,21 +37,16 @@ def _iso(dt) -> str | None:
 def _validate_content(content: dict[str, Any]) -> dict[str, str]:
     if not isinstance(content, dict):
         raise HTTPException(status_code=400, detail="content_json must be an object")
+    import re
+
     out: dict[str, str] = {}
     for k, v in content.items():
         key = str(k).strip()
         if not key:
             continue
-        if "{{" in key or "}}" in key:
-            raise HTTPException(status_code=400, detail=f"Placeholders not allowed in key: {key}")
+        # Strip legacy {{PLACEHOLDER}} tokens; V2 does not use them
         text = "" if v is None else str(v)
-        if "{{" in text and "}}" in text:
-            # Allow {index} for image roles only — profiles should not have {{TOKENS}}
-            if "{{index}}" not in text.lower() and "{index}" not in text:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Placeholders like {{{{TOKEN}}}} are not allowed in section '{key}'",
-                )
+        text = re.sub(r"\{\{[A-Z0-9_]+\}\}", "", text).strip()
         out[key] = text
     return out
 

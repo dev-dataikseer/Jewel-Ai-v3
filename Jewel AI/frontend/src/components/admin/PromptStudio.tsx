@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, ImageIcon, ImageOff, Save } from "lucide-react";
-import { PromptSectionEditor, type SectionMap } from "@/components/admin/PromptSectionEditor";
 import { api } from "@/lib/api";
-import type { PromptImageRoleV2, PromptJewelryV2, PromptProfileV2 } from "@/types";
+import type { PromptJewelryV2, PromptProfileV2 } from "@/types";
 
 type Props = {
   workflows: { id: string; label: string }[];
   jewelryTypes: string[];
 };
 
-type EditorScope = "profile" | "jewelry" | "image_role";
 type RefMode = "without_reference" | "with_reference";
+type EditorScope = "profile" | "jewelry";
 
 const HIDDEN_WORKFLOWS = new Set([
   "BULK_GENERATION",
@@ -20,6 +19,57 @@ const HIDDEN_WORKFLOWS = new Set([
   "CUSTOMER_TRY_ON",
   "REFERENCE_STYLE_MATCH",
 ]);
+
+const HEADER_RE = /^([A-Z][A-Z0-9 /_\-]{0,80}):\s*(.*)$/;
+
+/** Flat text → { HEADER: body } JSON. Header line becomes the key. */
+export function textToContentJson(raw: string): Record<string, string> {
+  const text = (raw || "").trim();
+  if (!text) return {};
+  const sections: Record<string, string> = {};
+  let currentKey: string | null = null;
+  const buf: string[] = [];
+
+  const flush = () => {
+    if (currentKey != null) {
+      sections[currentKey] = buf.join("\n").trim();
+    }
+    currentKey = null;
+    buf.length = 0;
+  };
+
+  for (const line of text.split("\n")) {
+    const m = line.trim() ? line.trim().match(HEADER_RE) : null;
+    if (m && m[1].length <= 80) {
+      flush();
+      currentKey = m[1].trim();
+      const rest = m[2] || "";
+      if (rest) buf.push(rest);
+    } else {
+      if (currentKey == null) {
+        currentKey = "BODY";
+      }
+      buf.push(line);
+    }
+  }
+  flush();
+  return Object.fromEntries(
+    Object.entries(sections).filter(([, v]) => (v || "").trim().length > 0),
+  );
+}
+
+/** { HEADER: body } → flat text for the editor. */
+export function contentJsonToText(content: Record<string, string> | null | undefined): string {
+  if (!content || typeof content !== "object") return "";
+  return Object.entries(content)
+    .filter(([, v]) => (v || "").trim())
+    .map(([k, v]) => {
+      const body = String(v).trim();
+      if (body.toUpperCase().startsWith(`${k.toUpperCase()}:`)) return body;
+      return `${k}: ${body}`;
+    })
+    .join("\n\n");
+}
 
 type AssembleResult = {
   final_prompt?: string;
@@ -30,10 +80,8 @@ type AssembleResult = {
 };
 
 /**
- * One-window Prompt Studio:
- * - Primary: two pages (Without reference / With reference)
- * - Secondary: jewelry type sections + image role labels
- * - No Shared fragments tab
+ * Prompt Studio: two pages (with / without reference) + one plain text box.
+ * Save parses HEADER: description into content_json automatically.
  */
 export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const queryClient = useQueryClient();
@@ -46,11 +94,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const [refMode, setRefMode] = useState<RefMode>("without_reference");
   const [scope, setScope] = useState<EditorScope>("profile");
   const [jewelryType, setJewelryType] = useState(jewelryTypes[0] || "Ring");
-  const [imageRole, setImageRole] = useState("product");
-
-  const [sections, setSections] = useState<SectionMap>({});
-  const [envPoolText, setEnvPoolText] = useState("");
-  const [roleInstruction, setRoleInstruction] = useState("");
+  const [editorText, setEditorText] = useState("");
   const [dirty, setDirty] = useState(false);
   const [preview, setPreview] = useState<AssembleResult | null>(null);
   const [previewJewelry, setPreviewJewelry] = useState(jewelryTypes[0] || "Ring");
@@ -58,7 +102,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["prompt-profile", workflow, refMode],
     enabled: scope === "profile",
-    staleTime: 30_000,
+    staleTime: 60_000,
     queryFn: async () =>
       (await api.get<PromptProfileV2>(`/prompts/profiles/${workflow}/${refMode}`)).data,
   });
@@ -66,7 +110,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const { data: jewelry, isLoading: jewelryLoading } = useQuery({
     queryKey: ["prompt-jewelry", workflow, jewelryType],
     enabled: scope === "jewelry",
-    staleTime: 30_000,
+    staleTime: 60_000,
     queryFn: async () =>
       (
         await api.get<PromptJewelryV2>(
@@ -75,60 +119,46 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
       ).data,
   });
 
-  const { data: imageRoles = [] } = useQuery({
-    queryKey: ["prompt-image-roles"],
-    staleTime: 60_000,
-    queryFn: async () => (await api.get<PromptImageRoleV2[]>(`/prompts/image-roles`)).data,
-  });
-
   useEffect(() => {
     if (scope !== "profile" || !profile) return;
-    setSections({ ...(profile.content_json || {}) });
-    setEnvPoolText((profile.environment_pool || []).join("\n"));
+    let text = contentJsonToText(profile.content_json || {});
+    const pool = profile.environment_pool;
+    if (refMode === "without_reference" && Array.isArray(pool) && pool.length > 0) {
+      const poolBlock = `ENVIRONMENT_POOL:\n${pool.join("\n")}`;
+      text = text ? `${text}\n\n${poolBlock}` : poolBlock;
+    }
+    setEditorText(text);
     setDirty(false);
-  }, [scope, profile]);
+  }, [scope, profile, refMode]);
 
   useEffect(() => {
     if (scope !== "jewelry" || !jewelry) return;
-    setSections({ ...(jewelry.content_json || {}) });
+    setEditorText(contentJsonToText(jewelry.content_json || {}));
     setDirty(false);
   }, [scope, jewelry]);
 
-  useEffect(() => {
-    if (scope !== "image_role") return;
-    const row = imageRoles.find((r) => r.role === imageRole);
-    setRoleInstruction(row?.instruction || "");
-    setDirty(false);
-  }, [scope, imageRole, imageRoles]);
-
-  const onSectionsChange = useCallback((next: SectionMap) => {
-    setSections(next);
-    setDirty(true);
-  }, []);
-
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const parsed = textToContentJson(editorText);
       if (scope === "profile") {
-        const pool =
-          refMode === "without_reference"
-            ? envPoolText
+        const poolRaw = parsed.ENVIRONMENT_POOL || parsed["ENVIRONMENT POOL"];
+        const content = { ...parsed };
+        delete content.ENVIRONMENT_POOL;
+        delete content["ENVIRONMENT POOL"];
+        const environment_pool =
+          refMode === "without_reference" && poolRaw
+            ? poolRaw
                 .split("\n")
                 .map((l) => l.trim())
                 .filter(Boolean)
             : null;
         await api.put(`/prompts/profiles/${workflow}/${refMode}`, {
-          content_json: sections,
-          environment_pool: pool,
-        });
-      } else if (scope === "jewelry") {
-        await api.put(`/prompts/jewelry/${workflow}/${encodeURIComponent(jewelryType)}`, {
-          content_json: sections,
+          content_json: content,
+          environment_pool,
         });
       } else {
-        await api.put(`/prompts/image-roles`, {
-          role: imageRole,
-          instruction: roleInstruction,
-          workflow: null,
+        await api.put(`/prompts/jewelry/${workflow}/${encodeURIComponent(jewelryType)}`, {
+          content_json: parsed,
         });
       }
     },
@@ -136,8 +166,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
       setDirty(false);
       queryClient.invalidateQueries({ queryKey: ["prompt-profile", workflow, refMode] });
       queryClient.invalidateQueries({ queryKey: ["prompt-jewelry", workflow, jewelryType] });
-      queryClient.invalidateQueries({ queryKey: ["prompt-image-roles"] });
-      toast.success("Saved");
+      toast.success("Saved as JSON sections");
     },
     onError: (err: Error) => toast.error(err.message || "Save failed"),
   });
@@ -169,21 +198,20 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const pageTitle =
     scope === "profile"
       ? refMode === "without_reference"
-        ? "Page 1 — Without reference image"
-        : "Page 2 — With reference image"
-      : scope === "jewelry"
-        ? `Jewelry · ${jewelryType}`
-        : `Image role · ${imageRole}`;
+        ? "Without reference"
+        : "With reference"
+      : `Jewelry · ${jewelryType}`;
 
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
-      {/* Header + workflow */}
       <div className="rounded-xl border border-[var(--jewel-border)] bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-jewel-ink">Prompt Studio</h2>
             <p className="text-xs text-jewel-ink-muted">
-              Two pages per workflow. No shared fragments. Heading = section key.
+              Paste prompt text. On Save, each{" "}
+              <code className="rounded bg-[var(--jewel-surface-muted)] px-1">HEADER:</code> becomes
+              a JSON key.
             </p>
           </div>
           <label className="flex items-center gap-2 text-xs font-medium text-jewel-ink-muted">
@@ -207,7 +235,6 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
           </label>
         </div>
 
-        {/* Primary: With / Without reference pages */}
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button
             type="button"
@@ -226,9 +253,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
             <ImageOff className="mt-0.5 size-5 shrink-0 text-[var(--jewel-accent)]" />
             <span>
               <span className="block text-sm font-semibold text-jewel-ink">Without reference</span>
-              <span className="block text-[11px] text-jewel-ink-muted">
-                Product image only — modern catalog / generated background
-              </span>
+              <span className="block text-[11px] text-jewel-ink-muted">Product image only</span>
             </span>
           </button>
           <button
@@ -249,16 +274,15 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
             <span>
               <span className="block text-sm font-semibold text-jewel-ink">With reference</span>
               <span className="block text-[11px] text-jewel-ink-muted">
-                Style ref, portrait, or logo uploaded — system uses this page
+                Style ref / portrait / logo uploaded
               </span>
             </span>
           </button>
         </div>
 
-        {/* Secondary scopes — not Shared fragments */}
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--jewel-border)] pt-3">
-          <span className="self-center text-[10px] font-bold uppercase tracking-wider text-jewel-ink-muted">
-            Also edit
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--jewel-border)] pt-3">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-jewel-ink-muted">
+            Jewelry (optional)
           </span>
           <select
             value={scope === "jewelry" ? jewelryType : ""}
@@ -270,31 +294,14 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
             }}
             className="rounded-lg border border-[var(--jewel-border)] px-2 py-1.5 text-xs"
           >
-            <option value="">Jewelry type…</option>
+            <option value="">Edit jewelry type…</option>
             {jewelryTypes.map((jt) => (
               <option key={jt} value={jt}>
                 {jt}
               </option>
             ))}
           </select>
-          <select
-            value={scope === "image_role" ? imageRole : ""}
-            onChange={(e) => {
-              if (!e.target.value) return;
-              setImageRole(e.target.value);
-              setScope("image_role");
-              setDirty(false);
-            }}
-            className="rounded-lg border border-[var(--jewel-border)] px-2 py-1.5 text-xs"
-          >
-            <option value="">Image role…</option>
-            {["product", "theme", "portrait", "logo"].map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          {scope !== "profile" && (
+          {scope === "jewelry" && (
             <button
               type="button"
               className="text-xs font-semibold text-[var(--jewel-accent)] underline"
@@ -303,16 +310,15 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
                 setDirty(false);
               }}
             >
-              Back to {refMode === "without_reference" ? "Without" : "With"} reference page
+              Back to reference page
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_340px]">
-        {/* Editor */}
-        <section className="rounded-xl border border-[var(--jewel-border)] bg-[var(--jewel-surface-muted)] p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_320px]">
+        <section className="rounded-xl border border-[var(--jewel-border)] bg-white p-4">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold text-jewel-ink">{pageTitle}</h3>
             {dirty && (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
@@ -329,66 +335,36 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
               Save
             </button>
           </div>
-
-          {scope === "image_role" ? (
-            <div className="space-y-2">
-              <p className="text-xs text-jewel-ink-muted">
-                Tells the model what each uploaded image is. Use{" "}
-                <code className="rounded bg-white px-1">{"{index}"}</code> for the slot number.
-              </p>
-              <textarea
-                value={roleInstruction}
-                onChange={(e) => {
-                  setRoleInstruction(e.target.value);
-                  setDirty(true);
-                }}
-                rows={10}
-                className="w-full rounded-lg border border-[var(--jewel-border)] bg-white px-3 py-2 font-mono text-[13px]"
-              />
-            </div>
-          ) : loading ? (
+          <p className="mb-2 text-[11px] text-jewel-ink-muted">
+            Example:{" "}
+            <code className="rounded bg-[var(--jewel-surface-muted)] px-1">
+              ROLE: You are a photographer…
+            </code>{" "}
+            then blank line, then{" "}
+            <code className="rounded bg-[var(--jewel-surface-muted)] px-1">CAMERA: 100mm…</code>
+          </p>
+          {loading ? (
             <p className="text-sm text-jewel-ink-muted">Loading…</p>
           ) : (
-            <>
-              <PromptSectionEditor
-                sections={sections}
-                onChange={onSectionsChange}
-                emptyHint="Add sections like ROLE, CAMERA, LIGHTING. Each heading becomes a JSON key."
-              />
-              {scope === "profile" && refMode === "without_reference" && (
-                <div className="mt-4 rounded-xl border border-[var(--jewel-border)] bg-white p-3">
-                  <label className="mb-1 block text-xs font-semibold text-jewel-ink">
-                    Environment pool (one line each)
-                  </label>
-                  <p className="mb-2 text-[11px] text-jewel-ink-muted">
-                    Used when there is no reference image. Backend rotates these for variety.
-                  </p>
-                  <textarea
-                    value={envPoolText}
-                    onChange={(e) => {
-                      setEnvPoolText(e.target.value);
-                      setDirty(true);
-                    }}
-                    rows={5}
-                    className="w-full rounded-lg border border-[var(--jewel-border)] px-3 py-2 font-mono text-[12px]"
-                  />
-                </div>
-              )}
-            </>
+            <textarea
+              value={editorText}
+              onChange={(e) => {
+                setEditorText(e.target.value);
+                setDirty(true);
+              }}
+              rows={22}
+              spellCheck={false}
+              className="w-full resize-y rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-surface-muted)] px-3 py-2 font-mono text-[13px] leading-relaxed text-jewel-ink"
+              placeholder={"ROLE: …\n\nCAMERA: …\n\nLIGHTING: …\n\nNEGATIVE PROMPT: …"}
+            />
           )}
         </section>
 
-        {/* Preview */}
         <aside className="rounded-xl border border-[var(--jewel-border)] bg-white p-3 flex flex-col gap-3 max-h-[80vh]">
           <div className="flex items-center gap-2">
             <Eye className="size-4 text-[var(--jewel-accent)]" />
             <h3 className="text-sm font-semibold">Preview</h3>
           </div>
-          <p className="text-[11px] text-jewel-ink-muted">
-            Showing the{" "}
-            <strong>{refMode === "without_reference" ? "Without" : "With"} reference</strong> page
-            for this workflow.
-          </p>
           <label className="text-[11px] font-medium text-jewel-ink-muted">
             Jewelry
             <select
@@ -417,16 +393,8 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
                 {preview.composePath || "compose"} · {preview.reference_mode || refMode}
               </p>
               <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-jewel-ink">
-                {preview.final_prompt || preview.prompt || "(empty — save a profile first)"}
+                {preview.final_prompt || preview.prompt || "(empty)"}
               </pre>
-              {preview.negative_prompt && (
-                <>
-                  <p className="mt-3 mb-1 text-[10px] font-bold uppercase text-red-700">Negative</p>
-                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-red-900/80">
-                    {preview.negative_prompt}
-                  </pre>
-                </>
-              )}
             </div>
           )}
         </aside>

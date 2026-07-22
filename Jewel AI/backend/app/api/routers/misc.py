@@ -19,20 +19,38 @@ router = APIRouter(tags=["admin"])
 
 @router.get("/admin/metrics")
 def admin_metrics(user: RequireAdmin, db: Session = Depends(get_db)):
-    total_jobs = db.query(GenerationJob).count()
-    completed = db.query(GenerationJob).filter(GenerationJob.status == "COMPLETED").count()
-    failed = db.query(GenerationJob).filter(GenerationJob.status == "FAILED").count()
+    """Lightweight overview counts — single status group-by + three cheap counts."""
+    status_rows = (
+        db.query(GenerationJob.status, func.count(GenerationJob.id))
+        .group_by(GenerationJob.status)
+        .all()
+    )
+    by_status = {status or "UNKNOWN": count for status, count in status_rows}
+    completed = by_status.get("COMPLETED", 0)
+    failed = by_status.get("FAILED", 0)
+    total_jobs = sum(by_status.values())
     return {
         "jobs": total_jobs,
-        "assets": db.query(Asset).count(),
-        "batches": db.query(Batch).count(),
-        "favorites": db.query(Favorite).count(),
+        "assets": db.query(func.count(Asset.id)).scalar() or 0,
+        "batches": db.query(func.count(Batch.id)).scalar() or 0,
+        "favorites": db.query(func.count(Favorite.id)).scalar() or 0,
         "success_rate": round(completed / total_jobs * 100, 1) if total_jobs else 0,
         "completed": completed,
         "failed": failed,
         "recent_failures": [
-            {"id": j.id, "workflow": j.workflow, "error": j.error_message, "created_at": j.created_at.isoformat()}
-            for j in db.query(GenerationJob).filter(GenerationJob.status == "FAILED").order_by(GenerationJob.created_at.desc()).limit(10)
+            {
+                "id": j.id,
+                "workflow": j.workflow,
+                "error": j.error_message,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+            for j in (
+                db.query(GenerationJob)
+                .filter(GenerationJob.status == "FAILED")
+                .order_by(GenerationJob.created_at.desc())
+                .limit(5)
+                .all()
+            )
         ],
     }
 
