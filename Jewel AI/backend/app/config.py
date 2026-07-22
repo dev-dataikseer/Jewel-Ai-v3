@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     allow_prompt_file_fallback: bool = False
     webhook_pending_timeout_minutes: int = 20
     stuck_job_minutes: int = 15
+    # When true, Beat may re-enqueue stuck PROCESSING jobs that never reached fal.
+    # Default false — requeue historically double-billed fal.ai on every deploy/restart.
+    allow_stuck_job_requeue: bool = False
     # Celery token-bucket for process_image_job (protects DB/R2; fal queue absorbs bursts).
     fal_celery_rate_limit: str = "10/s"
     # Temporary perf diagnostics — grep logs for LATENCY_TRACE

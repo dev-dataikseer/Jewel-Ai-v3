@@ -139,6 +139,22 @@ async def _process_job_async(job_id: str) -> None:
         if not job or job.status != "PROCESSING":
             return
 
+        # Already charged at fal — never resubmit. Recover or wait for Beat timeout.
+        existing_fal = (job.provider_metadata or {}).get("fal_request_id") or (
+            (job.provider_metadata or {}).get("usage") or {}
+        ).get("request_id")
+        if existing_fal and not (job.provider_metadata or {}).get("webhook_completed"):
+            logger.info(
+                "Skip fal resubmit — request already queued",
+                extra={"extra_fields": {"job_id": job_id, "fal_request_id": existing_fal}},
+            )
+            recovered = False
+            try:
+                recovered = _recover_fal_result(job_id)
+            except Exception:
+                logger.exception("recover after existing fal_request_id failed for %s", job_id)
+            return
+
         meta = dict(_get_meta(job))
         timing = dict(meta.get("timing") or {})
         timing["worker_started"] = now.isoformat()
@@ -676,7 +692,25 @@ def sweep_stuck_jobs() -> int:
                 acted += 1
                 continue
 
-            # Never reached fal — safe to requeue with lease.
+            # Never reached fal — do NOT requeue by default (deploy/restart used to
+            # double-bill fal.ai). Fail closed unless ALLOW_STUCK_JOB_REQUEUE=true.
+            if not get_settings().allow_stuck_job_requeue:
+                if job.status in _TERMINAL_JOB_STATUSES:
+                    continue
+                job.status = "FAILED"
+                job.error_message = (
+                    "Job stuck in PROCESSING without a fal request id. "
+                    "Not requeued (ALLOW_STUCK_JOB_REQUEUE is false) to protect fal credits. "
+                    "Use Retry in Studio if you want a new generation."
+                )
+                meta["stuck_failed_no_requeue"] = True
+                job.provider_metadata = meta
+                db.commit()
+                if job.batch_id:
+                    _update_batch(db, job.batch_id)
+                acted += 1
+                continue
+
             if not _acquire_requeue_lease(job.id):
                 continue
 

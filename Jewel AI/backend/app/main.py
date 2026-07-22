@@ -30,7 +30,6 @@ from app.logging_config import setup_logging
 from app.providers import circuit_breaker
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.storage.local import storage
-from app.tasks.generate import sweep_stuck_jobs
 from seeds.run_seeds import run_all_seeds
 
 settings = get_settings()
@@ -122,16 +121,13 @@ async def lifespan(app: FastAPI):
 
             logging.getLogger(__name__).exception("seed_prompt_fragments skipped")
         run_all_seeds(db)
-        try:
-            sweep_stuck_jobs()
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception("sweep_stuck_jobs skipped during startup")
+        # Do NOT run sweep_stuck_jobs on API boot — that historically re-enqueued
+        # fal jobs on every Railway redeploy and burned provider credits. Beat
+        # recovers safely every 2 minutes (poll/fail only; requeue disabled by default).
     finally:
         db.close()
     circuit_breaker.init_circuit_breaker()
-    # Warm fal credits cache in background — never block startup / generation
+    # Warm fal credits cache in background — billing API only (does not generate images).
     try:
         import threading
 
