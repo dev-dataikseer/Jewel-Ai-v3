@@ -93,19 +93,34 @@ async def lifespan(app: FastAPI):
         migrate_prompt_fragments(engine)
         migrate_provider_admin_key_column(engine)
         migrate_mfa_and_audit(engine)
-    # Idempotent additive columns — safe on every boot (including Alembic-managed DBs).
+    # Idempotent additive patches — safe on every boot (including Alembic-managed DBs).
     try:
         migrate_batch_wallclock_columns(engine)
     except Exception:
         import logging
 
         logging.getLogger(__name__).exception("migrate_batch_wallclock_columns skipped")
+    try:
+        migrate_prompt_fragments(engine)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("migrate_prompt_fragments skipped")
     # When SCHEMA_VIA_ALEMBIC=true, operators run `alembic upgrade head` — no boot DDL.
     db = SessionLocal()
     try:
         from app.pipeline.db_migrate import migrate_workflow_subjects
+        from app.prompt_engine.fragment_store import seed_prompt_fragments
 
         migrate_workflow_subjects(db)
+        try:
+            seed_prompt_fragments(db)
+            db.commit()
+        except Exception:
+            db.rollback()
+            import logging
+
+            logging.getLogger(__name__).exception("seed_prompt_fragments skipped")
         run_all_seeds(db)
         try:
             sweep_stuck_jobs()

@@ -4,41 +4,17 @@ from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user
 from app.database import get_db
-from app.models import Asset, GenerationJob, User
+from app.models import User
 from app.security.media_signing import verify_upload_signature
+from app.security.url_fetch import user_owns_upload_key
 from app.storage.local import storage
 
 router = APIRouter(tags=["storage"])
 
 
 def _user_owns_upload(db: Session, user: User, file_path: str) -> bool:
-    """True if the path appears on an asset or job owned by the user (or user is admin)."""
-    if user.role == "admin":
-        return True
-    asset_hit = (
-        db.query(Asset.id)
-        .filter(
-            Asset.user_id == user.id,
-            (Asset.original_url.contains(file_path)) | (Asset.processed_url.contains(file_path)),
-        )
-        .first()
-    )
-    if asset_hit:
-        return True
-    job_hit = (
-        db.query(GenerationJob.id)
-        .filter(
-            GenerationJob.user_id == user.id,
-            (
-                (GenerationJob.input_url.contains(file_path))
-                | (GenerationJob.output_url.contains(file_path))
-                | (GenerationJob.reference_url.contains(file_path))
-                | (GenerationJob.model_url.contains(file_path))
-            ),
-        )
-        .first()
-    )
-    return job_hit is not None
+    """True if the upload key exactly matches an asset or job URL owned by the user."""
+    return user_owns_upload_key(db, user, file_path)
 
 
 def authorize_upload_path(

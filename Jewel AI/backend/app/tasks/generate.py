@@ -351,6 +351,11 @@ async def _process_job_async(job_id: str) -> None:
             )
             extra_urls.append(storage.save_bytes(composed_blob, filename=f"generated_{uuid4().hex}.png"))
 
+        # Re-check cancel before committing success (download can race with cancel).
+        db.refresh(job)
+        if job.status in _TERMINAL_JOB_STATUSES:
+            return
+
         timing["storage_saved"] = datetime.now(timezone.utc).isoformat()
         timing["completed"] = timing["storage_saved"]
         merged = {
@@ -391,6 +396,14 @@ async def _process_job_async(job_id: str) -> None:
         elif (result.usage or {}).get("request_id"):
             merged["fal_request_id"] = result.usage["request_id"]
         merged = attach_duration_splits(merged)
+        job = (
+            db.query(GenerationJob)
+            .filter(GenerationJob.id == job_id)
+            .with_for_update()
+            .first()
+        )
+        if not job or job.status != "PROCESSING":
+            return
         job.status = "COMPLETED"
         job.output_url = output_url
         job.output_urls = extra_urls if extra_urls else None
@@ -435,7 +448,7 @@ async def _process_job_async(job_id: str) -> None:
     except Exception as e:
         logger.error("Job failed", extra={"extra_fields": {"job_id": job_id, "error": str(e)}})
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if job and job.status != "CANCELLED":
+        if job and job.status not in _TERMINAL_JOB_STATUSES:
             job.status = "FAILED"
             raw = str(e)
             if "expected output for this prompt" in raw.lower():
@@ -623,6 +636,8 @@ def sweep_stuck_jobs() -> int:
                     continue
                 # Fail permanently if fal webhook never arrives.
                 if started and started < webhook_cutoff:
+                    if job.status in _TERMINAL_JOB_STATUSES:
+                        continue
                     job.status = "FAILED"
                     job.error_message = (
                         f"Timed out waiting for fal webhook after {_webhook_timeout_minutes()} minutes"
@@ -635,7 +650,33 @@ def sweep_stuck_jobs() -> int:
                     acted += 1
                 continue
 
-            # Lease prevents concurrent beat/API sweeps from double-enqueueing.
+            # Subscribe / sync path already submitted to fal — never requeue (double spend).
+            # Try poll recovery once; otherwise fail after webhook timeout window.
+            has_fal_req = bool(
+                meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id")
+            )
+            if has_fal_req:
+                if _recover_fal_result(job.id):
+                    acted += 1
+                    continue
+                if started and started < webhook_cutoff:
+                    continue  # still within timeout; wait
+                if job.status in _TERMINAL_JOB_STATUSES:
+                    continue
+                job.status = "FAILED"
+                job.error_message = (
+                    f"Timed out while fal request was in flight after {_stuck_cutoff_minutes()} minutes "
+                    "(not requeued to avoid duplicate provider charges)"
+                )
+                meta["subscribe_timed_out"] = True
+                job.provider_metadata = meta
+                db.commit()
+                if job.batch_id:
+                    _update_batch(db, job.batch_id)
+                acted += 1
+                continue
+
+            # Never reached fal — safe to requeue with lease.
             if not _acquire_requeue_lease(job.id):
                 continue
 
@@ -757,6 +798,17 @@ def _acquire_webhook_finalize_lease(job_id: str, *, ttl_seconds: int = 300) -> b
         return True
 
 
+def _release_webhook_finalize_lease(job_id: str) -> None:
+    try:
+        import redis
+        from app.config import get_settings
+
+        client = redis.from_url(get_settings().redis_url, socket_connect_timeout=1)
+        client.delete(f"jewel:webhook-finalize:{job_id}")
+    except Exception:
+        pass
+
+
 @celery_app.task(name="app.tasks.generate.finalize_fal_webhook")
 def finalize_fal_webhook(job_id: str, payload: dict) -> None:
     """Durable webhook image download/save (survives API process restart)."""
@@ -773,6 +825,7 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
     from app.storage.local import storage
 
     finalize_t0 = time.perf_counter() if latency_trace_enabled() else None
+    lease_held = False
 
     if not _acquire_webhook_finalize_lease(job_id):
         logger.info(
@@ -780,11 +833,12 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
             extra={"extra_fields": {"job_id": job_id}},
         )
         return
+    lease_held = True
 
     db = SessionLocal()
     try:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).with_for_update().first()
-        if not job or job.status == "COMPLETED":
+        if not job or job.status in _TERMINAL_JOB_STATUSES:
             return
         if job.status != "PROCESSING":
             return
@@ -820,11 +874,12 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
         img_urls = extract_image_urls(payload, config) or extract_image_urls(payload_data, config)
 
         if not img_urls:
-            job.status = "FAILED"
-            job.error_message = "Webhook OK status but no images in payload"
-            db.commit()
-            if job.batch_id:
-                _update_batch(db, job.batch_id)
+            if job.status not in _TERMINAL_JOB_STATUSES:
+                job.status = "FAILED"
+                job.error_message = "Webhook OK status but no images in payload"
+                db.commit()
+                if job.batch_id:
+                    _update_batch(db, job.batch_id)
             return
 
         meta_peek = job.provider_metadata or {}
@@ -844,8 +899,8 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
             else:
                 extra_urls.append(saved_url)
 
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if not job or job.status == "COMPLETED":
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).with_for_update().first()
+        if not job or job.status != "PROCESSING":
             return
         meta = dict(job.provider_metadata or {})
         if job.cost is None and model_def and model_def.cost_per_call is not None:
@@ -906,11 +961,13 @@ async def _finalize_fal_webhook_async(job_id: str, payload: dict) -> None:
     except Exception as e:
         logger.error("Failed to process webhook image for job %s: %s", job_id, e)
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if job and job.status != "COMPLETED":
+        if job and job.status not in _TERMINAL_JOB_STATUSES:
             job.status = "FAILED"
             job.error_message = f"Webhook image download failed: {str(e)}"
             db.commit()
             if job.batch_id:
                 _update_batch(db, job.batch_id)
     finally:
+        if lease_held:
+            _release_webhook_finalize_lease(job_id)
         db.close()

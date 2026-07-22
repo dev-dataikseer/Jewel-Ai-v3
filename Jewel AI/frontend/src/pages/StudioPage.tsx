@@ -145,9 +145,13 @@ export function StudioPage() {
         ? 1
         : 0;
 
+  // Skip auto catalogMode when restoring history/session (set after hydrate that sets catalogMode)
+  const historyHydratedRef = useRef(false);
+
   // Keep catalogMode aligned with uploads for API compatibility (V2 uses image packet)
   useEffect(() => {
     if (!isCatalog) return;
+    if (historyHydratedRef.current) return;
     setCatalogMode(hasStyleOrLogoRef ? "reference_mirror" : "modern");
   }, [isCatalog, hasStyleOrLogoRef]);
 
@@ -236,6 +240,7 @@ export function StudioPage() {
         draft.catalogMode === "style_mood"
       ) {
         setCatalogMode(draft.catalogMode);
+        historyHydratedRef.current = true;
       }
       if (draft.jewelryTypes?.length) setJewelryTypes(draft.jewelryTypes);
       if (draft.aspectRatio) setAspectRatio(draft.aspectRatio);
@@ -378,12 +383,16 @@ export function StudioPage() {
     [sessionJobs],
   );
 
+  const failedToastIdsRef = useRef(new Set<string>());
+
   useJobStream(streamingIds, {
     onUpdate: (job) => {
       setSessionJobs((prev) =>
         prev.map((j) => (j.id === job.id ? { ...j, ...job } : j)),
       );
       if (job.status === "FAILED") {
+        if (failedToastIdsRef.current.has(job.id)) return;
+        failedToastIdsRef.current.add(job.id);
         const msg = job.error_message?.includes("expected output")
           ? "Model rejected this prompt. Retry with the updated catalog prompt limits."
           : job.error_message?.includes("401")
@@ -397,8 +406,9 @@ export function StudioPage() {
   useEffect(() => {
     const jobId = searchParams.get("jobId");
     if (!jobId) return;
+    const ac = new AbortController();
     api
-      .get<Job>(`/jobs/${jobId}`)
+      .get<Job>(`/jobs/${jobId}`, { signal: ac.signal })
       .then((res) => {
         const job = res.data;
         setActiveJobId(job.id);
@@ -413,6 +423,7 @@ export function StudioPage() {
         } else if (job.workflow === "REFERENCE_STYLE_MATCH") {
           setWorkflow("CATALOG_IMAGE");
           setCatalogMode("style_mood");
+          historyHydratedRef.current = true;
         } else if (job.workflow === "VIRTUAL_TRY_ON") {
           setWorkflow("VIRTUAL_TRY_ON");
           const tm = (job.provider_metadata as { tryOnMode?: string } | null)?.tryOnMode;
@@ -423,6 +434,7 @@ export function StudioPage() {
         const cm = (job.provider_metadata as { catalogMode?: string } | null)?.catalogMode;
         if (cm === "modern" || cm === "reference_mirror" || cm === "style_mood") {
           setCatalogMode(cm);
+          historyHydratedRef.current = true;
         }
         if (job.jewelry_type) {
           setJewelryTypes(
@@ -452,9 +464,13 @@ export function StudioPage() {
         });
         toast.success("Loaded into Studio — settings restored. Regenerate anytime.");
       })
-      .catch(() => toast.error("Could not load job from link"));
+      .catch(() => {
+        if (ac.signal.aborted) return;
+        toast.error("Could not load job from link");
+      });
     searchParams.delete("jobId");
     setSearchParams(searchParams, { replace: true });
+    return () => ac.abort();
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -468,10 +484,11 @@ export function StudioPage() {
   useEffect(() => {
     const batchId = searchParams.get("batchId");
     if (!batchId) return;
+    const ac = new AbortController();
     setLastBatchId(batchId);
     setBatchForceAllow(false);
     api
-      .get<BatchOut>(`/jobs/batches/${batchId}`)
+      .get<BatchOut>(`/jobs/batches/${batchId}`, { signal: ac.signal })
       .then((res) => {
         const jobs = res.data.jobs || [];
         if (jobs.length) {
@@ -483,16 +500,21 @@ export function StudioPage() {
         }
         toast.success("Batch loaded into Studio");
       })
-      .catch(() => toast.error("Could not load batch"));
+      .catch(() => {
+        if (ac.signal.aborted) return;
+        toast.error("Could not load batch");
+      });
     searchParams.delete("batchId");
     setSearchParams(searchParams, { replace: true });
+    return () => ac.abort();
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
-    setWorkflowVariantKey("");
+    const keys = new Set(workflowVariants.map((v) => v.variant_key));
+    if (workflowVariantKey && keys.has(workflowVariantKey)) return;
     const first = workflowVariants[0];
-    if (first) setWorkflowVariantKey(first.variant_key);
-  }, [workflow, workflowVariants]);
+    setWorkflowVariantKey(first ? first.variant_key : "");
+  }, [workflow, workflowVariants, workflowVariantKey]);
 
   useEffect(() => {
     if (
@@ -1170,7 +1192,10 @@ export function StudioPage() {
       tryOnPreset={tryOnPreset}
       onTryOnPresetChange={setTryOnPreset}
       catalogMode={catalogMode}
-      onCatalogModeChange={setCatalogMode}
+      onCatalogModeChange={(mode) => {
+        historyHydratedRef.current = true;
+        setCatalogMode(mode);
+      }}
       workflowVariantLabel={workflowVariantLabel}
       workflowVariants={workflowVariants}
       workflowVariantKey={workflowVariantKey}

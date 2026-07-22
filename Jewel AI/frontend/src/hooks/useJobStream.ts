@@ -43,7 +43,8 @@ async function fetchStreamToken(jobIds: string[]): Promise<string | null> {
   try {
     const res = await api.post<{ token: string }>("/jobs/stream-token", { job_ids: jobIds });
     return res.data.token;
-  } catch {
+  } catch (err) {
+    console.warn("[useJobStream] stream-token failed; falling back to poll", err);
     return null;
   }
 }
@@ -86,8 +87,12 @@ export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
       applyJobUpdate(queryClient, job, handlersRef.current);
     };
 
+    // IDs missing from poll results are treated as terminal so polling cannot hang forever.
+    const missingTerminal = new Set<string>();
+
     const allTerminal = (jobs: Job[]) =>
       activeIds.every((id) => {
+        if (missingTerminal.has(id)) return true;
         const job = jobs.find((j) => j.id === id);
         return job != null && TERMINAL.has(job.status);
       });
@@ -112,6 +117,10 @@ export function useJobStream(jobIds: string[], handlers: StreamHandlers = {}) {
       try {
         // When hidden, still poll slowly so state is fresh on return; visible uses POLL_MS.
         const results = await fetchJobsBatch(activeIds);
+        const returned = new Set(results.map((j) => j.id));
+        for (const id of activeIds) {
+          if (!returned.has(id)) missingTerminal.add(id);
+        }
         for (const job of results) {
           handleJob(job);
         }

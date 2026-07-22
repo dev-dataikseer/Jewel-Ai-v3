@@ -80,8 +80,8 @@ class ProfileComposeResult:
 
 
 def has_secondary_images(ctx: ImageContext) -> bool:
-    """True when any non-product image is attached (style ref, portrait, or logo)."""
-    return bool(ctx.has_style_reference or ctx.has_portrait or ctx.has_logo)
+    """True when a theme/style or portrait reference is attached (logo alone is branding, not reference)."""
+    return bool(ctx.has_style_reference or ctx.has_portrait)
 
 
 def resolve_reference_mode(ctx: ImageContext) -> str:
@@ -198,7 +198,11 @@ def load_variant(
     key = slugify(variant_value)
     var = (
         db.query(PromptVariant)
-        .filter(PromptVariant.workflow == workflow, PromptVariant.variant_key == key)
+        .filter(
+            PromptVariant.workflow == workflow,
+            PromptVariant.variant_key == key,
+            PromptVariant.is_active.is_(True),
+        )
         .first()
     )
     if not var or not var.active_version_id:
@@ -393,6 +397,11 @@ def compose_from_profiles(
     # User / custom instruction
     user_sections: dict[str, str] = {}
     user_raw = sanitize_user_prompt(inp.prompt_text) if inp.prompt_text else None
+    if user_raw and workflow == "CUSTOM_PROMPT":
+        from app.prompt_engine.custom_guard import sanitize_custom_change
+
+        cleaned, _alter_hits = sanitize_custom_change(user_raw, db=db)
+        user_raw = cleaned or None
     if user_raw:
         user_sections["USER_INSTRUCTION"] = user_raw
 
@@ -411,6 +420,16 @@ def compose_from_profiles(
     sections = append_image_role_sections(sections, ctx, db, workflow)
 
     prompt_text, negatives = serialize_sections(sections)
+    if not (prompt_text or "").strip() and not negatives:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No Prompt Profile V2 content for workflow={workflow} "
+                f"reference_mode={reference_mode}. Seed profiles or disable PROMPT_PROFILE_V2."
+            ),
+        )
     parts = [
         PromptPart(key=slugify(k) or "section", text=f"{k}: {v}", priority="critical", source="profile")
         for k, v in sections.items()

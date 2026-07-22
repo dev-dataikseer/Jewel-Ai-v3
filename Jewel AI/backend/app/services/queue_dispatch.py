@@ -61,8 +61,21 @@ def _fail_job_enqueue(job_id: str, message: str) -> None:
     try:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
         if job and job.status == "PENDING":
+            user_id = job.user_id
             job.status = "FAILED"
             job.error_message = message
+            try:
+                from app.services.credits import refund_credits
+
+                refund_credits(
+                    db,
+                    user_id,
+                    amount=1,
+                    job_id=job_id,
+                    description="job_enqueue_refund",
+                )
+            except Exception as exc:
+                logger.warning("Credit refund after enqueue fail for %s: %s", job_id, exc)
             db.commit()
     finally:
         db.close()

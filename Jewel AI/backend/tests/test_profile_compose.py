@@ -39,12 +39,17 @@ def test_reference_mode_from_images():
     assert resolve_reference_mode(product_only) == REF_WITHOUT
     assert not has_secondary_images(product_only)
 
+    # Logo alone is branding — must not select with_reference page.
     with_logo = ImageContext(has_product=True, has_logo=True)
-    assert resolve_reference_mode(with_logo) == REF_WITH
-    assert has_secondary_images(with_logo)
+    assert resolve_reference_mode(with_logo) == REF_WITHOUT
+    assert not has_secondary_images(with_logo)
 
     with_theme = ImageContext(has_product=True, has_style_reference=True)
     assert resolve_reference_mode(with_theme) == REF_WITH
+    assert has_secondary_images(with_theme)
+
+    with_portrait = ImageContext(has_product=True, has_portrait=True)
+    assert resolve_reference_mode(with_portrait) == REF_WITH
 
 
 def test_filter_conditional_keys_drops_logo_without_logo_image():

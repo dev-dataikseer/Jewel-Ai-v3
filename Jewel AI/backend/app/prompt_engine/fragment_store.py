@@ -51,7 +51,7 @@ def get_fragment_meta(db: Session | None, key: str) -> dict[str, Any]:
                     .filter(PromptFragmentVersion.id == frag.active_version_id)
                     .first()
                 )
-                if ver and ver.prompt_text is not None:
+                if ver and ver.prompt_text is not None and str(ver.prompt_text).strip():
                     return {
                         "key": key,
                         "text": ver.prompt_text,
@@ -85,6 +85,17 @@ def get_fragment_meta(db: Session | None, key: str) -> dict[str, Any]:
     }
 
 
+def _load_raw(db: Session | None, key: str) -> str:
+    meta = get_fragment_meta(db, key)
+    text = (meta.get("text") or "").strip()
+    if text:
+        return meta.get("text") or ""
+    # Empty/missing DB row: allow defaults only when fallback is permitted (dev/tests).
+    if _allow_file_fallback():
+        return DEFAULT_FRAGMENTS.get(key, "")
+    return ""
+
+
 def get_environment_pool(db: Session | None = None) -> list[str]:
     if db is not None:
         try:
@@ -111,13 +122,10 @@ def get_environment_pool(db: Session | None = None) -> list[str]:
                                 return lines
         except Exception as exc:
             logger.debug("environment pool load failed: %s", exc)
-    return list(DEFAULT_ENVIRONMENT_POOL)
-
-
-def _load_raw(db: Session | None, key: str) -> str:
-    meta = get_fragment_meta(db, key)
-    return meta.get("text") or DEFAULT_FRAGMENTS.get(key, "")
-
+    if _allow_file_fallback():
+        return list(DEFAULT_ENVIRONMENT_POOL)
+    logger.error("Missing ENVIRONMENT_POOL in DB (file fallback disabled in production)")
+    return []
 
 def seed_prompt_fragments(db: Session, *, force: bool = False) -> int:
     """Upsert fragment shells with seed text. Returns number of fragments ensured."""

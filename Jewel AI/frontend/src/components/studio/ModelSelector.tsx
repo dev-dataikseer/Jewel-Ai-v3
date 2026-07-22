@@ -86,6 +86,22 @@ export function ModelSelector({
 
   useEffect(() => {
     if (models.length === 0) return;
+    const inList = selectedEndpointId
+      ? models.find((m) => m.endpoint_id === selectedEndpointId)
+      : null;
+    // Do not overwrite an already-valid selection with preferred.
+    if (inList) {
+      if (Object.keys(modelParams).length === 0) {
+        const saved = loadPrefs(workflow);
+        onParamsChange(
+          sanitizeParams(inList.input_schema, inList.default_params, {
+            ...inList.default_params,
+            ...(saved?.endpoint_id === inList.endpoint_id ? saved.params ?? {} : {}),
+          })
+        );
+      }
+      return;
+    }
     const saved = loadPrefs(workflow);
     const match = saved
       ? models.find((m) => m.endpoint_id === saved.endpoint_id)
@@ -97,15 +113,8 @@ export function ModelSelector({
           models[0]
         : models.find((m) => m.ui?.supports_t2i && !m.ui?.supports_i2i) ?? models[0];
     const pick = match ?? preferred ?? models[0];
-    if (pick && pick.endpoint_id !== selectedEndpointId) {
+    if (pick) {
       onModelChange(pick.endpoint_id, pick);
-      onParamsChange(
-        sanitizeParams(pick.input_schema, pick.default_params, {
-          ...pick.default_params,
-          ...(saved?.params ?? {}),
-        })
-      );
-    } else if (pick && Object.keys(modelParams).length === 0) {
       onParamsChange(
         sanitizeParams(pick.input_schema, pick.default_params, {
           ...pick.default_params,

@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
+    refresh_token: str = ""
     token_type: str = "bearer"
     user: Optional["UserOut"] = None
 
@@ -182,7 +182,7 @@ class ProviderUpdate(BaseModel):
 
 class ShareLinkCreate(BaseModel):
     job_id: str
-    expires_in_hours: int = 72
+    expires_in_hours: int = Field(default=72, ge=1, le=168)  # max 7 days
 
 
 TokenResponse.model_rebuild()

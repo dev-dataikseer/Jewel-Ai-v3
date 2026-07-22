@@ -43,7 +43,8 @@ def build_final_prompt(
     from app.prompt_engine.workflow_resolve import resolve_workflow as _resolve
 
     ctx_early = image_ctx
-    has_ref = bool(ctx_early and (ctx_early.has_style_reference or ctx_early.has_portrait or ctx_early.has_logo))
+    # Logo alone must not flip V2 into with_reference / auto-enable V2.
+    has_ref = bool(ctx_early and (ctx_early.has_style_reference or ctx_early.has_portrait))
     resolved_early = _resolve(
         inp.workflow,
         catalog_mode=getattr(inp, "catalog_mode", None),
@@ -54,6 +55,7 @@ def build_final_prompt(
     if not use_v2:
         from app.models import PromptProfile
 
+        # Require BOTH reference modes (or the needed one) so logo-only cannot flip engines.
         mode = "with_reference" if has_ref else "without_reference"
         row = (
             db.query(PromptProfile)

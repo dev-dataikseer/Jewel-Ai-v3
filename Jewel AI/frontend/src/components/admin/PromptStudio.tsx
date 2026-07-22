@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Eye, ImageIcon, ImageOff, Save } from "lucide-react";
+import { ChevronDown, Eye, ImageIcon, ImageOff, Save } from "lucide-react";
 import { api } from "@/lib/api";
 import type { PromptJewelryV2, PromptProfileV2 } from "@/types";
 
@@ -84,12 +84,7 @@ type AssembleResult = {
 };
 
 /**
- * Exact hierarchy:
- * 1. With / Without reference
- * 2. Category + Jewelry type + Env/Content dropdowns
- * 3. One text box showing the selected prompt
- *
- * Changing Jewelry type loads THAT jewelry prompt into the text box.
+ * Hierarchy: workflow → reference mode → jewelry type → editor → preview/save
  */
 export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const queryClient = useQueryClient();
@@ -98,8 +93,8 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
     [workflows],
   );
 
-  const [refMode, setRefMode] = useState<RefMode>("without_reference");
   const [category, setCategory] = useState(visibleWorkflows[0]?.id || "CATALOG_IMAGE");
+  const [refMode, setRefMode] = useState<RefMode>("without_reference");
   const [jewelryType, setJewelryType] = useState(jewelryTypes[0] || "Ring");
   // Default to jewelry so picking a type immediately shows its prompt
   const [editTarget, setEditTarget] = useState<EditTarget>("jewelry");
@@ -107,6 +102,7 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
   const [editorText, setEditorText] = useState("");
   const [dirty, setDirty] = useState(false);
   const [preview, setPreview] = useState<AssembleResult | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (refMode === "with_reference" && editTarget === "environments") {
@@ -173,20 +169,46 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
     return window.confirm("You have unsaved changes. Discard them?");
   };
 
-  const switchRef = (mode: RefMode) => {
-    if (mode === refMode) return;
-    if (!confirmLeave()) return;
-    setRefMode(mode);
+  const clearSelectionSideEffects = () => {
     setDirty(false);
     setPreview(null);
   };
 
+  const switchWorkflow = (next: string) => {
+    if (next === category) return;
+    if (!confirmLeave()) return;
+    setCategory(next);
+    clearSelectionSideEffects();
+  };
+
+  const switchRef = (mode: RefMode) => {
+    if (mode === refMode) return;
+    if (!confirmLeave()) return;
+    setRefMode(mode);
+    clearSelectionSideEffects();
+  };
+
+  const switchJewelry = (next: string) => {
+    if (next === jewelryType) return;
+    if (!confirmLeave()) return;
+    setJewelryType(next);
+    setEditTarget("jewelry");
+    clearSelectionSideEffects();
+  };
+
+  const switchEditTarget = (next: EditTarget) => {
+    if (next === editTarget) return;
+    if (!confirmLeave()) return;
+    setEditTarget(next);
+    setDirty(false);
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const cleaned = stripPlaceholders(editorText).replace(
-        /^\(No jewelry prompt.*\)$/m,
-        "",
-      ).replace(/^\(Empty jewelry prompt.*\)$/m, "").trim();
+      const cleaned = stripPlaceholders(editorText)
+        .replace(/^\(No jewelry prompt.*\)$/m, "")
+        .replace(/^\(Empty jewelry prompt.*\)$/m, "")
+        .trim();
 
       if (editTarget === "category") {
         await api.put(`/prompts/profiles/${category}/${refMode}`, {
@@ -234,98 +256,103 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
           },
         })
       ).data,
-    onSuccess: setPreview,
+    onSuccess: (data) => {
+      setPreview(data);
+      setPreviewOpen(true);
+    },
     onError: (err: Error) => toast.error(err.message || "Preview failed"),
   });
 
+  const workflowLabel =
+    visibleWorkflows.find((w) => w.id === category)?.label || category;
+
   const boxTitle =
     editTarget === "category"
-      ? `Category prompt · ${visibleWorkflows.find((w) => w.id === category)?.label || category}`
+      ? `Category prompt · ${workflowLabel}`
       : editTarget === "jewelry"
         ? `Jewelry prompt · ${jewelryType}`
         : "Environments (one line each)";
 
   const selectClass =
-    "mt-1 w-full rounded-lg border border-[var(--jewel-border)] bg-white px-2.5 py-2 text-sm font-semibold text-jewel-ink";
+    "mt-1.5 w-full rounded-lg border border-[var(--jewel-border)] bg-white px-2.5 py-2 text-sm font-semibold text-jewel-ink transition-[border-color,box-shadow] duration-150 focus-visible:border-[var(--jewel-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/25";
+
+  const stepLabel =
+    "block text-[11px] font-bold uppercase tracking-wide text-jewel-ink-muted";
 
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
-      {/* 1) Reference mode */}
-      <div className="rounded-xl border border-[var(--jewel-border)] bg-white px-4 py-3 space-y-3">
+      {/* Context selectors: workflow → reference → jewelry → edit target */}
+      <div className="ui-card space-y-4 p-4 sm:p-5">
         <div>
           <h2 className="text-base font-semibold text-jewel-ink">Prompt Studio</h2>
-          <p className="text-xs text-jewel-ink-muted">
-            Step 1: reference → Step 2: category / jewelry / env → Step 3: edit text → Save
+          <p className="mt-0.5 text-xs text-jewel-ink-muted">
+            Workflow → reference → jewelry type → edit → preview / save
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => switchRef("without_reference")}
-            className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left ${
-              refMode === "without_reference"
-                ? "border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)]"
-                : "border-[var(--jewel-border)] hover:bg-[var(--jewel-surface-muted)]"
-            }`}
+        {/* 1) Workflow */}
+        <label className={stepLabel}>
+          1. Workflow
+          <select
+            className={selectClass}
+            value={category}
+            onChange={(e) => switchWorkflow(e.target.value)}
           >
-            <ImageOff className="mt-0.5 size-5 text-[var(--jewel-accent)]" />
-            <span>
-              <span className="block text-sm font-semibold">Without reference</span>
-              <span className="block text-[11px] text-jewel-ink-muted">Product image only</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => switchRef("with_reference")}
-            className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left ${
-              refMode === "with_reference"
-                ? "border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)]"
-                : "border-[var(--jewel-border)] hover:bg-[var(--jewel-surface-muted)]"
-            }`}
-          >
-            <ImageIcon className="mt-0.5 size-5 text-[var(--jewel-accent)]" />
-            <span>
-              <span className="block text-sm font-semibold">With reference</span>
-              <span className="block text-[11px] text-jewel-ink-muted">
-                Style / portrait / logo uploaded
+            {visibleWorkflows.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* 2) Reference mode */}
+        <div>
+          <p className={stepLabel}>2. Reference mode</p>
+          <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => switchRef("without_reference")}
+              className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-[border-color,background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/30 ${
+                refMode === "without_reference"
+                  ? "border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)] shadow-sm"
+                  : "border-[var(--jewel-border)] hover:bg-[var(--jewel-surface-muted)]"
+              }`}
+            >
+              <ImageOff className="mt-0.5 size-5 shrink-0 text-[var(--jewel-accent)]" />
+              <span>
+                <span className="block text-sm font-semibold">Without reference</span>
+                <span className="block text-[11px] text-jewel-ink-muted">Product image only</span>
               </span>
-            </span>
-          </button>
+            </button>
+            <button
+              type="button"
+              onClick={() => switchRef("with_reference")}
+              className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-[border-color,background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/30 ${
+                refMode === "with_reference"
+                  ? "border-[var(--jewel-accent)] bg-[var(--jewel-accent-soft)] shadow-sm"
+                  : "border-[var(--jewel-border)] hover:bg-[var(--jewel-surface-muted)]"
+              }`}
+            >
+              <ImageIcon className="mt-0.5 size-5 shrink-0 text-[var(--jewel-accent)]" />
+              <span>
+                <span className="block text-sm font-semibold">With reference</span>
+                <span className="block text-[11px] text-jewel-ink-muted">
+                  Style / portrait / logo uploaded
+                </span>
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* 2) Dropdowns — always visible after reference choice */}
-        <div className="grid grid-cols-1 gap-3 border-t border-[var(--jewel-border)] pt-3 sm:grid-cols-3">
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-jewel-ink-muted">
-            1. Category
-            <select
-              className={selectClass}
-              value={category}
-              onChange={(e) => {
-                if (!confirmLeave()) return;
-                setCategory(e.target.value);
-                setDirty(false);
-              }}
-            >
-              {visibleWorkflows.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-jewel-ink-muted">
-            2. Jewelry type
+        {/* 3) Jewelry + what to edit */}
+        <div className="grid grid-cols-1 gap-3 border-t border-[var(--jewel-border)] pt-4 sm:grid-cols-2">
+          <label className={stepLabel}>
+            3. Jewelry type
             <select
               className={selectClass}
               value={jewelryType}
-              onChange={(e) => {
-                if (!confirmLeave()) return;
-                setJewelryType(e.target.value);
-                setEditTarget("jewelry"); // show this type's prompt immediately
-                setDirty(false);
-              }}
+              onChange={(e) => switchJewelry(e.target.value)}
             >
               {jewelryTypes.map((jt) => (
                 <option key={jt} value={jt}>
@@ -335,16 +362,12 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
             </select>
           </label>
 
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-jewel-ink-muted">
-            3. Show in text box
+          <label className={stepLabel}>
+            Edit target
             <select
               className={selectClass}
               value={editTarget}
-              onChange={(e) => {
-                if (!confirmLeave()) return;
-                setEditTarget(e.target.value as EditTarget);
-                setDirty(false);
-              }}
+              onChange={(e) => switchEditTarget(e.target.value as EditTarget)}
             >
               <option value="jewelry">Jewelry prompt ({jewelryType})</option>
               <option value="category">Category prompt</option>
@@ -356,77 +379,131 @@ export function PromptStudio({ workflows, jewelryTypes }: Props) {
         </div>
       </div>
 
-      {/* 3) One text box */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_300px]">
-        <section className="rounded-xl border border-[var(--jewel-border)] bg-white p-4">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-jewel-ink">{boxTitle}</h3>
+      {/* Editor + preview */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
+        <section className="ui-card relative flex min-w-0 flex-col overflow-hidden p-0">
+          {/* Sticky save / preview action bar */}
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-[var(--jewel-border)] bg-[var(--jewel-surface)]/95 px-4 py-3 backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--jewel-surface)]/85">
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-sm font-semibold text-jewel-ink">{boxTitle}</h3>
+              <p className="mt-0.5 text-[11px] text-jewel-ink-muted">
+                {editTarget === "environments"
+                  ? "One environment sentence per line."
+                  : "HEADER: description — Save converts to JSON and strips {{placeholders}}."}
+              </p>
+            </div>
             {dirty && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 transition-opacity duration-150">
                 Unsaved
               </span>
             )}
-            <button
-              type="button"
-              disabled={saveMutation.isPending || !dirty}
-              onClick={() => saveMutation.mutate()}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[var(--jewel-accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-            >
-              <Save className="size-3.5" />
-              Save
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => previewMutation.mutate()}
+                disabled={previewMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--jewel-accent)] transition-[opacity,transform,background-color] duration-150 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/30 disabled:opacity-50"
+              >
+                <Eye className="size-3.5" />
+                {previewMutation.isPending ? "Assembling…" : "Preview"}
+              </button>
+              <button
+                type="button"
+                disabled={saveMutation.isPending || !dirty}
+                onClick={() => saveMutation.mutate()}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-[opacity,transform,box-shadow,background-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/40 ${
+                  dirty
+                    ? "bg-[var(--jewel-accent)] shadow-sm hover:brightness-105 active:scale-[0.98]"
+                    : "bg-[var(--jewel-accent)] opacity-45"
+                } disabled:cursor-not-allowed`}
+              >
+                <Save className="size-3.5" />
+                {saveMutation.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
           </div>
-          <p className="mb-2 text-[11px] text-jewel-ink-muted">
-            {editTarget === "environments"
-              ? "One environment sentence per line."
-              : "Write HEADER: description. Save converts to JSON and removes {{placeholders}} for you."}
-          </p>
-          {loading ? (
-            <p className="text-sm text-jewel-ink-muted py-8">Loading {jewelryType} prompt…</p>
-          ) : (
-            <textarea
-              key={`${refMode}-${category}-${jewelryType}-${editTarget}`}
-              value={editorText}
-              onChange={(e) => {
-                setEditorText(e.target.value);
-                setDirty(true);
-              }}
-              rows={22}
-              spellCheck={false}
-              className="w-full resize-y rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-surface-muted)] px-3 py-2 font-mono text-[13px] leading-relaxed text-jewel-ink"
-              placeholder={
-                editTarget === "environments"
-                  ? "A matte travertine stone slab…\nDark brushed concrete…"
-                  : "ROLE: …\n\nCAMERA: …\n\nLIGHTING: …"
-              }
-            />
-          )}
+
+          <div className="p-4 pt-3">
+            {loading ? (
+              <p className="py-8 text-sm text-jewel-ink-muted">Loading {jewelryType} prompt…</p>
+            ) : (
+              <textarea
+                key={`${refMode}-${category}-${jewelryType}-${editTarget}`}
+                value={editorText}
+                onChange={(e) => {
+                  setEditorText(e.target.value);
+                  setDirty(true);
+                }}
+                rows={22}
+                spellCheck={false}
+                className="w-full resize-y rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-surface-muted)] px-3.5 py-3 font-mono text-[13px] leading-[1.65] tracking-[0.01em] text-jewel-ink transition-[border-color,box-shadow] duration-150 placeholder:text-jewel-ink-muted/60 focus-visible:border-[var(--jewel-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/20"
+                placeholder={
+                  editTarget === "environments"
+                    ? "A matte travertine stone slab…\nDark brushed concrete…"
+                    : "ROLE: …\n\nCAMERA: …\n\nLIGHTING: …"
+                }
+              />
+            )}
+          </div>
         </section>
 
-        <aside className="flex max-h-[80vh] flex-col gap-3 rounded-xl border border-[var(--jewel-border)] bg-white p-3">
-          <div className="flex items-center gap-2">
-            <Eye className="size-4 text-[var(--jewel-accent)]" />
-            <h3 className="text-sm font-semibold">Assemble preview</h3>
-          </div>
-          <p className="text-[11px] text-jewel-ink-muted">
-            Uses <strong>{category}</strong> + <strong>{jewelryType}</strong> +{" "}
-            <strong>{refMode === "with_reference" ? "with" : "without"} reference</strong>.
-          </p>
+        {/* Collapsible assemble preview */}
+        <aside className="ui-card flex max-h-[min(80vh,720px)] flex-col overflow-hidden p-0 xl:sticky xl:top-20">
           <button
             type="button"
-            onClick={() => previewMutation.mutate()}
-            disabled={previewMutation.isPending}
-            className="rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--jewel-accent)]"
+            onClick={() => setPreviewOpen((o) => !o)}
+            className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--jewel-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--jewel-accent)]/30"
+            aria-expanded={previewOpen}
           >
-            {previewMutation.isPending ? "Assembling…" : "Assemble preview"}
+            <Eye className="size-4 shrink-0 text-[var(--jewel-accent)]" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-jewel-ink">Assemble preview</span>
+              <span className="block truncate text-[11px] text-jewel-ink-muted">
+                {workflowLabel} · {jewelryType} ·{" "}
+                {refMode === "with_reference" ? "with" : "without"} ref
+              </span>
+            </span>
+            {preview && !previewOpen && (
+              <span className="rounded-full bg-[var(--jewel-accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--jewel-accent)]">
+                Ready
+              </span>
+            )}
+            <ChevronDown
+              className={`size-4 shrink-0 text-jewel-ink-muted transition-transform duration-200 ${
+                previewOpen ? "rotate-180" : "rotate-0"
+              }`}
+            />
           </button>
-          {preview && (
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-[var(--jewel-surface-muted)] p-2">
-              <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
-                {preview.final_prompt || preview.prompt || "(empty)"}
-              </pre>
+
+          <div
+            className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+              previewOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex flex-col gap-3 border-t border-[var(--jewel-border)] px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => previewMutation.mutate()}
+                  disabled={previewMutation.isPending}
+                  className="rounded-lg border border-[var(--jewel-border)] bg-[var(--jewel-accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--jewel-accent)] transition-[opacity,background-color] duration-150 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--jewel-accent)]/30 disabled:opacity-50"
+                >
+                  {previewMutation.isPending ? "Assembling…" : "Assemble preview"}
+                </button>
+                {preview ? (
+                  <div className="min-h-0 max-h-[52vh] flex-1 overflow-y-auto rounded-lg bg-[var(--jewel-surface-muted)] p-3">
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-jewel-ink">
+                      {preview.final_prompt || preview.prompt || "(empty)"}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-jewel-ink-muted">
+                    Run Assemble to see the composed prompt for this selection.
+                  </p>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </aside>
       </div>
     </div>

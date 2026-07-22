@@ -5,6 +5,7 @@ import {
   api,
   clearTokens,
   getAccessToken,
+  refreshAccessToken,
   setTokens,
 } from "@/lib/api";
 import type { User } from "@/types";
@@ -43,6 +44,7 @@ export function useAuth() {
   }, [queryClient]);
 
   // Restore session from httpOnly refresh cookie after full page reload.
+  // Uses shared refreshAccessToken so StrictMode double-mount shares the mutex.
   useEffect(() => {
     if (getAccessToken()) {
       setBootstrapping(false);
@@ -51,13 +53,8 @@ export function useAuth() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await axios.post(
-          "/api/auth/refresh",
-          {},
-          { withCredentials: true, headers: { "X-CSRF-Token": document.cookie.match(/(?:^|; )jewel_csrf=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|; )jewel_csrf=([^;]*)/)![1]) : "" } },
-        );
-        if (!cancelled && res.data?.access_token) {
-          setTokens(res.data.access_token, res.data.refresh_token);
+        const token = await refreshAccessToken();
+        if (!cancelled && token) {
           setHasToken(true);
         }
       } catch {
@@ -120,9 +117,15 @@ export function useAuth() {
     queryClient.clear();
   }, [queryClient]);
 
+  // On non-auth /auth/me errors, keep loading so AuthGuard waits instead of redirecting.
+  const isLoading =
+    bootstrapping ||
+    (hasToken && userLoading) ||
+    (hasToken && isError && !isAuthFailure(error));
+
   return {
     user: hasToken ? user : null,
-    isLoading: bootstrapping || (hasToken && userLoading && !(isError && isAuthFailure(error))),
+    isLoading,
     isError,
     isAuthenticated: hasToken && !!user,
     isAdmin: user?.role === "admin",

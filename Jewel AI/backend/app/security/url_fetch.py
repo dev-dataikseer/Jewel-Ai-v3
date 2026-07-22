@@ -7,8 +7,11 @@ import socket
 from urllib.parse import urlparse
 
 import httpx
+from sqlalchemy import String, cast, or_
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.models import Asset, GenerationJob, User
 
 # Only dotted suffixes (or exact apex hosts listed separately).
 # Never use bare "fal.ai" with endswith — that would allow evilfal.ai.
@@ -115,6 +118,98 @@ def validate_user_image_url(url: str | None) -> None:
     if is_app_upload_url(raw):
         return
     validate_image_url(raw)
+
+
+def extract_upload_key(url: str | None) -> str | None:
+    """Normalize an upload URL to its storage key.
+
+    `/uploads/foo.png` or `https://host/uploads/foo.png?sig=...` → `foo.png`
+    """
+    if not url or not str(url).strip():
+        return None
+    raw = str(url).strip()
+    path = urlparse(raw).path if "://" in raw else raw.split("?", 1)[0]
+    path = (path or "").split("?", 1)[0]
+    marker = "/uploads/"
+    idx = path.find(marker)
+    if idx < 0:
+        return None
+    key = path[idx + len(marker) :].lstrip("/")
+    return key or None
+
+
+def user_owns_upload_key(db: Session, user: User, file_path: str) -> bool:
+    """True if upload key equals a URL key on an asset/job owned by the user (or admin)."""
+    if getattr(user, "role", None) == "admin":
+        return True
+    key = (file_path or "").lstrip("/")
+    if not key or ".." in key:
+        return False
+
+    assets = (
+        db.query(Asset.original_url, Asset.processed_url)
+        .filter(
+            Asset.user_id == user.id,
+            or_(
+                Asset.original_url.contains(key),
+                Asset.processed_url.contains(key),
+            ),
+        )
+        .all()
+    )
+    for original_url, processed_url in assets:
+        if extract_upload_key(original_url) == key or extract_upload_key(processed_url) == key:
+            return True
+
+    jobs = (
+        db.query(
+            GenerationJob.input_url,
+            GenerationJob.output_url,
+            GenerationJob.reference_url,
+            GenerationJob.model_url,
+            GenerationJob.provider_metadata,
+        )
+        .filter(
+            GenerationJob.user_id == user.id,
+            or_(
+                GenerationJob.input_url.contains(key),
+                GenerationJob.output_url.contains(key),
+                GenerationJob.reference_url.contains(key),
+                GenerationJob.model_url.contains(key),
+                cast(GenerationJob.provider_metadata, String).contains(key),
+            ),
+        )
+        .limit(100)
+        .all()
+    )
+    for input_url, output_url, reference_url, model_url, provider_metadata in jobs:
+        for candidate in (input_url, output_url, reference_url, model_url):
+            if extract_upload_key(candidate) == key:
+                return True
+        meta = provider_metadata or {}
+        if isinstance(meta, dict) and extract_upload_key(meta.get("logoUrl")) == key:
+            return True
+    return False
+
+
+def assert_user_owns_upload_url(db: Session, user: User, url: str | None) -> None:
+    """For app upload URLs, require the user owns the exact upload key."""
+    if not url or not str(url).strip():
+        return
+    raw = str(url).strip()
+    if not is_app_upload_url(raw):
+        return
+    key = extract_upload_key(raw)
+    if not key:
+        raise ValueError("Invalid upload URL")
+    if not user_owns_upload_key(db, user, key):
+        raise ValueError("Upload URL is not owned by the current user")
+
+
+def validate_user_owned_image_url(db: Session, user: User, url: str | None) -> None:
+    """SSRF allowlist plus ownership check for app upload URLs."""
+    validate_user_image_url(url)
+    assert_user_owns_upload_url(db, user, url)
 
 
 async def safe_fetch_image_bytes(url: str, timeout: float = 120.0) -> bytes:
