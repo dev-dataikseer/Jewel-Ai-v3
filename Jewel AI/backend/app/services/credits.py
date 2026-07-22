@@ -41,6 +41,35 @@ def debit_credits(
     )
 
 
+def refund_credits(
+    db: Session,
+    user_id: str,
+    amount: int,
+    *,
+    job_id: str | None = None,
+    description: str = "job_enqueue_refund",
+) -> None:
+    """Refund credits after a failed enqueue. No-op when ENFORCE_USER_CREDITS is false."""
+    if amount <= 0:
+        return
+    settings = get_settings()
+    if not settings.enforce_user_credits:
+        return
+    user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    if not user:
+        return
+    user.credits = int(user.credits or 0) + amount
+    db.add(
+        CreditLedger(
+            user_id=user_id,
+            amount=amount,
+            type="credit",
+            description=description,
+            job_id=job_id,
+        )
+    )
+
+
 def credit_top_up(
     db: Session,
     user_id: str,

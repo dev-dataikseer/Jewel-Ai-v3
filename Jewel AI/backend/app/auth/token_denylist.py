@@ -42,10 +42,13 @@ def deny_refresh_jti(jti: str | None, *, exp: int | float | None = None) -> None
 def is_refresh_jti_denied(jti: str | None) -> bool:
     if not jti:
         return False
-    if jti in _LOCAL_DENY:
-        return True
     try:
         client = _redis_client()
-        return bool(client.exists(f"{_DENY_PREFIX}{jti}"))
+        if bool(client.exists(f"{_DENY_PREFIX}{jti}")):
+            return True
+        return jti in _LOCAL_DENY
     except Exception:
-        return False
+        if get_settings().is_production:
+            # Fail closed: treat as denied when Redis is unavailable in production.
+            return True
+        return jti in _LOCAL_DENY

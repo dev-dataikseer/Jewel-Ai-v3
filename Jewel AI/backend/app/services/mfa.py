@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from typing import Iterable
 
@@ -10,7 +11,13 @@ import pyotp
 from sqlalchemy.orm import Session
 
 from app.auth.security import decrypt_secret, encrypt_secret
+from app.config import get_settings
 from app.models import User
+
+logger = logging.getLogger(__name__)
+
+_MFA_PENDING_PREFIX = "jewel:mfa-pending:"
+_MFA_PENDING_TTL_SECONDS = 15 * 60
 
 
 def generate_totp_secret() -> str:
@@ -67,3 +74,41 @@ def consume_backup_code(db: Session, user: User, code: str) -> bool:
 
 def admin_requires_mfa(user: User) -> bool:
     return (user.role or "").lower() == "admin" and bool(getattr(user, "totp_enabled", False))
+
+
+def _redis_client():
+    import redis
+
+    return redis.from_url(get_settings().redis_url, socket_connect_timeout=1)
+
+
+def store_pending_totp_secret(user_id: str, secret: str) -> None:
+    """Store a re-enroll pending TOTP secret in Redis (TTL 15 minutes)."""
+    try:
+        client = _redis_client()
+        client.setex(f"{_MFA_PENDING_PREFIX}{user_id}", _MFA_PENDING_TTL_SECONDS, secret)
+    except Exception as exc:
+        logger.debug("mfa pending redis unavailable: %s", exc)
+        raise RuntimeError("MFA enroll requires Redis") from exc
+
+
+def get_pending_totp_secret(user_id: str) -> str | None:
+    try:
+        client = _redis_client()
+        raw = client.get(f"{_MFA_PENDING_PREFIX}{user_id}")
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            return raw.decode()
+        return str(raw)
+    except Exception as exc:
+        logger.debug("mfa pending redis read failed: %s", exc)
+        return None
+
+
+def clear_pending_totp_secret(user_id: str) -> None:
+    try:
+        client = _redis_client()
+        client.delete(f"{_MFA_PENDING_PREFIX}{user_id}")
+    except Exception as exc:
+        logger.debug("mfa pending redis delete failed: %s", exc)

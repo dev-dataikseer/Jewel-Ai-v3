@@ -88,7 +88,7 @@ api.interceptors.request.use((config) => {
 
 let refreshPromise: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+async function doRefreshAccessToken(): Promise<string | null> {
   try {
     const res = await axios.post(
       `${API_BASE}/auth/refresh`,
@@ -101,10 +101,23 @@ async function refreshAccessToken(): Promise<string | null> {
     const { access_token, refresh_token } = res.data;
     setTokens(access_token, refresh_token);
     return access_token;
-  } catch {
-    clearTokens();
+  } catch (err) {
+    // Only clear session on definitive auth rejection — keep tokens on network/5xx.
+    if (axios.isAxiosError(err) && err.response?.status === 401) {
+      clearTokens();
+    }
     return null;
   }
+}
+
+/** Shared refresh with mutex so StrictMode double-mount / interceptor share one in-flight call. */
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = doRefreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 /** FastAPI `detail` can be a string, list of validation errors, or `{field, message}`. */
@@ -168,12 +181,7 @@ api.interceptors.response.use(
       if (isAuthMeBootstrap || requestUrl.includes("/auth/login") || requestUrl.includes("/auth/refresh")) {
         return Promise.reject(error);
       }
-      if (!refreshPromise) {
-        refreshPromise = refreshAccessToken().finally(() => {
-          refreshPromise = null;
-        });
-      }
-      const token = await refreshPromise;
+      const token = await refreshAccessToken();
       if (token) {
         original.headers.Authorization = `Bearer ${token}`;
         original.headers["X-Retry"] = "1";

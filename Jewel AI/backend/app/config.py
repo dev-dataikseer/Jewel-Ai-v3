@@ -199,3 +199,9 @@ def assert_production_settings() -> None:
     critical = [w for w in issues if any(m in w for m in critical_markers)]
     if critical:
         raise RuntimeError("Production configuration invalid: " + "; ".join(critical))
+    if not s.enforce_user_credits:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "ENFORCE_USER_CREDITS is false — user billing credits are not deducted"
+        )

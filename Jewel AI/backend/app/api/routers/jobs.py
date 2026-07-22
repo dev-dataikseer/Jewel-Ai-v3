@@ -124,6 +124,38 @@ def _stamp_timing(meta: dict | None, stage: str) -> dict:
     return out
 
 
+_PROVIDER_RUN_KEYS = frozenset(
+    {
+        "fal_request_id",
+        "usage",
+        "webhook_pending",
+        "webhook_accepted",
+        "webhook_completed",
+        "webhook_timed_out",
+        "recovered_via_fal_poll",
+        "statusHint",
+        "poison_max_retries",
+        "composedPrompt",
+        "providerChain",
+        "fal_inference_time",
+        "latencyTrace",
+    }
+)
+
+
+def _scrub_provider_run_state(meta: dict | None) -> dict:
+    """Drop fal/webhook run state so retry/regenerate cannot finalize the wrong request."""
+    out = {k: v for k, v in dict(meta or {}).items() if k not in _PROVIDER_RUN_KEYS}
+    timing = dict(out.get("timing") or {})
+    for key in ("fal_queued", "fal_result_received", "storage_saved", "completed", "failed", "cancelled"):
+        timing.pop(key, None)
+    if timing:
+        out["timing"] = timing
+    else:
+        out.pop("timing", None)
+    return out
+
+
 def _batch_status_counts(db: Session, batch_id: str) -> dict[str, int]:
     rows = (
         db.query(GenerationJob.status, func.count(GenerationJob.id))
@@ -215,11 +247,11 @@ def create_job(
     data = whitelist_job_fields(body.model_dump())
     validate_job_create(data)
     try:
-        from app.security.url_fetch import validate_user_image_url
+        from app.security.url_fetch import validate_user_owned_image_url
 
-        validate_user_image_url(body.reference_url)
-        validate_user_image_url(body.model_url)
-        validate_user_image_url(getattr(body, "logo_url", None))
+        validate_user_owned_image_url(db, user, body.reference_url)
+        validate_user_owned_image_url(db, user, body.model_url)
+        validate_user_owned_image_url(db, user, getattr(body, "logo_url", None))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -244,9 +276,6 @@ def create_job(
         raise HTTPException(status_code=400, detail="asset_id is required and must belong to you")
 
     _enforce_daily_job_limit(db, user, 1)
-    from app.services.credits import debit_credits
-
-    debit_credits(db, user.id, amount=1, description="job_create")
 
     if workflow == "VIRTUAL_TRY_ON" and not (body.model_url or body.reference_url):
         raise HTTPException(
@@ -321,6 +350,10 @@ def create_job(
         provider_metadata=meta,
     )
     db.add(job)
+    db.flush()
+    from app.services.credits import debit_credits
+
+    debit_credits(db, user.id, amount=1, job_id=job.id, description="job_create")
     db.commit()
     db.refresh(job)
     if latency_trace_enabled() and t0_api is not None:
@@ -381,11 +414,11 @@ def create_bulk_jobs(
     data["asset_ids"] = body.asset_ids
     validate_job_create(data)
     try:
-        from app.security.url_fetch import validate_user_image_url
+        from app.security.url_fetch import validate_user_owned_image_url
 
-        validate_user_image_url(body.reference_url)
-        validate_user_image_url(body.model_url)
-        validate_user_image_url(body.logo_url)
+        validate_user_owned_image_url(db, user, body.reference_url)
+        validate_user_owned_image_url(db, user, body.model_url)
+        validate_user_owned_image_url(db, user, body.logo_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -846,7 +879,7 @@ def regenerate_job(job_id: str, user: RequireUser, request: Request, db: Session
 
     _enforce_daily_job_limit(db, user, 1)
 
-    meta = _stamp_timing(dict(original.provider_metadata or {}), "queued")
+    meta = _stamp_timing(_scrub_provider_run_state(original.provider_metadata), "queued")
     meta["regeneratedFrom"] = original.id
 
     job = GenerationJob(
@@ -872,6 +905,10 @@ def regenerate_job(job_id: str, user: RequireUser, request: Request, db: Session
         provider_metadata=meta,
     )
     db.add(job)
+    db.flush()
+    from app.services.credits import debit_credits
+
+    debit_credits(db, user.id, amount=1, job_id=job.id, description="job_regenerate")
     db.commit()
     db.refresh(job)
     enqueue_image_job(job.id, request_id=_request_id(request))
@@ -895,8 +932,9 @@ def retry_job(job_id: str, user: RequireUser, request: Request, db: Session = De
     job.output_urls = None
     job.final_prompt = None
     job.processing_started_at = None
+    job.celery_task_id = None
     job.retry_count = (job.retry_count or 0) + 1
-    job.provider_metadata = _stamp_timing(dict(job.provider_metadata or {}), "queued")
+    job.provider_metadata = _stamp_timing(_scrub_provider_run_state(job.provider_metadata), "queued")
     db.commit()
     db.refresh(job)
     enqueue_image_job(job.id, request_id=_request_id(request))
@@ -954,6 +992,11 @@ def delete_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in ("PENDING", "PROCESSING"):
+        raise HTTPException(
+            status_code=400,
+            detail="Cancel the job before deleting while it is still pending or processing",
+        )
     db.delete(job)
     db.commit()
     return {"success": True}

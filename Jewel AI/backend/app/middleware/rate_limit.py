@@ -97,7 +97,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 key = f"{_rate_limit_key(request)}:bulk"
                 if not _allow(key, BULK_LIMIT, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")
-            elif path.endswith("/jobs") or "/assets/upload" in path:
+            elif (
+                path.endswith("/jobs")
+                or path.endswith("/retry")
+                or path.endswith("/regenerate")
+                or "/assets/upload" in path
+            ):
                 key = f"{_rate_limit_key(request)}:jobs"
                 if not _allow(key, LIMIT, fail_closed=prod_fail_closed):
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -12,12 +12,15 @@ from app.schemas.common import LoginRequest, TokenResponse, UserOut
 from app.services.audit import write_audit
 from app.services.mfa import (
     admin_requires_mfa,
+    clear_pending_totp_secret,
     clear_user_totp,
     consume_backup_code,
     generate_backup_codes,
     generate_totp_secret,
+    get_pending_totp_secret,
     get_user_totp_secret,
     set_user_totp,
+    store_pending_totp_secret,
     totp_provisioning_uri,
     verify_totp,
 )
@@ -37,10 +40,19 @@ class MfaVerifyLogin(BaseModel):
     backup_code: str | None = None
 
 
+class MfaEnrollIn(BaseModel):
+    current_otp: str | None = None
+
+
 class MfaEnrollOut(BaseModel):
     secret: str
     otpauth_url: str
     backup_codes: list[str]
+
+
+class MfaDisableIn(BaseModel):
+    otp: str | None = None
+    backup_code: str | None = None
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -56,7 +68,12 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(key=settings.refresh_cookie_name, path="/api/auth")
+    response.delete_cookie(
+        key=settings.refresh_cookie_name,
+        path="/api/auth",
+        secure=settings.is_production,
+        samesite="strict",
+    )
 
 
 def _set_csrf_cookie(response: Response, csrf: str) -> None:
@@ -68,6 +85,15 @@ def _set_csrf_cookie(response: Response, csrf: str) -> None:
         samesite="strict",
         max_age=settings.refresh_token_expire_days * 86400,
         path="/",
+    )
+
+
+def _clear_csrf_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path="/",
+        secure=settings.is_production,
+        samesite="strict",
     )
 
 
@@ -86,10 +112,10 @@ def _issue_tokens(response: Response, user: User) -> TokenResponse:
     csrf = secrets.token_urlsafe(32)
     _set_refresh_cookie(response, refresh)
     _set_csrf_cookie(response, csrf)
-    # Refresh still returned in body for backward-compat during migration; prefer cookie.
+    # Refresh is cookie-only; body field kept empty for schema compatibility.
     return TokenResponse(
         access_token=access,
-        refresh_token=refresh,
+        refresh_token="",
         user=UserOut.model_validate(user),
     )
 
@@ -129,7 +155,8 @@ async def refresh(
 ):
     _require_csrf(request)
     token = request.cookies.get(settings.refresh_cookie_name)
-    if not token:
+    if not token and not settings.is_production:
+        # Body refresh allowed in non-production for tests / local clients.
         try:
             data = await request.json()
             token = (data or {}).get("refresh_token")
@@ -158,14 +185,17 @@ def logout(
     body: LogoutRequest | None = None,
     user: User | None = Depends(get_current_user),
 ):
-    token = request.cookies.get(settings.refresh_cookie_name) or (body.refresh_token if body else None)
+    cookie_token = request.cookies.get(settings.refresh_cookie_name)
+    if cookie_token:
+        _require_csrf(request)
+    token = cookie_token or (body.refresh_token if body else None)
     if token:
         payload = decode_token(token)
         if payload and payload.get("type") == "refresh":
             if user is None or payload.get("sub") == user.id:
                 deny_refresh_jti(payload.get("jti"), exp=payload.get("exp"))
     _clear_refresh_cookie(response)
-    response.delete_cookie(key=settings.csrf_cookie_name, path="/")
+    _clear_csrf_cookie(response)
     return {"ok": True}
 
 
@@ -177,19 +207,41 @@ def me(user: User = Depends(get_current_user)):
 
 
 @router.post("/mfa/enroll", response_model=MfaEnrollOut)
-def mfa_enroll(user: RequireAdmin, db: Session = Depends(get_db)):
+def mfa_enroll(
+    user: RequireAdmin,
+    db: Session = Depends(get_db),
+    body: MfaEnrollIn = Body(default_factory=MfaEnrollIn),
+):
     secret = generate_totp_secret()
     codes = generate_backup_codes()
-    # Store pending secret until confirm — for simplicity enable immediately after client confirms via /mfa/confirm
-    user.encrypted_totp_secret = None  # clear until confirm
-    # Return codes; client must call confirm with otp
+
+    if getattr(user, "totp_enabled", False):
+        current = get_user_totp_secret(user)
+        if not body.current_otp or not current or not verify_totp(current, body.current_otp):
+            raise HTTPException(status_code=400, detail="current_otp required to re-enroll MFA")
+        try:
+            store_pending_totp_secret(user.id, secret)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        # Keep existing encrypted_totp_secret / totp_enabled / backups until confirm.
+        return MfaEnrollOut(
+            secret=secret,
+            otpauth_url=totp_provisioning_uri(secret, user.email),
+            backup_codes=codes,
+        )
+
+    # First-time enroll: store pending encrypted secret; leave backups alone if already empty.
     from app.auth.security import encrypt_secret
 
     user.encrypted_totp_secret = encrypt_secret(secret)
     user.totp_enabled = False
-    user.totp_backup_hashes = None
+    db.add(user)
     db.commit()
-    return MfaEnrollOut(secret=secret, otpauth_url=totp_provisioning_uri(secret, user.email), backup_codes=codes)
+    return MfaEnrollOut(
+        secret=secret,
+        otpauth_url=totp_provisioning_uri(secret, user.email),
+        backup_codes=codes,
+    )
 
 
 class MfaConfirm(BaseModel):
@@ -199,11 +251,13 @@ class MfaConfirm(BaseModel):
 
 @router.post("/mfa/confirm")
 def mfa_confirm(body: MfaConfirm, user: RequireAdmin, db: Session = Depends(get_db), request: Request = None):
-    secret = get_user_totp_secret(user)
+    pending = get_pending_totp_secret(user.id)
+    secret = pending or get_user_totp_secret(user)
     if not secret or not verify_totp(secret, body.otp):
         raise HTTPException(status_code=400, detail="Invalid OTP")
     codes = body.backup_codes or generate_backup_codes()
     set_user_totp(db, user, secret, codes)
+    clear_pending_totp_secret(user.id)
     write_audit(
         db,
         actor_user_id=user.id,
@@ -217,8 +271,22 @@ def mfa_confirm(body: MfaConfirm, user: RequireAdmin, db: Session = Depends(get_
 
 
 @router.post("/mfa/disable")
-def mfa_disable(user: RequireAdmin, db: Session = Depends(get_db), request: Request = None):
+def mfa_disable(
+    body: MfaDisableIn,
+    user: RequireAdmin,
+    db: Session = Depends(get_db),
+    request: Request = None,
+):
+    secret = get_user_totp_secret(user)
+    ok = False
+    if body.otp and secret and verify_totp(secret, body.otp):
+        ok = True
+    elif body.backup_code and consume_backup_code(db, user, body.backup_code):
+        ok = True
+    if not ok:
+        raise HTTPException(status_code=400, detail="OTP or backup code required to disable MFA")
     clear_user_totp(db, user)
+    clear_pending_totp_secret(user.id)
     write_audit(
         db,
         actor_user_id=user.id,
