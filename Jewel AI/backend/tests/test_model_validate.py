@@ -23,11 +23,10 @@ def _model(endpoint_id: str) -> ModelDefinition:
     )
 
 
-def test_validate_model_params_enum():
+def test_validate_model_params_enum_fallback():
     model = _model("fal-ai/nano-banana-pro/edit")
-    with pytest.raises(HTTPException) as exc:
-        validate_model_params(model, {"resolution": "8K"})
-    assert exc.value.status_code == 400
+    params = validate_model_params(model, {"resolution": "8K"})
+    assert params["resolution"] == "1K"
 
 
 def test_validate_model_params_merges_defaults():
