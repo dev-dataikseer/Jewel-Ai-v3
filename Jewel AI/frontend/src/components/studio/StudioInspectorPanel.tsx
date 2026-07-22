@@ -30,8 +30,8 @@ type Props = {
   isCatalog: boolean;
   tryOnPreset: "studio" | "customer";
   onTryOnPresetChange: (v: "studio" | "customer") => void;
-  catalogMode: "modern" | "reference_mirror" | "style_mood";
-  onCatalogModeChange: (v: "modern" | "reference_mirror" | "style_mood") => void;
+  catalogMode?: "modern" | "reference_mirror" | "style_mood";
+  onCatalogModeChange?: (v: "modern" | "reference_mirror" | "style_mood") => void;
   workflowVariantLabel: string | null;
   workflowVariants: { variant_key: string; label: string }[];
   workflowVariantKey: string;
@@ -312,11 +312,8 @@ export function StudioInspectorPanel(props: Props) {
 
 function WorkflowPromptControls(props: Props) {
   const {
-    isCatalog,
     tryOnPreset,
     onTryOnPresetChange,
-    catalogMode,
-    onCatalogModeChange,
     workflow,
     workflowVariantLabel,
     workflowVariants,
@@ -345,23 +342,6 @@ function WorkflowPromptControls(props: Props) {
           >
             <option value="studio">Studio</option>
             <option value="customer">Customer</option>
-          </select>
-        </div>
-      ) : null}
-
-      {isCatalog ? (
-        <div>
-          <label className="ui-label">Catalog mode</label>
-          <select
-            value={catalogMode}
-            onChange={(e) =>
-              onCatalogModeChange(e.target.value as "modern" | "reference_mirror" | "style_mood")
-            }
-            className="ui-input"
-          >
-            <option value="modern">Modern</option>
-            <option value="reference_mirror">Match reference</option>
-            <option value="style_mood">Match mood</option>
           </select>
         </div>
       ) : null}

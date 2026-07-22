@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.prompt_engine.attachments import ImageContext, append_attachments, role_index
 from app.prompt_engine.document import FinalPrompt
 from app.prompt_engine.execution_mode import (
@@ -34,7 +35,50 @@ def build_final_prompt(
     user_id: str | None = None,
     job_id: str | None = None,
 ) -> FinalPrompt:
-    """Build a model-ready prompt from Admin layers + fragments + image roles."""
+    """Build a model-ready prompt from Admin layers + fragments + image roles.
+
+    When Settings.prompt_profile_v2 is true, OR when V2 profiles exist for the
+    workflow, uses JSON profile compose (two pages).
+    """
+    from app.prompt_engine.workflow_resolve import resolve_workflow as _resolve
+
+    ctx_early = image_ctx
+    has_ref = bool(ctx_early and (ctx_early.has_style_reference or ctx_early.has_portrait or ctx_early.has_logo))
+    resolved_early = _resolve(
+        inp.workflow,
+        catalog_mode=getattr(inp, "catalog_mode", None),
+        try_on_mode=getattr(inp, "try_on_mode", None),
+        has_reference=bool(ctx_early.has_style_reference) if ctx_early else False,
+    )
+    use_v2 = get_settings().prompt_profile_v2
+    if not use_v2:
+        from app.models import PromptProfile
+
+        mode = "with_reference" if has_ref else "without_reference"
+        row = (
+            db.query(PromptProfile)
+            .filter(
+                PromptProfile.workflow == resolved_early.workflow,
+                PromptProfile.reference_mode == mode,
+                PromptProfile.is_active.is_(True),
+            )
+            .first()
+        )
+        use_v2 = bool(row and row.active_version_id)
+
+    if use_v2:
+        from app.prompt_engine.profile_compose import build_final_prompt_v2
+
+        return build_final_prompt_v2(
+            db,
+            inp,
+            model_spec=model_spec,
+            model_endpoint_id=model_endpoint_id,
+            image_ctx=image_ctx,
+            user_id=user_id,
+            job_id=job_id,
+        )
+
     from app.pipeline.composer import compose_prompt_document
     from app.pipeline.validator import normalize_jewelry_types, parse_jewelry_types
 
@@ -50,7 +94,6 @@ def build_final_prompt(
         try_on_mode=getattr(inp, "try_on_mode", None),
         has_reference=bool(ctx.has_style_reference),
     )
-    # Compose against resolved canonical workflow (DB masters for VIRTUAL_TRY_ON / CATALOG_IMAGE)
     inp_resolved = inp
     if resolved.workflow != (inp.workflow or ""):
         from dataclasses import replace
@@ -104,7 +147,6 @@ def build_final_prompt(
             environment_chosen = execution_meta.get("environmentChosen")
         fragment_versions.update(execution_meta.get("fragmentVersions") or {})
 
-    # Try-on: inject customer preserve clause
     if workflow == "VIRTUAL_TRY_ON" and (resolved.try_on_mode or getattr(inp, "try_on_mode", None)) == "customer":
         from app.prompt_engine.fragment_defaults import TRYON_CUSTOMER_PRESERVE
         from app.prompt_engine.fragment_store import get_fragment_meta
@@ -123,7 +165,6 @@ def build_final_prompt(
             )
             fragment_versions[TRYON_CUSTOMER_PRESERVE] = meta.get("version_id")
 
-    # Custom prompt: Change / Preserve / Realism shells
     if workflow == "CUSTOM_PROMPT":
         from app.prompt_engine.custom_guard import sanitize_custom_change
         from app.prompt_engine.fragment_defaults import CUSTOM_PRESERVE, CUSTOM_REALISM
@@ -157,7 +198,6 @@ def build_final_prompt(
                 fragment_versions[key] = meta.get("version_id")
         execution_meta["customAlterHits"] = alter_hits
 
-    # Background: inject BACKGROUND_SOURCE
     if workflow == "BACKGROUND_REPLACEMENT":
         from app.prompt_engine.fragment_defaults import (
             BACKGROUND_SOURCE_GENERATED,
@@ -218,5 +258,6 @@ def build_final_prompt(
         "executionMode": execution_mode,
         "executionModeVersion": EXECUTION_MODE_VERSION if execution_mode else None,
         "fragmentVersions": fragment_versions,
+        "composePath": "legacy_v1",
     }
     return final

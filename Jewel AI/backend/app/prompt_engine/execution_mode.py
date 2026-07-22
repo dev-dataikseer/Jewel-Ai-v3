@@ -1,5 +1,9 @@
 """Catalog Layer 3 execution modes — loads fragment text from DB (Admin-editable).
 
+DEPRECATED for new work: Prompt Profile V2 (`profile_compose.py`) inlines execution
+and branding into with/without-reference profiles. This module remains for the
+legacy `composePath: legacy_v1` path until profiles are migrated.
+
 Python only routes has_reference × has_logo × catalog_mode and substitutes placeholders.
 """
 

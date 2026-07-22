@@ -138,6 +138,45 @@ export type StylePreset = {
   is_active?: boolean;
 };
 
+export type PromptProfileV2 = {
+  id: string | null;
+  workflow: string;
+  reference_mode: "without_reference" | "with_reference";
+  name: string;
+  is_active?: boolean;
+  active_version_id?: string | null;
+  content_json: Record<string, string>;
+  environment_pool?: string[] | null;
+  version?: number | null;
+  versions?: Array<{
+    id: string;
+    version: number;
+    is_active: boolean;
+    content_json: Record<string, string>;
+    environment_pool?: string[] | null;
+    created_at?: string | null;
+  }>;
+};
+
+export type PromptJewelryV2 = {
+  id: string | null;
+  workflow: string;
+  jewelry_type: string;
+  content_json: Record<string, string>;
+  version?: number | null;
+  active_version_id?: string | null;
+};
+
+export type PromptImageRoleV2 = {
+  id: string | null;
+  role: string;
+  workflow?: string | null;
+  name: string;
+  instruction: string;
+  is_active?: boolean;
+  version?: number | null;
+};
+
 export type PromptLayer = {
   key: string;
   label: string;

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     fal_celery_rate_limit: str = "10/s"
     # Temporary perf diagnostics — grep logs for LATENCY_TRACE
     latency_trace: bool = False
+    # Prompt Profile V2: JSON key→value profiles (two pages: with/without reference).
+    # When true, build_final_prompt uses profile_compose instead of fragments/layers.
+    prompt_profile_v2: bool = False
     daily_job_limit: int = 100
     schema_via_alembic: bool = False
     # When true, debit user credits atomically on job create (SELECT FOR UPDATE).

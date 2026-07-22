@@ -9,7 +9,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.routers import assets, auth, billing, jobs, misc, models, prompts, providers, public, storage_files, users
+from app.api.routers import (
+    assets,
+    auth,
+    billing,
+    jobs,
+    misc,
+    models,
+    prompt_profiles_v2,
+    prompts,
+    providers,
+    public,
+    storage_files,
+    users,
+)
 from app.config import get_settings, validate_production_settings, assert_production_settings
 from app.database import Base, SessionLocal, engine
 import app.models  # noqa: F401 — register all tables before create_all
@@ -208,6 +221,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(assets.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(prompts.router, prefix="/api")
+app.include_router(prompt_profiles_v2.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
 app.include_router(billing.router, prefix="/api")
@@ -220,6 +234,7 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(assets.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(prompts.router, prefix="/api/v1")
+app.include_router(prompt_profiles_v2.router, prefix="/api/v1")
 app.include_router(providers.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")

@@ -124,10 +124,6 @@ export function StudioPage() {
   const supportsBulk = primaryFiles.length > 1;
   const isBulk = supportsBulk;
   const needsModelReference = workflow === "VIRTUAL_TRY_ON";
-  const needsStyleReference =
-    isCatalog && (catalogMode === "reference_mirror" || catalogMode === "style_mood" || Boolean(referenceFile));
-  const needsReference =
-    needsModelReference || (isCatalog && catalogMode === "style_mood");
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [lockedUrls, setLockedUrls] = useState<{
     input?: string | null;
@@ -138,12 +134,22 @@ export function StudioPage() {
     themeAssetId?: string | null;
     assetId?: string | null;
   }>({});
+  // V2: with/without reference is driven by uploads, not a Catalog mode dropdown
+  const hasStyleOrLogoRef = Boolean(referenceFile || lockedUrls.reference || lockedUrls.logo);
+  const needsStyleReference = isCatalog && hasStyleOrLogoRef;
+  const needsReference = needsModelReference;
   const inputImageCount =
     primaryFiles.length > 0
       ? primaryFiles.length
       : lockedUrls.input || lockedUrls.assetId
         ? 1
         : 0;
+
+  // Keep catalogMode aligned with uploads for API compatibility (V2 uses image packet)
+  useEffect(() => {
+    if (!isCatalog) return;
+    setCatalogMode(hasStyleOrLogoRef ? "reference_mirror" : "modern");
+  }, [isCatalog, hasStyleOrLogoRef]);
 
   const {
     data: options,
@@ -313,34 +319,37 @@ export function StudioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockedUrls.themeAssetId, lockedUrls.logoAssetId]);
 
-  // Persist session draft (settings + job ids — not File blobs)
+  // Persist session draft (debounced — avoids lag when flipping option settings)
   useEffect(() => {
     if (!sessionHydrated.current) return;
-    saveStudioSession({
-      workflow,
-      tryOnPreset,
-      jewelryTypes,
-      aspectRatio,
-      personGeneration,
-      numberOfImages,
-      modelEndpointId,
-      modelParams,
-      workflowVariantKey,
-      stylePresetId,
-      promptText,
-      lightingStyle,
-      catalogMode,
-      lastBatchId,
-      sessionJobIds: sessionJobs.map((j) => j.id).slice(0, 40),
-      activeJobId,
-      lockedInputUrl: lockedUrls.input,
-      lockedReferenceUrl: lockedUrls.reference,
-      lockedModelUrl: lockedUrls.model,
-      lockedThemeUrl: lockedUrls.reference,
-      lockedLogoUrl: lockedUrls.logo,
-      lockedLogoAssetId: lockedUrls.logoAssetId,
-      lockedThemeAssetId: lockedUrls.themeAssetId,
-    });
+    const timer = window.setTimeout(() => {
+      saveStudioSession({
+        workflow,
+        tryOnPreset,
+        jewelryTypes,
+        aspectRatio,
+        personGeneration,
+        numberOfImages,
+        modelEndpointId,
+        modelParams,
+        workflowVariantKey,
+        stylePresetId,
+        promptText,
+        lightingStyle,
+        catalogMode,
+        lastBatchId,
+        sessionJobIds: sessionJobs.map((j) => j.id).slice(0, 40),
+        activeJobId,
+        lockedInputUrl: lockedUrls.input,
+        lockedReferenceUrl: lockedUrls.reference,
+        lockedModelUrl: lockedUrls.model,
+        lockedThemeUrl: lockedUrls.reference,
+        lockedLogoUrl: lockedUrls.logo,
+        lockedLogoAssetId: lockedUrls.logoAssetId,
+        lockedThemeAssetId: lockedUrls.themeAssetId,
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [
     workflow,
     tryOnPreset,

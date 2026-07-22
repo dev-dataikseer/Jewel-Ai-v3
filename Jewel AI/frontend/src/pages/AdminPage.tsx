@@ -11,10 +11,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FacetMark } from "@/components/ui/FacetMark";
 import { ProviderSettings } from "@/components/ProviderSettings";
-import { PromptEditor } from "@/components/PromptEditor";
-import { PromptFragmentsAdmin } from "@/components/admin/PromptFragmentsAdmin";
-import { PromptToolsAdmin } from "@/components/admin/PromptToolsAdmin";
-import { StylePresetsAdmin } from "@/components/admin/StylePresetsAdmin";
+import { PromptStudio } from "@/components/admin/PromptStudio";
 import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { MfaAdminPanel } from "@/components/admin/MfaAdminPanel";
@@ -31,15 +28,6 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-const PROMPT_SUBTABS = [
-  { id: "workflows", label: "Workflow prompts" },
-  { id: "fragments", label: "Shared fragments" },
-  { id: "presets", label: "Style presets" },
-  { id: "tools", label: "Tools" },
-] as const;
-
-type PromptSubtab = (typeof PROMPT_SUBTABS)[number]["id"];
-
 function AdminPromptsSection({
   workflows,
   jewelryTypes,
@@ -47,33 +35,7 @@ function AdminPromptsSection({
   workflows: { id: string; label: string }[];
   jewelryTypes: string[];
 }) {
-  const [sub, setSub] = useState<PromptSubtab>("workflows");
-  return (
-    <div className="flex flex-col gap-4 animate-fadeIn">
-      <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--jewel-border)] bg-white p-1">
-        {PROMPT_SUBTABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setSub(item.id)}
-            className={`rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors ${
-              sub === item.id
-                ? "bg-[var(--jewel-accent-soft)] text-[var(--jewel-accent)]"
-                : "text-jewel-ink-muted hover:bg-[var(--jewel-surface-muted)]"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      {sub === "workflows" && (
-        <PromptEditor workflows={workflows} jewelryTypes={jewelryTypes} />
-      )}
-      {sub === "fragments" && <PromptFragmentsAdmin />}
-      {sub === "presets" && <StylePresetsAdmin workflows={workflows} />}
-      {sub === "tools" && <PromptToolsAdmin />}
-    </div>
-  );
+  return <PromptStudio workflows={workflows} jewelryTypes={jewelryTypes} />;
 }
 export function AdminPage() {
   const [tab, setTab] = useState<TabId>("overview");

@@ -247,6 +247,109 @@ class PromptFragmentVersion(Base):
     fragment: Mapped[PromptFragment] = relationship(back_populates="versions")
 
 
+# ── Prompt Profile V2 (JSON key→value sections, two pages per workflow) ──────
+
+
+class PromptProfile(Base):
+    """One workflow × reference_mode shell; active version holds content_json."""
+
+    __tablename__ = "prompt_profiles"
+    __table_args__ = (UniqueConstraint("workflow", "reference_mode", name="uq_profile_workflow_ref"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    workflow: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # without_reference | with_reference
+    reference_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    versions: Mapped[list["PromptProfileVersion"]] = relationship(back_populates="profile")
+
+
+class PromptProfileVersion(Base):
+    __tablename__ = "prompt_profile_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_profiles.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Ordered section map: {"ROLE": "...", "CAMERA": "...", "NEGATIVE PROMPT": "..."}
+    content_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Optional environment pool for without_reference catalog (list of sentences)
+    environment_pool: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(32), default="seed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    profile: Mapped[PromptProfile] = relationship(back_populates="versions")
+
+
+class PromptJewelrySection(Base):
+    """Jewelry-type sections (replaces prompt_subjects for V2)."""
+
+    __tablename__ = "prompt_jewelry_sections"
+    __table_args__ = (
+        UniqueConstraint("workflow", "jewelry_type", name="uq_jewelry_section_workflow_type"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    workflow: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    jewelry_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    versions: Mapped[list["PromptJewelrySectionVersion"]] = relationship(back_populates="section")
+
+
+class PromptJewelrySectionVersion(Base):
+    __tablename__ = "prompt_jewelry_section_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    section_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("prompt_jewelry_sections.id"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(32), default="seed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    section: Mapped[PromptJewelrySection] = relationship(back_populates="versions")
+
+
+class PromptImageRole(Base):
+    """Image-role instruction labels (replaces ATTACH_* fragments)."""
+
+    __tablename__ = "prompt_image_roles"
+    __table_args__ = (
+        UniqueConstraint("role", "workflow", name="uq_image_role_workflow"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # product | theme | portrait | logo
+    role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # NULL = global default; otherwise workflow override
+    workflow: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Plain text; {index} substituted at compose time
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    source: Mapped[str] = mapped_column(String(32), default="seed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Provider(Base):
     __tablename__ = "providers"
 
