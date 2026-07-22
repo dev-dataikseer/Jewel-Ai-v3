@@ -472,19 +472,27 @@ def media_thumb(
 @router.get("/pipelines/{workflow}/assemble")
 def assemble_pipeline(
     workflow: str,
-    user: RequireUser,
+    user: RequireAdmin,
     jewelry_type: str = "Ring",
     prompt_text: str | None = None,
+    catalog_mode: str | None = None,
     db: Session = Depends(get_db),
 ):
+    """Admin compose preview — dry-run of the prompt pipeline."""
     from app.pipeline.composer import ComposeInput, compose_prompt
 
     composed = compose_prompt(
         db,
-        ComposeInput(workflow=workflow, jewelry_type=jewelry_type, prompt_text=prompt_text),
+        ComposeInput(
+            workflow=workflow,
+            jewelry_type=jewelry_type,
+            prompt_text=prompt_text,
+            catalog_mode=catalog_mode,
+        ),
     )
     return {
         "prompt": composed.text,
+        "final_prompt": composed.text,
         "negative_prompt": composed.negative_prompt,
         "debug": composed.debug,
     }

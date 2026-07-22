@@ -149,7 +149,12 @@ def _backfill_layers(db: Session) -> None:
 
 
 def seed_prompts(db: Session) -> None:
-    """Create empty master/subject shells only — all prompt text is authored in Admin UI."""
+    """Create empty master/subject shells + fragment shells.
+
+    Prompt *content* is authored in Admin UI (or explicit Admin import-from-files).
+    Boot no longer auto-imports docs/Modals/Prompts — that caused Railway path noise
+    and bypassed Admin as the source of truth.
+    """
     for wf in WORKFLOWS:
         _ensure_master_template(db, wf["id"], wf.get("label", wf["id"]))
 
@@ -164,23 +169,26 @@ def seed_prompts(db: Session) -> None:
 
     seed_prompt_fragments(db)
 
-    # Load production copy from docs/Modals/Prompts into DB (skips unchanged text)
-    try:
-        from seeds.import_prompts_folder import import_prompts_folder
+    # Explicit opt-in only (ALLOW_PROMPT_RESEED=true). Never run silently in production.
+    from app.config import get_settings
 
-        stats = import_prompts_folder(db, force=False)
-        import logging
+    if get_settings().effective_allow_prompt_reseed:
+        try:
+            from seeds.import_prompts_folder import import_prompts_folder
 
-        logging.getLogger(__name__).info(
-            "prompts folder import: fragments=%s masters=%s subjects=%s",
-            stats.get("fragments"),
-            stats.get("masters"),
-            stats.get("subjects"),
-        )
-    except Exception:
-        import logging
+            stats = import_prompts_folder(db, force=False)
+            import logging
 
-        logging.getLogger(__name__).exception("prompts folder import skipped")
+            logging.getLogger(__name__).info(
+                "prompts folder import (ALLOW_PROMPT_RESEED): fragments=%s masters=%s subjects=%s",
+                stats.get("fragments"),
+                stats.get("masters"),
+                stats.get("subjects"),
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("prompts folder import skipped")
 
 
 def run_all_seeds(db: Session) -> None:

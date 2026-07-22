@@ -1,4 +1,7 @@
-"""CLI entry point for one-time prompt TXT migration."""
+"""ARCHIVED — CLI for one-time prompt TXT migration.
+
+Prefer Admin → Prompts → Tools → Import from files, or seeds.import_prompts_folder.
+"""
 
 from __future__ import annotations
 

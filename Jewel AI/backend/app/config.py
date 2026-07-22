@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     default_user_password: str = "studio123"
     force_seed_passwords: bool = False
     allow_prompt_reseed: bool | None = None
+    # When true in production, compose may fall back to DEFAULT_FRAGMENTS / .txt files.
+    # Default false in production — Admin DB is the sole runtime source.
+    allow_prompt_file_fallback: bool = False
     webhook_pending_timeout_minutes: int = 20
     stuck_job_minutes: int = 15
     # Celery token-bucket for process_image_job (protects DB/R2; fal queue absorbs bursts).

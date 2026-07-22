@@ -1,4 +1,8 @@
-"""One-time import of data/seed-prompt-templates/*.txt library into DB as versioned layer arrays."""
+"""ARCHIVED — one-time import of data/seed-prompt-templates/*.txt into DB.
+
+Prefer Admin → Prompts → Tools → Import from files, or seeds.import_prompts_folder.
+Do not use this module for day-to-day prompt updates.
+"""
 
 from __future__ import annotations
 

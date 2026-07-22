@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import type { PromptVersion } from "@/types";
 
 type FragmentRow = {
   id: string | null;
@@ -12,6 +13,12 @@ type FragmentRow = {
   prompt_text: string | null;
   content_json?: unknown;
   active_version_id?: string | null;
+};
+
+type ValidateResult = {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
 };
 
 const CATEGORY_ORDER: { id: string; label: string; match: (key: string) => boolean }[] = [
@@ -45,6 +52,8 @@ export function PromptFragmentsAdmin() {
   );
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [validation, setValidation] = useState<ValidateResult | null>(null);
+  const [showVersions, setShowVersions] = useState(false);
 
   const grouped = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -68,35 +77,53 @@ export function PromptFragmentsAdmin() {
   const activeKey = selected?.fragment_key || "";
   const displayText = dirty ? draft : selected?.prompt_text || "";
 
+  const { data: versions = [], refetch: refetchVersions } = useQuery({
+    queryKey: ["prompts", "fragment-versions", selected?.id],
+    queryFn: async () => {
+      if (!selected?.id) return [];
+      return (await api.get<PromptVersion[]>(`/prompts/fragments/${selected.id}/versions`)).data;
+    },
+    enabled: Boolean(selected?.id) && showVersions,
+  });
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!activeKey) throw new Error("No fragment selected");
+      const text = dirty ? draft : selected?.prompt_text || "";
+      const v = (
+        await api.post<ValidateResult>("/prompts/validate", {
+          prompt_text: text,
+          scope: "fragment",
+        })
+      ).data;
+      setValidation(v);
+      if (!v.ok) throw new Error(v.errors.join("; ") || "Validation failed");
       await api.post("/prompts/fragments", {
         fragment_key: activeKey,
         name: selected?.name,
-        prompt_text: dirty ? draft : selected?.prompt_text || "",
+        prompt_text: text,
       });
     },
     onSuccess: () => {
       toast.success("Fragment saved (new version). Generation uses this text immediately.");
       setDirty(false);
       qc.invalidateQueries({ queryKey: ["prompts", "fragments"] });
+      if (showVersions) void refetchVersions();
     },
     onError: (e: Error) => toast.error(e.message || "Save failed"),
   });
 
-  const importMutation = useMutation({
-    mutationFn: async () =>
-      (await api.post<{ ok: boolean; fragments: number; masters: number; subjects: number }>(
-        "/prompts/import-from-files?force=true",
-      )).data,
-    onSuccess: (data) => {
-      toast.success(
-        `Imported from files — fragments ${data.fragments}, masters ${data.masters}, subjects ${data.subjects}`,
-      );
-      qc.invalidateQueries({ queryKey: ["prompts"] });
+  const activateMutation = useMutation({
+    mutationFn: async (versionId: string) => {
+      if (!selected?.id) throw new Error("No fragment id");
+      await api.post(`/prompts/fragments/${selected.id}/activate/${versionId}`);
     },
-    onError: (e: Error) => toast.error(e.message || "Import failed"),
+    onSuccess: () => {
+      toast.success("Fragment version activated");
+      qc.invalidateQueries({ queryKey: ["prompts", "fragments"] });
+      void refetchVersions();
+    },
+    onError: (e: Error) => toast.error(e.message || "Activate failed"),
   });
 
   if (isLoading) {
@@ -109,26 +136,17 @@ export function PromptFragmentsAdmin() {
         <div>
           <h3 className="text-sm font-semibold text-slate-800">Shared prompt fragments</h3>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
-            Seeded from <code className="text-[11px]">docs/Modals/Prompts/*.txt</code>. Edit here for
-            live changes, or click <strong>Re-import from files</strong> after editing the .txt
-            library. Full guide: <code className="text-[11px]">docs/Modals/Prompts/HOW_TO_EDIT_PROMPTS.md</code>
+            Shared blocks used at compose time (execution modes, branding, try-on, user wrap). Edits
+            create a new DB version and apply immediately. File import lives under Tools.
           </p>
         </div>
         <button
           type="button"
-          className="ui-btn text-xs px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50"
-          disabled={importMutation.isPending}
-          onClick={() => {
-            if (
-              window.confirm(
-                "Re-import all masters, jewelry types, and fragments from docs/Modals/Prompts? This creates new DB versions.",
-              )
-            ) {
-              importMutation.mutate();
-            }
-          }}
+          className="ui-btn-secondary text-xs h-9"
+          disabled={!selected?.id}
+          onClick={() => setShowVersions((v) => !v)}
         >
-          {importMutation.isPending ? "Importing…" : "Re-import from files"}
+          {showVersions ? "Hide versions" : "Versions"}
         </button>
       </div>
       <input
@@ -155,6 +173,7 @@ export function PromptFragmentsAdmin() {
                       setSelectedKey(f.fragment_key);
                       setDirty(false);
                       setDraft(f.prompt_text || "");
+                      setValidation(null);
                     }}
                     className={`w-full text-left px-2 py-1.5 rounded text-xs mb-0.5 ${
                       (selectedKey || fragments[0]?.fragment_key) === f.fragment_key
@@ -187,7 +206,7 @@ export function PromptFragmentsAdmin() {
                   <p className="text-[11px] text-slate-500 font-mono">{selected.fragment_key}</p>
                   {!selected.prompt_text && (
                     <p className="text-[11px] text-amber-600 mt-1">
-                      Empty — run seed import or paste text and save.
+                      Empty — paste text and save, or use Tools → Import from files.
                     </p>
                   )}
                 </div>
@@ -209,17 +228,70 @@ export function PromptFragmentsAdmin() {
                 onChange={(e) => {
                   setDraft(e.target.value);
                   setDirty(true);
+                  setValidation(null);
                 }}
                 onFocus={() => {
                   if (!dirty) setDraft(selected.prompt_text || "");
                 }}
                 spellCheck={false}
               />
+              {validation ? (
+                <div
+                  className={`rounded-lg border p-2 text-xs ${
+                    validation.ok
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-rose-200 bg-rose-50"
+                  }`}
+                >
+                  {validation.errors.map((e) => (
+                    <p key={e}>• {e}</p>
+                  ))}
+                  {validation.warnings.map((w) => (
+                    <p key={w}>⚠ {w}</p>
+                  ))}
+                  {validation.ok && !validation.warnings.length ? <p>Validation passed</p> : null}
+                </div>
+              ) : null}
               <p className="text-[11px] text-slate-400">
                 Tip: keep placeholders intact (
                 {"{{CHOSEN_ENVIRONMENT}}"}, {"{{BRANDING_CLAUSE}}"}, {"{{LOGO_IMAGE_INDEX}}"},{" "}
                 {"{{USER_ADDITION_TEXT}}"}).
               </p>
+              {showVersions && selected.id ? (
+                <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                  {versions.map((v) => (
+                    <li
+                      key={v.id}
+                      className="flex items-center justify-between gap-2 text-xs px-1 py-1"
+                    >
+                      <span>
+                        v{v.version}
+                        {v.is_active ? (
+                          <span className="ml-2 text-[var(--jewel-accent)] font-semibold">
+                            active
+                          </span>
+                        ) : null}
+                      </span>
+                      {!v.is_active ? (
+                        <button
+                          type="button"
+                          className="ui-btn-secondary h-7 px-2 text-[10px]"
+                          onClick={() => {
+                            if (window.confirm(`Activate fragment v${v.version}?`)) {
+                              activateMutation.mutate(v.id);
+                            }
+                          }}
+                        >
+                          Activate
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                  {!versions.length ? (
+                    <li className="text-slate-400">No versions yet.</li>
+                  ) : null}
+                </ul>
+              ) : null}
             </>
           )}
         </div>

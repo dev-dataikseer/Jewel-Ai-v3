@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { api } from "@/lib/api";
 import type { StylePreset } from "@/types";
@@ -13,6 +13,7 @@ type Props = {
 export function StylePresetsAdmin({ workflows }: Props) {
   const queryClient = useQueryClient();
   const nameRef = useRef<HTMLInputElement>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [workflow, setWorkflow] = useState("");
   const [description, setDescription] = useState("");
@@ -23,26 +24,50 @@ export function StylePresetsAdmin({ workflows }: Props) {
     queryFn: async () => (await api.get<StylePreset[]>("/prompts/presets")).data,
   });
 
+  const resetForm = () => {
+    setEditingId(null);
+    setName("");
+    setWorkflow("");
+    setDescription("");
+    setPromptAddon("");
+  };
+
+  const startEdit = (p: StylePreset) => {
+    setEditingId(p.id);
+    setName(p.name);
+    setWorkflow(p.workflow || "");
+    setDescription(p.description || "");
+    setPromptAddon(p.prompt_addon || "");
+    nameRef.current?.focus();
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!name.trim() || !promptAddon.trim()) {
         throw new Error("Name and prompt addon are required");
       }
-      await api.post("/prompts/presets", {
-        name: name.trim(),
-        workflow: workflow || null,
-        description: description.trim() || null,
-        prompt_addon: promptAddon.trim(),
-      });
+      if (editingId) {
+        await api.patch(`/prompts/presets/${editingId}`, {
+          name: name.trim(),
+          workflow: workflow || null,
+          description: description.trim() || null,
+          prompt_addon: promptAddon.trim(),
+        });
+      } else {
+        await api.post("/prompts/presets", {
+          name: name.trim(),
+          workflow: workflow || null,
+          description: description.trim() || null,
+          prompt_addon: promptAddon.trim(),
+        });
+      }
     },
     onSuccess: () => {
-      setName("");
-      setDescription("");
-      setPromptAddon("");
+      resetForm();
       queryClient.invalidateQueries({ queryKey: ["style-presets"] });
-      toast.success("Style preset created");
+      toast.success(editingId ? "Style preset updated" : "Style preset created");
     },
-    onError: (err: Error) => toast.error(err.message || "Failed to create preset"),
+    onError: (err: Error) => toast.error(err.message || "Failed to save preset"),
   });
 
   const deleteMutation = useMutation({
@@ -59,18 +84,16 @@ export function StylePresetsAdmin({ workflows }: Props) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-800">
-          Style presets
-        </h2>
+        <h2 className="text-sm font-semibold text-slate-800">Style presets</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Presets append prompt text in Studio. Optional workflow scope.
+          Presets append Admin-authored style text in Studio. Optional workflow scope.
         </p>
       </div>
 
       <div className="grid gap-6 p-6 lg:grid-cols-2">
         <div className="space-y-3">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            New preset
+            {editingId ? "Edit preset" : "New preset"}
           </p>
           <input
             ref={nameRef}
@@ -105,15 +128,31 @@ export function StylePresetsAdmin({ workflows }: Props) {
             placeholder="Prompt addon text…"
             className="min-h-[120px] w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button
-            type="button"
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending}
-            className="ui-btn-primary"
-          >
-            <Plus className="size-3.5" />
-            Add preset
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending}
+              className="ui-btn-primary"
+            >
+              {editingId ? (
+                <>
+                  <Pencil className="size-3.5" />
+                  Update preset
+                </>
+              ) : (
+                <>
+                  <Plus className="size-3.5" />
+                  Add preset
+                </>
+              )}
+            </button>
+            {editingId ? (
+              <button type="button" className="ui-btn-secondary" onClick={resetForm}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -153,14 +192,24 @@ export function StylePresetsAdmin({ workflows }: Props) {
                     {p.prompt_addon}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate(p.id)}
-                  className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"
-                  aria-label={`Delete ${p.name}`}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(p)}
+                    className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-50"
+                    aria-label={`Edit ${p.name}`}
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMutation.mutate(p.id)}
+                    className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"
+                    aria-label={`Delete ${p.name}`}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

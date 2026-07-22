@@ -131,7 +131,7 @@ def build_final_prompt(
         from app.prompt_engine.document import PromptPart
 
         user_raw = inp.prompt_text
-        cleaned, alter_hits = sanitize_custom_change(user_raw)
+        cleaned, alter_hits = sanitize_custom_change(user_raw, db=db)
         if cleaned:
             doc = doc.clone()
             doc.parts.append(

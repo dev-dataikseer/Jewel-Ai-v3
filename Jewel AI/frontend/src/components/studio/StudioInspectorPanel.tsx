@@ -223,14 +223,17 @@ export function StudioInspectorPanel(props: Props) {
 
             <div>
               <label className="ui-label" htmlFor="studio-prompt-ref">
-                Prompt
+                Additional instruction (optional)
               </label>
+              <p className="mb-1.5 text-[11px] text-jewel-ink-muted leading-relaxed">
+                Optional add-on only. Master workflow prompts are configured in Admin → Prompts.
+              </p>
               <div className="relative">
                 <textarea
                   id="studio-prompt-ref"
                   value={promptText}
                   onChange={(e) => onPromptTextChange(e.target.value.slice(0, PROMPT_MAX))}
-                  placeholder="Studio lighting, clean catalog…"
+                  placeholder="e.g. warmer lighting, minimal props…"
                   rows={4}
                   className="ui-input h-auto min-h-[6rem] py-2 pb-6 resize-y"
                 />

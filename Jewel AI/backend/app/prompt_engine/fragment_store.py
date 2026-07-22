@@ -25,6 +25,19 @@ def get_fragment_text(db: Session | None, key: str, variables: dict[str, Any] | 
     return substitute(raw, variables or {})
 
 
+def _allow_file_fallback() -> bool:
+    """File/DEFAULT_FRAGMENTS fallback: on in tests/dev; off in production unless opt-in."""
+    try:
+        from app.config import get_settings
+
+        settings = get_settings()
+        if getattr(settings, "allow_prompt_file_fallback", False):
+            return True
+        return not settings.is_production
+    except Exception:
+        return True
+
+
 def get_fragment_meta(db: Session | None, key: str) -> dict[str, Any]:
     """Return text + version id for promptDebug."""
     if db is not None:
@@ -48,12 +61,27 @@ def get_fragment_meta(db: Session | None, key: str) -> dict[str, Any]:
                     }
         except Exception as exc:
             logger.debug("fragment load failed for %s: %s", key, exc)
+
+    allow_fallback = _allow_file_fallback()
+    default_text = DEFAULT_FRAGMENTS.get(key, "") if allow_fallback else ""
+    if not allow_fallback:
+        logger.error(
+            "Missing prompt fragment in DB (file fallback disabled in production): %s",
+            key,
+        )
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_message(f"Missing prompt fragment: {key}", level="error")
+        except Exception:
+            pass
+
     return {
         "key": key,
-        "text": DEFAULT_FRAGMENTS.get(key, ""),
+        "text": default_text,
         "version_id": None,
         "version": 0,
-        "source": "default",
+        "source": "default" if allow_fallback else "missing",
     }
 
 

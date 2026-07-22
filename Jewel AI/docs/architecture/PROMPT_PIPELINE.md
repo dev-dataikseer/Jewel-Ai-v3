@@ -6,23 +6,31 @@ This document explains how prompts are built, stored, edited, and sent to fal.ai
 
 ## 1. High-level architecture
 
-Jewel AI uses a **DB-driven, layer-based prompt pipeline**. There are **no hardcoded prompt strings in application code** at generation time. All prompt text lives in the database and is assembled at runtime.
+Jewel AI uses a **DB-driven, layer-based prompt pipeline**. At generation time, **every config prompt byte comes from PostgreSQL**. File seeds and `DEFAULT_FRAGMENTS` are not on the hot path.
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────┐
-│ Studio UI   │────▶│ Job + validation │────▶│ Prompt composer │────▶│ fal.ai API   │
-│ Admin UI    │     │ (structured fields)│     │ (layers + Jinja)│     │ (image+text) │
+│ Admin UI    │────▶│ POST /prompts/*  │────▶│ PostgreSQL      │     │              │
+│ (write)     │     │ + /validate      │     │ (masters /      │     │              │
+└─────────────┘     └──────────────────┘     │  subjects /     │     │              │
+                                             │  fragments /    │     │              │
+┌─────────────┐     ┌──────────────────┐     │  variants)      │────▶│ Composer     │──▶ fal.ai
+│ Studio UI   │────▶│ POST /jobs       │────▶│ + prompt_text   │     │ (layers)     │
+│ (add-on)    │     │ prompt_text only │     │   user add-on   │     │              │
 └─────────────┘     └──────────────────┘     └─────────────────┘     └──────────────┘
-       │                      │                         │
-       │                      │                         ▼
-       │                      │              Master + Subject + Variant
-       │                      │              layers merged in order
-       ▼                      ▼
-  data/seed-prompt-templates/*.txt ──import──▶ PostgreSQL / SQLite
-  (optional seed source)
 ```
 
-**Three prompt pieces per workflow:**
+See also: [PROMPT_ENGINE_AUDIT.md](PROMPT_ENGINE_AUDIT.md) for the scorecard and consolidation target.
+
+**Three prompt classes (never mix):**
+
+| Class | Owner | Storage |
+|-------|-------|---------|
+| **Config templates** | Admin | `prompt_*_versions` tables |
+| **Runtime variables** | Python engine | Injected via `{{PLACEHOLDERS}}` |
+| **User add-on** | Studio | `GenerationJob.prompt_text` (sanitized, ≤500 chars) |
+
+**Three config pieces per workflow:**
 
 | Piece | Stored as | Purpose |
 |-------|-----------|---------|
@@ -42,16 +50,16 @@ Jewel AI uses a **DB-driven, layer-based prompt pipeline**. There are **no hardc
 
 Each master/subject has **versioned rows**. Saving in Admin creates a new version; you can activate older versions from version history.
 
-### 2.2 `data/seed-prompt-templates/*.txt` files (optional import seed)
+### 2.2 File seeds (migration / disaster recovery only)
 
-Text files under the repo `data/seed-prompt-templates/` folder (e.g. `01_catalog_image.txt`) are parsed on API startup and imported into the DB when content changes. They are **not** read during job generation.
+Text files under `docs/Modals/Prompts/` are **not** read during job generation and are **not** auto-imported on API boot.
 
-Import flow:
+- **First deploy:** `seed_prompt_fragments()` may create empty DB shells; content should come from Admin or an **explicit** import.
+- **Admin → Prompts → Tools → Import from files:** explicit Admin action (`POST /prompts/import-from-files`). Prefer this over CLI for production recovery.
+- **CLI (archived / ops):** `python -m seeds.import_prompts_folder` — only when `ALLOW_PROMPT_RESEED=true` (default **false** in production). Do not enable reseed on Railway for normal deploys.
+- **File fallback at compose:** disabled in production unless `ALLOW_PROMPT_FILE_FALLBACK=true` (dev/tests only).
 
-1. Parser reads master sections (`ROLE:`, `CAMERA:`, `PRESERVATION LOCK:`, etc.) → master layers
-2. Parser reads child blocks (`--- RING ---`, `--- NECKLACE ---`) → subject layers
-3. Parser reads `AVAILABLE TRANSFORMATION OPTIONS` → variant rows
-4. Hash-based re-import: if files unchanged, skip; if changed, create new DB versions **only when `ALLOW_PROMPT_RESEED` is enabled** (default in development). Versions with `source=admin` are never overwritten.
+Versions with `source=admin` are never overwritten by import unless `force=true`.
 
 ### 2.4 Auth and roles
 

@@ -118,6 +118,20 @@ class PromptFragmentUpsert(BaseModel):
     is_active: bool = True
 
 
+class PromptValidateBody(BaseModel):
+    prompt_text: str = ""
+    scope: str = "master"  # master | subject | variant | fragment | preset
+    workflow: Optional[str] = None
+
+
+class StylePresetUpdate(BaseModel):
+    name: Optional[str] = None
+    workflow: Optional[str] = None
+    description: Optional[str] = None
+    prompt_addon: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 @router.get("/templates")
 def list_templates(user: RequireUser, db: Session = Depends(get_db)):
     rows = db.query(PromptMasterTemplate).all()
@@ -380,6 +394,33 @@ def delete_preset(preset_id: str, user: RequireAdmin, db: Session = Depends(get_
     return {"success": True}
 
 
+@router.patch("/presets/{preset_id}")
+def update_preset(
+    preset_id: str,
+    body: StylePresetUpdate,
+    user: RequireAdmin,
+    db: Session = Depends(get_db),
+):
+    preset = db.query(StylePreset).filter(StylePreset.id == preset_id).first()
+    if not preset:
+        raise HTTPException(status_code=404)
+    data = body.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(preset, key, value)
+    db.commit()
+    db.refresh(preset)
+    return preset
+
+
+@router.post("/validate")
+def validate_prompt(body: PromptValidateBody, user: RequireAdmin):
+    """Save-time placeholder / Jinja lint for Admin editors."""
+    from app.prompt_engine.prompt_validate import validate_prompt_text
+
+    scope = body.scope if body.scope in ("master", "subject", "variant", "fragment", "preset") else "master"
+    return validate_prompt_text(body.prompt_text, scope=scope, workflow=body.workflow)
+
+
 @router.post("/templates/{template_id}/rollback/{version_id}")
 def rollback_template(template_id: str, version_id: str, user: RequireAdmin, db: Session = Depends(get_db)):
     tmpl = db.query(PromptMasterTemplate).filter(PromptMasterTemplate.id == template_id).first()
@@ -457,6 +498,22 @@ def list_variant_versions(variant_id: str, user: RequireAdmin, db: Session = Dep
         .all()
     )
     return [{"id": v.id, "version": v.version, "is_active": v.is_active, "prompt_text": v.prompt_text} for v in versions]
+
+
+@router.post("/variants/{variant_id}/activate/{version_id}")
+def activate_variant_version(variant_id: str, version_id: str, user: RequireAdmin, db: Session = Depends(get_db)):
+    var = db.query(PromptVariant).filter(PromptVariant.id == variant_id).first()
+    ver = db.query(PromptVariantVersion).filter(
+        PromptVariantVersion.id == version_id,
+        PromptVariantVersion.variant_id == variant_id,
+    ).first()
+    if not var or not ver:
+        raise HTTPException(status_code=404)
+    db.query(PromptVariantVersion).filter(PromptVariantVersion.variant_id == variant_id).update({"is_active": False})
+    ver.is_active = True
+    var.active_version_id = ver.id
+    db.commit()
+    return {"success": True, "active_version_id": ver.id}
 
 
 # ── Prompt fragments (shared Admin-editable blocks) ──────────────────────────
@@ -617,7 +674,10 @@ def activate_fragment_version(
 
 @router.post("/import-from-files")
 def import_prompts_from_files(user: RequireAdmin, db: Session = Depends(get_db), force: bool = True):
-    """Re-import docs/Modals/Prompts/*.txt into DB (masters, subjects, fragments)."""
+    """Migration / disaster recovery: re-import docs/Modals/Prompts/*.txt into DB.
+
+    Prefer day-to-day edits via Admin UI. Rows with source=admin are skipped unless force=true.
+    """
     from seeds.import_prompts_folder import import_prompts_folder
 
     try:
@@ -626,4 +686,10 @@ def import_prompts_from_files(user: RequireAdmin, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Import failed: {exc}") from exc
-    return {"ok": True, **stats}
+    return {
+        "ok": True,
+        "mode": "migration",
+        "force": force,
+        "note": "Admin-authored versions are preserved unless force=true overwrites.",
+        **stats,
+    }

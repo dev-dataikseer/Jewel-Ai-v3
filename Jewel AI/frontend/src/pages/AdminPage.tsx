@@ -13,6 +13,7 @@ import { FacetMark } from "@/components/ui/FacetMark";
 import { ProviderSettings } from "@/components/ProviderSettings";
 import { PromptEditor } from "@/components/PromptEditor";
 import { PromptFragmentsAdmin } from "@/components/admin/PromptFragmentsAdmin";
+import { PromptToolsAdmin } from "@/components/admin/PromptToolsAdmin";
 import { StylePresetsAdmin } from "@/components/admin/StylePresetsAdmin";
 import { UsageMonitor } from "@/components/admin/UsageMonitor";
 import { UserManagement } from "@/components/admin/UserManagement";
@@ -30,6 +31,50 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+const PROMPT_SUBTABS = [
+  { id: "workflows", label: "Workflow prompts" },
+  { id: "fragments", label: "Shared fragments" },
+  { id: "presets", label: "Style presets" },
+  { id: "tools", label: "Tools" },
+] as const;
+
+type PromptSubtab = (typeof PROMPT_SUBTABS)[number]["id"];
+
+function AdminPromptsSection({
+  workflows,
+  jewelryTypes,
+}: {
+  workflows: { id: string; label: string }[];
+  jewelryTypes: string[];
+}) {
+  const [sub, setSub] = useState<PromptSubtab>("workflows");
+  return (
+    <div className="flex flex-col gap-4 animate-fadeIn">
+      <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--jewel-border)] bg-white p-1">
+        {PROMPT_SUBTABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setSub(item.id)}
+            className={`rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors ${
+              sub === item.id
+                ? "bg-[var(--jewel-accent-soft)] text-[var(--jewel-accent)]"
+                : "text-jewel-ink-muted hover:bg-[var(--jewel-surface-muted)]"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {sub === "workflows" && (
+        <PromptEditor workflows={workflows} jewelryTypes={jewelryTypes} />
+      )}
+      {sub === "fragments" && <PromptFragmentsAdmin />}
+      {sub === "presets" && <StylePresetsAdmin workflows={workflows} />}
+      {sub === "tools" && <PromptToolsAdmin />}
+    </div>
+  );
+}
 export function AdminPage() {
   const [tab, setTab] = useState<TabId>("overview");
 
@@ -146,22 +191,10 @@ export function AdminPage() {
             {tab === "providers" && <ProviderSettings />}
 
             {tab === "prompts" && (
-              <div className="flex flex-col gap-4 animate-fadeIn">
-                <PromptEditor
-                  workflows={options?.workflows ?? []}
-                  jewelryTypes={options?.jewelryTypes ?? ["Ring"]}
-                />
-                <details className="ui-card overflow-hidden">
-                  <summary className="cursor-pointer list-none px-5 py-3.5 text-[13px] font-semibold text-jewel-ink marker:content-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-2">
-                    <span>Shared fragments &amp; style presets</span>
-                    <span className="text-[11px] font-medium text-jewel-ink-muted">Optional</span>
-                  </summary>
-                  <div className="space-y-6 border-t border-[var(--jewel-hairline)] p-5">
-                    <PromptFragmentsAdmin />
-                    <StylePresetsAdmin workflows={options?.workflows ?? []} />
-                  </div>
-                </details>
-              </div>
+              <AdminPromptsSection
+                workflows={options?.workflows ?? []}
+                jewelryTypes={options?.jewelryTypes ?? ["Ring"]}
+              />
             )}
 
             {tab === "users" && (

@@ -324,6 +324,7 @@ def compose_prompt_document(db: Session, inp: ComposeInput) -> ComposedDocument:
             variant_text=variant_text,
             user_instruction=safe_prompt,
             variables=variables,
+            db=db,
         )
     except PromptCompositionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

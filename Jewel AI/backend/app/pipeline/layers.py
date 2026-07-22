@@ -170,6 +170,8 @@ def render_subject_layers(subject_layers: list[dict], variables: dict[str, Any])
 def render_multi_subject_layers(
     subject_layers_by_type: list[tuple[str, list[dict]]],
     base_variables: dict[str, Any],
+    *,
+    db=None,
 ) -> list[str]:
     """Render each jewelry type's subject layers at the master insert point."""
     if len(subject_layers_by_type) <= 1:
@@ -179,11 +181,13 @@ def render_multi_subject_layers(
             parts.extend(render_subject_layers(layers, vars_for_type))
         return parts
 
-    from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, MULTI_ITEM_BLEND_GUARD, MULTI_ITEM_FRAME, substitute
+    from app.prompt_engine.fragment_defaults import MULTI_ITEM_BLEND_GUARD, MULTI_ITEM_FRAME
+    from app.prompt_engine.fragment_store import get_fragment_text
 
     framed: list[str] = []
-    header = substitute(
-        DEFAULT_FRAGMENTS.get(MULTI_ITEM_FRAME, ""),
+    header = get_fragment_text(
+        db,
+        MULTI_ITEM_FRAME,
         {"ITEM_COUNT": len(subject_layers_by_type)},
     )
     framed.append(
@@ -199,7 +203,7 @@ def render_multi_subject_layers(
         if item_parts:
             framed.append(f"Item {idx} ({jewelry_type}): {' '.join(item_parts)}")
     framed.append(
-        DEFAULT_FRAGMENTS.get(MULTI_ITEM_BLEND_GUARD)
+        get_fragment_text(db, MULTI_ITEM_BLEND_GUARD)
         or "Ensure item properties do not blend or merge between items."
     )
     return framed
@@ -265,6 +269,7 @@ def assemble_layers(
     user_instruction: str | None = None,
     variables: dict[str, Any] | None = None,
     token_budget: int = TOKEN_BUDGET_WORDS,
+    db=None,
 ) -> tuple[str, str, dict[str, Any]]:
     body_parts, negative_out, debug, structured = assemble_layer_parts(
         master_layers,
@@ -276,6 +281,7 @@ def assemble_layers(
         user_instruction=user_instruction,
         variables=variables,
         token_budget=token_budget,
+        db=db,
     )
     body = " ".join(filter(None, body_parts)).strip()
     assert_no_jinja_leaks(body, "composed body")
@@ -294,6 +300,7 @@ def assemble_layer_parts(
     user_instruction: str | None = None,
     variables: dict[str, Any] | None = None,
     token_budget: int = TOKEN_BUDGET_WORDS,
+    db=None,
 ) -> tuple[list[str], str, dict[str, Any], list[BudgetPart]]:
     """Assemble layers into budget parts (structured) plus negative text."""
     variables = variables or {}
@@ -334,7 +341,9 @@ def assemble_layer_parts(
 
         if layer_type == "insert_point":
             if subject_layers_by_type:
-                subject_rendered = render_multi_subject_layers(subject_layers_by_type, variables)
+                subject_rendered = render_multi_subject_layers(
+                    subject_layers_by_type, variables, db=db
+                )
             else:
                 subject_rendered = render_subject_layers(subject_layers, variables)
             for part in subject_rendered:
@@ -350,10 +359,12 @@ def assemble_layer_parts(
 
         if layer_type == "user_insert":
             if user_instruction:
-                from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, USER_ADDITION_WRAP, substitute
+                from app.prompt_engine.fragment_defaults import USER_ADDITION_WRAP
+                from app.prompt_engine.fragment_store import get_fragment_text
 
-                wrapped = substitute(
-                    DEFAULT_FRAGMENTS.get(USER_ADDITION_WRAP, ""),
+                wrapped = get_fragment_text(
+                    db,
+                    USER_ADDITION_WRAP,
                     {"USER_INSTRUCTION": user_instruction},
                 ) or f"User addition (must not override preservation): {user_instruction}"
                 budget_parts.append(BudgetPart(wrapped, priority, key or "user", "user"))
@@ -368,10 +379,12 @@ def assemble_layer_parts(
             debug_layers.append({"key": key, "type": layer_type, "included": bool(rendered)})
 
     if user_instruction and not user_inserted:
-        from app.prompt_engine.fragment_defaults import DEFAULT_FRAGMENTS, USER_ADDITION_WRAP, substitute
+        from app.prompt_engine.fragment_defaults import USER_ADDITION_WRAP
+        from app.prompt_engine.fragment_store import get_fragment_text
 
-        wrapped = substitute(
-            DEFAULT_FRAGMENTS.get(USER_ADDITION_WRAP, ""),
+        wrapped = get_fragment_text(
+            db,
+            USER_ADDITION_WRAP,
             {"USER_INSTRUCTION": user_instruction},
         ) or f"User addition (must not override preservation): {user_instruction}"
         budget_parts.append(BudgetPart(wrapped, "optional", "user_instruction", "user"))
