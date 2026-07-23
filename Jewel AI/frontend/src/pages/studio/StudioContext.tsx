@@ -868,7 +868,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const clearPrimaryFiles = () => {
     setPrimaryFiles([]);
+    setPrimaryPreviews([]);
     setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+    setValidationErrors((e) => ({ ...e, productImage: "" }));
   };
 
   const clearGenerated = () => {

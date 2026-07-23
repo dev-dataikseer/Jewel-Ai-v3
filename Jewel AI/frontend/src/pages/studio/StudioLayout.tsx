@@ -341,7 +341,6 @@ return (
                             onAppend={onPrimaryAppend}
                             onReplace={onPrimaryReplace}
                             onRemoveAt={removePrimaryAt}
-                            onClearAll={clearPrimaryFiles}
                             imageZoom={inputZoom}
                             onCropAt={
                               primaryFiles.length > 0 ? openCropForPrimary : undefined
@@ -392,7 +391,6 @@ return (
                         onAppend={onPrimaryAppend}
                         onReplace={onPrimaryReplace}
                         onRemoveAt={removePrimaryAt}
-                        onClearAll={clearPrimaryFiles}
                         imageZoom={inputZoom}
                         onCropAt={
                           primaryFiles.length > 0 ? openCropForPrimary : undefined
@@ -420,24 +418,11 @@ return (
                       />
                     </div>
                     <div className="flex h-10 items-center gap-1.5 border-t border-[var(--jewel-hairline)] px-2.5">
-                      {primaryFiles.length > 1 ? (
-                        <span className="text-[11px] font-medium text-jewel-ink-muted tabular-nums">
-                          {primaryFiles.length} images
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-medium text-jewel-ink-muted">
-                          Product
-                        </span>
-                      )}
-                      {primaryFiles.length > 0 || productPreviewSrcs.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={clearPrimaryFiles}
-                          className="ml-auto text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
-                        >
-                          Clear
-                        </button>
-                      ) : null}
+                      <span className="text-[11px] font-medium text-jewel-ink-muted tabular-nums">
+                        {primaryFiles.length > 1
+                          ? `${primaryFiles.length} images`
+                          : "Product"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -700,22 +685,7 @@ return (
                             onToggleCompare={() => setCompareMode((c: any) => !c)}
                             mediaUrl={mediaUrl}
                           />
-                          <button
-                            type="button"
-                            onClick={clearGenerated}
-                            className="ml-auto shrink-0 text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
-                          >
-                            Clear
-                          </button>
                         </>
-                      ) : activeJob ? (
-                        <button
-                          type="button"
-                          onClick={clearGenerated}
-                          className="ml-auto text-[11px] font-semibold text-jewel-ink-muted hover:text-jewel-ink"
-                        >
-                          Clear
-                        </button>
                       ) : (
                         <span className="text-[11px] font-medium text-jewel-ink-muted">
                           Output

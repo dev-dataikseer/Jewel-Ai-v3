@@ -14,7 +14,6 @@ type Props = {
   onAppend: (files: File[]) => void;
   onReplace: (files: File[]) => void;
   onRemoveAt: (index: number) => void;
-  onClearAll: () => void;
   imageZoom?: number;
   /** Crop a specific uploaded file (local File only) */
   onCropAt?: (index: number) => void;
@@ -29,7 +28,6 @@ export function ProductUploadGallery({
   onAppend,
   onReplace,
   onRemoveAt,
-  onClearAll,
   imageZoom = 1,
   onCropAt,
 }: Props) {
@@ -138,35 +136,6 @@ export function ProductUploadGallery({
           </label>
         ) : isSingle ? (
           <div className="absolute inset-0 flex flex-col">
-            <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-[var(--jewel-hairline)] px-2 bg-white/95">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-jewel-ink-muted">
-                {emptyTitle}
-              </span>
-              <div className="flex items-center gap-0.5">
-                {onCropAt && hasFiles ? (
-                  <button
-                    type="button"
-                    onClick={() => onCropAt(0)}
-                    className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
-                    aria-label="Crop image"
-                    title="Crop"
-                  >
-                    <Crop className="size-3.5" />
-                    Crop
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={onClearAll}
-                  className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-600"
-                  aria-label="Clear image"
-                  title="Clear"
-                >
-                  <X className="size-3.5" strokeWidth={2.5} />
-                  Clear
-                </button>
-              </div>
-            </div>
             <div className="relative min-h-0 flex-1 flex items-center justify-center p-3">
               <img
                 src={previews[0]}
@@ -174,6 +143,17 @@ export function ProductUploadGallery({
                 className="max-h-full max-w-full object-contain transition-transform"
                 style={{ transform: `scale(${imageZoom})` }}
               />
+              {onCropAt && hasFiles ? (
+                <button
+                  type="button"
+                  onClick={() => onCropAt(0)}
+                  className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-700 shadow-sm border border-slate-200 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)] z-10"
+                  aria-label="Crop image"
+                  title="Crop"
+                >
+                  <Crop className="size-3.5" />
+                </button>
+              ) : null}
               {dragging ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--jewel-accent)]/15">
                   <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[var(--jewel-accent)] shadow-sm">
@@ -241,15 +221,6 @@ export function ProductUploadGallery({
                     Add
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={onClearAll}
-                  className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700"
-                  title="Clear all images"
-                >
-                  <X className="size-3" strokeWidth={2.5} />
-                  Clear All
-                </button>
               </div>
             </div>
           </div>
