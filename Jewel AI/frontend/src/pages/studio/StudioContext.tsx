@@ -868,8 +868,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const clearPrimaryFiles = () => {
     setPrimaryFiles([]);
-    setPrimaryPreviews([]);
     setLockedUrls((u) => ({ ...u, input: null, assetId: null }));
+    setActiveJobId(null);
     setValidationErrors((e) => ({ ...e, productImage: "" }));
   };
 
@@ -1001,9 +1001,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     ? primaryPreviews.map((p) => p.url)
     : lockedUrls.input
       ? [mediaUrl(lockedUrls.input)]
-      : activeJob?.input_url
-        ? [mediaUrl(activeJob.input_url)]
-        : [];
+      : [];
 
   const outputUrls = useMemo(() => {
     if (!activeJob) return [] as string[];
