@@ -15,11 +15,6 @@ celery_app = Celery(
     ],
 )
 
-# Force-import so worker process always registers finalize_fal_webhook + billing.
-# (Variable-only redeploys have left workers on stale images missing these tasks.)
-from app.tasks import billing as _billing_tasks  # noqa: E402,F401
-from app.tasks import generate as _generate_tasks  # noqa: E402,F401
-
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -69,6 +64,7 @@ _init_sentry()
 # Apply fal job rate limit from settings (token bucket across workers sharing Redis).
 try:
     _rl = (settings.fal_celery_rate_limit or "10/s").strip() or "10/s"
-    _generate_tasks.process_image_job.rate_limit = _rl
+    from app.tasks.job_runner import process_image_job
+    process_image_job.rate_limit = _rl
 except Exception:
     pass
