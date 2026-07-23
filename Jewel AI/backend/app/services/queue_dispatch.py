@@ -3,27 +3,28 @@ import asyncio
 import threading
 import time
 
+from contextlib import contextmanager
+
 from app.config import get_settings
+from app.constants import JOB_STATUS_PENDING
 from app.database import SessionLocal
 from app.logging_config import get_logger
 from app.models import GenerationJob
+from app.redis_client import redis_available
 
 logger = get_logger(__name__)
 settings = get_settings()
 
+@contextmanager
+def _with_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 _worker_cache: dict[str, float | bool] = {"checked_at": 0.0, "available": False}
 _WORKER_CACHE_TTL = 30.0
-
-
-def _redis_available() -> bool:
-    try:
-        import redis
-
-        client = redis.from_url(settings.redis_url, socket_connect_timeout=1)
-        client.ping()
-        return True
-    except Exception:
-        return False
 
 
 def celery_worker_available() -> bool:
@@ -33,7 +34,7 @@ def celery_worker_available() -> bool:
         return bool(_worker_cache["available"])
 
     available = False
-    if _redis_available():
+    if redis_available():
         try:
             from app.tasks.celery_app import celery_app
 
@@ -57,10 +58,9 @@ def _celery_worker_available() -> bool:
 
 
 def _fail_job_enqueue(job_id: str, message: str) -> None:
-    db = SessionLocal()
-    try:
+    with _with_db() as db:
         job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if job and job.status == "PENDING":
+        if job and job.status == JOB_STATUS_PENDING:
             user_id = job.user_id
             job.status = "FAILED"
             job.error_message = message
@@ -77,44 +77,38 @@ def _fail_job_enqueue(job_id: str, message: str) -> None:
             except Exception as exc:
                 logger.warning("Credit refund after enqueue fail for %s: %s", job_id, exc)
             db.commit()
-    finally:
-        db.close()
 
 
 def _persist_celery_task_id(job_id: str, task_id: str | None) -> None:
     if not task_id:
         return
-    db = SessionLocal()
     try:
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if job:
-            job.celery_task_id = task_id
-            db.commit()
+        with _with_db() as db:
+            job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+            if job:
+                job.celery_task_id = task_id
+                db.commit()
     except Exception as exc:
         logger.warning("Failed to persist celery_task_id for %s: %s", job_id, exc)
-    finally:
-        db.close()
 
 
 def _stamp_api_request_id(job_id: str, request_id: str | None) -> None:
     """Store API X-Request-ID on job metadata for worker/Sentry correlation."""
     if not request_id:
         return
-    db = SessionLocal()
     try:
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if not job:
-            return
-        meta = dict(job.provider_metadata or {})
-        if meta.get("request_id") == request_id:
-            return
-        meta["request_id"] = request_id
-        job.provider_metadata = meta
-        db.commit()
+        with _with_db() as db:
+            job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+            if not job:
+                return
+            meta = dict(job.provider_metadata or {})
+            if meta.get("request_id") == request_id:
+                return
+            meta["request_id"] = request_id
+            job.provider_metadata = meta
+            db.commit()
     except Exception as exc:
         logger.warning("Failed to stamp request_id for %s: %s", job_id, exc)
-    finally:
-        db.close()
 
 
 def enqueue_image_job(job_id: str, request_id: str | None = None) -> None:
@@ -157,8 +151,9 @@ def enqueue_image_job(job_id: str, request_id: str | None = None) -> None:
         return
 
     from app.tasks.generate import _process_job_async
+    from app.redis_client import get_redis_client
 
-    reason = "no Redis" if not _redis_available() else "no Celery worker"
+    reason = "no Redis" if not get_redis_client() else "no Celery worker"
     logger.warning(
         "Processing job in background thread (%s) — not durable across restarts",
         reason,

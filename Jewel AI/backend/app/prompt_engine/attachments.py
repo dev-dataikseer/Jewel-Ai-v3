@@ -112,7 +112,7 @@ def attachment_parts(
     wf = workflow or ""
 
     product_idx = role_index(ctx, "product") or 1
-    theme_idx = role_index(ctx, "theme")
+    # theme_idx is unused, removed for linting
     portrait_idx = role_index(ctx, "portrait")
 
     if wf in CATALOG_EXEC_WORKFLOWS or wf == "REFERENCE_STYLE_MATCH":

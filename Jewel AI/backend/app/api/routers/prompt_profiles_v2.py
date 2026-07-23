@@ -367,6 +367,59 @@ def upsert_jewelry(
     db.add(ver)
     db.flush()
     section.active_version_id = ver.id
+
+    # Mirror into legacy PromptSubject layers so V1 compose also gets the jewelry prompt
+    # (Admin Prompt Studio is the source of truth for per-type subject text).
+    try:
+        from app.models import PromptSubject, PromptSubjectVersion
+
+        body_parts = [f"{k}: {v}" for k, v in content.items() if (v or "").strip()]
+        subject_text = "\n\n".join(body_parts).strip()
+        subj = (
+            db.query(PromptSubject)
+            .filter(PromptSubject.workflow == wf, PromptSubject.jewelry_type == jewelry_type)
+            .first()
+        )
+        if not subj:
+            subj = PromptSubject(workflow=wf, jewelry_type=jewelry_type, is_active=True)
+            db.add(subj)
+            db.flush()
+        last_s = (
+            db.query(PromptSubjectVersion)
+            .filter(PromptSubjectVersion.subject_id == subj.id)
+            .order_by(PromptSubjectVersion.version.desc())
+            .first()
+        )
+        s_ver_num = (last_s.version + 1) if last_s else 1
+        db.query(PromptSubjectVersion).filter(PromptSubjectVersion.subject_id == subj.id).update(
+            {"is_active": False}
+        )
+        sver = PromptSubjectVersion(
+            subject_id=subj.id,
+            version=s_ver_num,
+            composition_mode="layered",
+            layers=[
+                {
+                    "key": "jewelry_prompt",
+                    "label": "Jewelry prompt",
+                    "order": 1,
+                    "content": subject_text,
+                    "locked": False,
+                    "type": "text",
+                    "enabled": True,
+                }
+            ],
+            prompt_text=subject_text,
+            is_active=True,
+            source="admin_jewelry_sync",
+        )
+        db.add(sver)
+        db.flush()
+        subj.active_version_id = sver.id
+        subj.is_active = True
+    except Exception:
+        pass
+
     db.commit()
     return {"id": section.id, "version_id": ver.id, "version": version_num}
 
@@ -523,14 +576,12 @@ class AssembleBody(BaseModel):
 @router.post("/assemble")
 def assemble_preview(body: AssembleBody, user: RequireAdmin, db: Session = Depends(get_db)):
     """Live compose preview for Prompt Studio (V2 path when profiles exist / flag on)."""
-    from app.config import get_settings
     from app.pipeline.composer import ComposeInput
     from app.prompt_engine.attachments import ImageContext
     from app.prompt_engine.engine import build_final_prompt
     from app.prompt_engine.profile_compose import (
         compose_from_profiles,
         resolve_reference_mode,
-        serialize_sections,
     )
 
     sim = body.simulate_images or {}
@@ -600,14 +651,14 @@ def assemble_preview(body: AssembleBody, user: RequireAdmin, db: Session = Depen
         style_preset_addon=body.style_preset_addon,
     )
 
-    # Prefer V2 compose for preview when profiles exist or flag is on
-    from app.models import PromptProfile
+    from app.prompt_engine.profile_compose import should_use_profile_v2_compose
 
-    has_profiles = (
-        db.query(PromptProfile).filter(PromptProfile.workflow == body.workflow.upper()).first()
-        is not None
+    use_v2 = should_use_profile_v2_compose(
+        db,
+        workflow=body.workflow,
+        jewelry_type=body.jewelry_type,
+        has_reference=bool(ctx and ctx.has_style_reference),
     )
-    use_v2 = get_settings().prompt_profile_v2 or has_profiles
 
     if use_v2:
         result = compose_from_profiles(db, inp, image_ctx=ctx)

@@ -57,6 +57,11 @@ export function UploadZone({
     applyFiles(e.dataTransfer.files);
   };
 
+  const handleClear = () => {
+    if (inputRef.current) inputRef.current.value = "";
+    onClear?.();
+  };
+
   const hasPreview = previews.length > 0;
 
   const fileInput = (
@@ -123,7 +128,7 @@ export function UploadZone({
                   {onClear ? (
                     <button
                       type="button"
-                      onClick={onClear}
+                      onClick={handleClear}
                       className="flex size-7 items-center justify-center rounded-md text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                       aria-label="Clear image"
                       title="Clear"
@@ -212,7 +217,7 @@ export function UploadZone({
             {onClear && (
               <button
                 type="button"
-                onClick={onClear}
+                onClick={handleClear}
                 className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                 title="Clear"
                 aria-label="Clear image"
@@ -291,7 +296,7 @@ export function UploadZone({
           {onClear && (
             <button
               type="button"
-              onClick={onClear}
+              onClick={handleClear}
               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
             >
               <X className="size-3" /> Clear

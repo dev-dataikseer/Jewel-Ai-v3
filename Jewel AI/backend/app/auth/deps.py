@@ -11,7 +11,10 @@ from app.models import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-ROLE_HIERARCHY = {"user": 1, "admin": 2, "operator": 1, "viewer": 1}
+# Only two effective levels: user (1) and admin (2).
+# "operator" and "viewer" are intentional aliases for "user" — they exist
+# so that future granular RBAC can be introduced without changing call sites.
+ROLE_HIERARCHY = {"user": 1, "operator": 1, "viewer": 1, "admin": 2}
 
 
 def _lookup_active_user(db: Session, user_id: str) -> User | None:
@@ -50,5 +53,7 @@ def require_role(min_role: str) -> Callable:
 
 RequireAdmin = Annotated[User, Depends(require_role("admin"))]
 RequireUser = Annotated[User, Depends(require_user)]
-RequireOperator = Annotated[User, Depends(require_role("user"))]
-RequireViewer = Annotated[User, Depends(require_role("user"))]
+# Explicit aliases — currently equivalent to RequireUser; named for future RBAC granularity.
+RequireOperator = RequireUser
+RequireViewer = RequireUser
+

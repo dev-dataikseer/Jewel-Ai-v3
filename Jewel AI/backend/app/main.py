@@ -26,7 +26,7 @@ from app.api.routers import (
 from app.config import get_settings, validate_production_settings, assert_production_settings
 from app.database import Base, SessionLocal, engine
 import app.models  # noqa: F401 — register all tables before create_all
-from app.logging_config import setup_logging
+from app.logging_config import get_logger, setup_logging
 from app.providers import circuit_breaker
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.storage.local import storage
@@ -34,6 +34,8 @@ from seeds.run_seeds import run_all_seeds
 
 settings = get_settings()
 setup_logging()
+logger = get_logger(__name__)
+
 
 APP_VERSION = "4.3.0"
 
@@ -58,9 +60,7 @@ def _init_sentry() -> None:
             ],
         )
     except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("Sentry init failed (API)")
+        logger.exception("Sentry init failed (API)")
 
 
 _init_sentry()
@@ -96,15 +96,11 @@ async def lifespan(app: FastAPI):
     try:
         migrate_batch_wallclock_columns(engine)
     except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("migrate_batch_wallclock_columns skipped")
+        logger.exception("migrate_batch_wallclock_columns skipped")
     try:
         migrate_prompt_fragments(engine)
     except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("migrate_prompt_fragments skipped")
+        logger.exception("migrate_prompt_fragments skipped")
     # When SCHEMA_VIA_ALEMBIC=true, operators run `alembic upgrade head` — no boot DDL.
     db = SessionLocal()
     try:
@@ -117,9 +113,7 @@ async def lifespan(app: FastAPI):
             db.commit()
         except Exception:
             db.rollback()
-            import logging
-
-            logging.getLogger(__name__).exception("seed_prompt_fragments skipped")
+            logger.exception("seed_prompt_fragments skipped")
         run_all_seeds(db)
         # Do NOT run sweep_stuck_jobs on API boot — that historically re-enqueued
         # fal jobs on every Railway redeploy and burned provider credits. Beat
@@ -148,9 +142,7 @@ async def lifespan(app: FastAPI):
     if settings.is_production:
         assert_production_settings()
     for warning in validate_production_settings():
-        import logging
-
-        logging.getLogger(__name__).warning("Production config: %s", warning)
+        logger.warning("Production config: %s", warning)
     yield
 
 
@@ -227,30 +219,17 @@ else:
     # Always serve via signed/auth router (no anonymous StaticFiles).
     app.include_router(storage_files.router)
 
-app.include_router(auth.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(assets.router, prefix="/api")
-app.include_router(jobs.router, prefix="/api")
-app.include_router(prompts.router, prefix="/api")
-app.include_router(prompt_profiles_v2.router, prefix="/api")
-app.include_router(providers.router, prefix="/api")
-app.include_router(models.router, prefix="/api")
-app.include_router(billing.router, prefix="/api")
-app.include_router(misc.router, prefix="/api")
-app.include_router(public.router, prefix="/api")
+ROUTERS = [
+    auth, users, assets, jobs, prompts, prompt_profiles_v2, 
+    providers, models, billing, misc, public
+]
+for r in ROUTERS:
+    app.include_router(r.router, prefix="/api")
 
-# API version alias — /api/v1/* mirrors /api/* for future breaking-change freeze.
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(assets.router, prefix="/api/v1")
-app.include_router(jobs.router, prefix="/api/v1")
-app.include_router(prompts.router, prefix="/api/v1")
-app.include_router(prompt_profiles_v2.router, prefix="/api/v1")
-app.include_router(providers.router, prefix="/api/v1")
-app.include_router(models.router, prefix="/api/v1")
-app.include_router(billing.router, prefix="/api/v1")
-app.include_router(misc.router, prefix="/api/v1")
-app.include_router(public.router, prefix="/api/v1")
+# All application routes are served exclusively under /api/*.
+# A second /api/v1/* block was previously registered as a "version alias" but
+# was never called by any client — removed to halve the route table and avoid
+# silent divergence when adding new routers.
 
 
 @app.get("/health")
@@ -298,31 +277,8 @@ if STATIC_DIR.is_dir():
         """HTML shell with Open Graph tags for crawlers / link previews."""
         from fastapi.responses import HTMLResponse
 
-        from app.database import SessionLocal
-        from app.models import GenerationJob, ShareLink
-        from app.security.media_signing import sign_media_url
-
-        title = "Jewel AI — Shared generation"
-        description = "Shared jewelry generation from Jewel AI Studio"
-        image = ""
-        db = SessionLocal()
-        try:
-            link = db.query(ShareLink).filter(ShareLink.token == token).first()
-            if link:
-                job = db.query(GenerationJob).filter(GenerationJob.id == link.job_id).first()
-                if job:
-                    title = f"Jewel AI — {job.workflow}"
-                    if job.jewelry_type:
-                        description = f"{job.jewelry_type} · {job.workflow}"
-                    raw = job.output_url or ((job.output_urls or [None])[0])
-                    if raw:
-                        signed = sign_media_url(raw) or raw
-                        if signed.startswith("http"):
-                            image = signed
-                        else:
-                            image = f"{settings.api_public_url.rstrip('/')}{signed}"
-        finally:
-            db.close()
+        from app.services.share_links import get_share_og_metadata
+        title, description, image = get_share_og_metadata(token)
 
         index = STATIC_DIR / "index.html"
         # Prefer injecting into SPA index so React still boots for humans.

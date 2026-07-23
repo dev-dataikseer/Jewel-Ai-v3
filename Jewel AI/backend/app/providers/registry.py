@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -7,8 +6,17 @@ from app.auth.security import decrypt_secret
 from app.config import get_settings
 from app.models import ModelDefinition, Provider
 from app.providers.adapters.fal import FalAdapter
+from app.providers.types import ProviderAdapter
 
 settings = get_settings()
+
+# Explicit mapping from provider env_key_name to Settings attribute.
+# Using getattr(settings, attr) dynamically is fragile: a typo in DB data
+# silently returns None instead of raising an error.
+_ENV_KEY_TO_SETTINGS_ATTR: dict[str, str] = {
+    "FAL_KEY": "fal_key",
+    "FAL_ADMIN_KEY": "fal_admin_key",
+}
 
 ADAPTER_MAP = {
     "FAL": FalAdapter,
@@ -26,12 +34,20 @@ def _resolve_api_key(provider: Provider) -> str | None:
         env_val = os.environ.get(provider.env_key_name)
         if env_val:
             return env_val
-        attr = provider.env_key_name.lower()
-        return getattr(settings, attr, None)
+        # Use the explicit mapping rather than dynamic getattr which can
+        # silently return None for any typo or unknown key name in DB.
+        attr = _ENV_KEY_TO_SETTINGS_ATTR.get(provider.env_key_name)
+        if attr:
+            return getattr(settings, attr, None)
     return settings.fal_key or None
 
 
-def build_adapter(provider: Provider) -> FalAdapter:
+def build_adapter(provider: Provider) -> ProviderAdapter:
+    """Build an adapter for the given provider.
+
+    Returns a ``ProviderAdapter`` abstraction so callers depend on the
+    protocol, not the concrete ``FalAdapter`` implementation (DIP).
+    """
     api_key = _resolve_api_key(provider)
     cls = ADAPTER_MAP.get(provider.name)
     if not cls:

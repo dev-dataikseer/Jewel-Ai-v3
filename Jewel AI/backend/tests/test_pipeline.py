@@ -1,5 +1,5 @@
 import pytest
-from app.pipeline.composer import ComposeInput, slugify
+from app.pipeline.composer import slugify
 from app.pipeline.validator import validate_job_create, whitelist_job_fields
 
 

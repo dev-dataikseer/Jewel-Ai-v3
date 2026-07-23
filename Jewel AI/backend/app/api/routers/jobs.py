@@ -9,17 +9,19 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.auth.deps import RequireAdmin, RequireUser
+from app.auth.deps import RequireUser
 from app.auth.security import create_job_stream_token, decode_job_stream_token
 from app.config import get_settings
+from app.constants import BULK_SUPPORTED_WORKFLOWS
 from app.database import SessionLocal, get_db
-from app.models import Asset, Batch, Favorite, GenerationJob, Project, ShareLink, User
+from app.models import Asset, Batch, Favorite, GenerationJob, Project, User
 from app.pipeline.validator import validate_job_create, whitelist_job_fields
 from app.providers.model_validate import validate_generation_request, validate_model_params
 from app.providers.registry import get_model_definition, resolve_default_endpoint
 from app.providers.types import GenerationRequest
-from app.schemas.common import BatchOut, BulkJobCreate, JobCreate, JobOut, ShareLinkCreate
+from app.schemas.common import BatchOut, BulkJobCreate, JobCreate, JobOut
 from app.services.queue_dispatch import enqueue_image_job, enqueue_image_jobs
+
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -395,19 +397,9 @@ def create_bulk_jobs(
         has_reference=bool(body.reference_url),
     )
     workflow = resolved.workflow
-    if workflow not in (
-        "CATALOG_IMAGE",
-        "VIRTUAL_TRY_ON",
-        "GEMSTONE_COLOR_CHANGE",
-        "BACKGROUND_REPLACEMENT",
-        "LUXURY_ENHANCEMENT",
-        "CUSTOM_PROMPT",
-        # legacy accepted then remapped above
-        "JEWELRY_ON_MODEL",
-        "CUSTOMER_TRY_ON",
-        "REFERENCE_STYLE_MATCH",
-    ):
+    if workflow not in BULK_SUPPORTED_WORKFLOWS:
         raise HTTPException(status_code=400, detail=f"Bulk not supported for workflow: {workflow}")
+
 
     data = whitelist_job_fields(body.model_dump())
     data["workflow"] = workflow

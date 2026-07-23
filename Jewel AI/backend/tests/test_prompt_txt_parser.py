@@ -1,6 +1,5 @@
 """Tests for data/seed-prompt-templates/*.txt parser."""
 
-from pathlib import Path
 
 from app.pipeline.layer_derive import parse_labeled_sections
 from seeds.prompt_txt_parser import (

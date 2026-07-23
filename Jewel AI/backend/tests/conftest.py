@@ -9,6 +9,12 @@ import app.models  # noqa: F401
 from app.database import Base
 
 
+@pytest.fixture(autouse=True)
+def _mock_allow_file_fallback(monkeypatch):
+    """Ensure file fallback is enabled for all prompt tests even if NODE_ENV=production."""
+    import app.prompt_engine.fragment_store as store
+    monkeypatch.setattr(store, "_allow_file_fallback", lambda: True)
+
 @pytest.fixture()
 def db_session():
     engine = create_engine(

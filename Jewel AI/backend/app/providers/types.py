@@ -1,5 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from app.models import ModelDefinition
 
 
 @dataclass
@@ -43,3 +50,28 @@ class ProviderStatus:
     healthy: bool
     message: str = ""
     latency_ms: float | None = None
+
+
+@runtime_checkable
+class ProviderAdapter(Protocol):
+    """Abstraction that all provider adapters must satisfy.
+
+    High-level modules (router, registry) depend on this protocol rather
+    than concrete adapter classes, satisfying the Dependency Inversion
+    Principle. Adding a new provider only requires implementing this protocol.
+    """
+
+    async def generate(
+        self,
+        request: GenerationRequest,
+        *,
+        model_def: ModelDefinition | None = None,
+        db: Session | None = None,
+    ) -> GenerationResult:
+        """Run image generation and return a result."""
+        ...
+
+    async def health_check(self) -> ProviderStatus:
+        """Return the current health of this provider."""
+        ...
+

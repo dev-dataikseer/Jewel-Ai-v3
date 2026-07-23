@@ -314,6 +314,15 @@ def compose_prompt_document(db: Session, inp: ComposeInput) -> ComposedDocument:
         "variant_text": variant_text or "",
     }
 
+    from app.pipeline.layers import render_multi_subject_layers, render_subject_layers
+
+    if len(jewelry_types) > 1:
+        subtype_parts = render_multi_subject_layers(subject_layers_by_type, variables, db=db)
+    else:
+        subtype_parts = render_subject_layers(subject_layers, variables)
+    if subtype_parts:
+        variables["SUBTYPE_BLOCK"] = "\n\n".join(subtype_parts)
+
     try:
         _body_parts, negative, layer_debug, budget_parts = assemble_layer_parts(
             master_layers,

@@ -11,7 +11,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from io import BytesIO
 from pathlib import Path
 
 BASE = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")

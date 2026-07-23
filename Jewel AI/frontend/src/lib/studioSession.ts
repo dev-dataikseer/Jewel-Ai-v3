@@ -21,6 +21,7 @@ export type StudioSessionDraft = {
   lastBatchId?: string | null;
   /** Locked asset URLs from a loaded history job (no File objects). */
   lockedInputUrl?: string | null;
+  lockedAssetId?: string | null;
   lockedReferenceUrl?: string | null;
   lockedModelUrl?: string | null;
   lockedThemeUrl?: string | null;

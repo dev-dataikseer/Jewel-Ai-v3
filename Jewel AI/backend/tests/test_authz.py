@@ -12,7 +12,7 @@ import app.models  # noqa: F401
 from app.auth.security import create_access_token, create_webhook_token, hash_password
 from app.database import Base, get_db
 from app.main import app
-from app.models import Asset, Favorite, GenerationJob, User
+from app.models import Asset, GenerationJob, User
 
 
 @pytest.fixture()

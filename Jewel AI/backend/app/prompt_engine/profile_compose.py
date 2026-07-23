@@ -188,6 +188,54 @@ def load_jewelry(
     return section, ver
 
 
+def jewelry_content_nonempty(content_json: dict | None) -> bool:
+    if not content_json or not isinstance(content_json, dict):
+        return False
+    return any(str(v).strip() for v in content_json.values() if v is not None)
+
+
+def jewelry_type_has_prompt(db: Session, workflow: str, jewelry_type: str) -> bool:
+    _sec, jver = load_jewelry(db, workflow, jewelry_type)
+    return bool(jver and jewelry_content_nonempty(jver.content_json))
+
+
+def should_use_profile_v2_compose(
+    db: Session,
+    *,
+    workflow: str,
+    jewelry_type: str | None = None,
+    has_reference: bool = False,
+    prompt_profile_v2_flag: bool | None = None,
+) -> bool:
+    """Match job compose and Admin preview: V2 when flag, profile, or non-empty jewelry."""
+    from app.config import get_settings
+
+    if prompt_profile_v2_flag is None:
+        prompt_profile_v2_flag = get_settings().prompt_profile_v2
+    if prompt_profile_v2_flag:
+        return True
+
+    wf = workflow.upper()
+    mode = REF_WITH if has_reference else REF_WITHOUT
+    row = (
+        db.query(PromptProfile)
+        .filter(
+            PromptProfile.workflow == wf,
+            PromptProfile.reference_mode == mode,
+            PromptProfile.is_active.is_(True),
+        )
+        .first()
+    )
+    if row and row.active_version_id:
+        return True
+
+    if jewelry_type:
+        for jt in normalize_jewelry_types(parse_jewelry_types(jewelry_type)):
+            if jewelry_type_has_prompt(db, wf, jt):
+                return True
+    return False
+
+
 def load_variant(
     db: Session,
     workflow: str,
@@ -376,13 +424,16 @@ def compose_from_profiles(
     jewelry_merged: dict[str, str] = {}
     for jt in jewelry_types or ([] if not inp.jewelry_type else [inp.jewelry_type]):
         _sec, jver = load_jewelry(db, workflow, jt)
-        if jver and isinstance(jver.content_json, dict):
+        if jver and isinstance(jver.content_json, dict) and jewelry_content_nonempty(jver.content_json):
             jewelry_version_id = jver.id
             for k, v in jver.content_json.items():
                 if v is None:
                     continue
+                text = str(v).strip()
+                if not text:
+                    continue
                 key = k if len(jewelry_types) <= 1 else f"{jt.upper()}_{k}"
-                jewelry_merged[key] = str(v)
+                jewelry_merged[key] = text
 
     # Variant
     variant_value = _variant_value_for(inp)
@@ -426,8 +477,9 @@ def compose_from_profiles(
         raise HTTPException(
             status_code=404,
             detail=(
-                f"No Prompt Profile V2 content for workflow={workflow} "
-                f"reference_mode={reference_mode}. Seed profiles or disable PROMPT_PROFILE_V2."
+                f"No prompt content for workflow={workflow} "
+                f"reference_mode={reference_mode} jewelry_type={inp.jewelry_type!r}. "
+                "Save a workflow profile and/or jewelry-type prompt in Admin → Prompts."
             ),
         )
     parts = [

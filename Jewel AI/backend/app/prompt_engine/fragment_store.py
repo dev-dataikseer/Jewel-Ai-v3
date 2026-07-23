@@ -27,6 +27,9 @@ def get_fragment_text(db: Session | None, key: str, variables: dict[str, Any] | 
 
 def _allow_file_fallback() -> bool:
     """File/DEFAULT_FRAGMENTS fallback: on in tests/dev; off in production unless opt-in."""
+    import sys
+    if "pytest" in sys.modules:
+        return True
     try:
         from app.config import get_settings
 

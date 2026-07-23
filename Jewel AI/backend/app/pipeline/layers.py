@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from jinja2 import BaseLoader, StrictUndefined, UndefinedError

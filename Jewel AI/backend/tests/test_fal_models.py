@@ -1,4 +1,3 @@
-import pytest
 
 from app.pipeline.composer import slugify
 from app.pipeline.layers import render_jinja

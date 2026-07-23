@@ -1,0 +1,86 @@
+{
+  "upload_ms": 636,
+  "asset_id": "87cc5be5-c98b-4c07-9cec-75eaba6f161c",
+  "runs": [
+    {
+      "ok": true,
+      "job_id": "0c4e530b-c678-40a7-b74d-2ebef167265b",
+      "status": "COMPLETED",
+      "create_ms": 3065,
+      "wall_ms": 27982,
+      "model": "fal-ai/nano-banana-pro/edit",
+      "fal_request_id": "019f891e-af5c-7683-bd59-534fb82966ae",
+      "fal_inference_time": null,
+      "durationSplits": {
+        "prep_ms": 148,
+        "fal_inference_ms": null,
+        "fal_queue_wait_ms": 21481,
+        "fal_wall_ms": 21481,
+        "finalize_ms": 157,
+        "worker_total_ms": 22643
+      },
+      "latencyTrace": {
+        "T1_prep_ms": 159,
+        "T2_fal_api_ms": 21481,
+        "T2_fal_mode": "subscribe",
+        "fal_image_prep_ms": 0,
+        "fal_build_args_ms": 0,
+        "fal_cdn_fetch_ms": 807,
+        "T3_post_ms": 163,
+        "fal_request_id": "019f891e-af5c-7683-bd59-534fb82966ae"
+      },
+      "timing": {
+        "queued": "2026-07-22T09:18:34.941482+00:00",
+        "worker_started": "2026-07-22T09:18:37.109777+00:00",
+        "prompt_ready": "2026-07-22T09:18:37.258039+00:00",
+        "fal_submit": "2026-07-22T09:18:37.258067+00:00",
+        "fal_result_received": "2026-07-22T09:18:59.595772+00:00",
+        "storage_saved": "2026-07-22T09:18:59.752951+00:00",
+        "completed": "2026-07-22T09:18:59.752951+00:00"
+      },
+      "error": null,
+      "run_id": "D",
+      "purpose": "prompt_weight"
+    },
+    {
+      "ok": true,
+      "job_id": "8e376c18-a1cf-40a9-9a6d-9df5d1ae4d5b",
+      "status": "COMPLETED",
+      "create_ms": 634,
+      "wall_ms": 192510,
+      "model": "openai/gpt-image-2/edit",
+      "fal_request_id": "019f891f-14d1-7790-8f32-d27eff69a057",
+      "fal_inference_time": null,
+      "durationSplits": {
+        "prep_ms": 239,
+        "fal_inference_ms": null,
+        "fal_queue_wait_ms": 189441,
+        "fal_wall_ms": 189441,
+        "finalize_ms": 211,
+        "worker_total_ms": 190866
+      },
+      "latencyTrace": {
+        "T1_prep_ms": 253,
+        "T2_fal_api_ms": 189441,
+        "T2_fal_mode": "subscribe",
+        "fal_image_prep_ms": 0,
+        "fal_build_args_ms": 0,
+        "fal_cdn_fetch_ms": 924,
+        "T3_post_ms": 219,
+        "fal_request_id": "019f891f-14d1-7790-8f32-d27eff69a057"
+      },
+      "timing": {
+        "queued": "2026-07-22T09:19:02.951264+00:00",
+        "worker_started": "2026-07-22T09:19:02.982536+00:00",
+        "prompt_ready": "2026-07-22T09:19:03.222331+00:00",
+        "fal_submit": "2026-07-22T09:19:03.222356+00:00",
+        "fal_result_received": "2026-07-22T09:22:13.637205+00:00",
+        "storage_saved": "2026-07-22T09:22:13.848976+00:00",
+        "completed": "2026-07-22T09:22:13.848976+00:00"
+      },
+      "error": null,
+      "run_id": "E",
+      "purpose": "alternate_model"
+    }
+  ]
+}

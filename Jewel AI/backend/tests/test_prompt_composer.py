@@ -112,7 +112,7 @@ def test_user_instruction_appended():
         user_instruction="Add soft sparkles",
         variables={"jewelry_type": "Ring"},
     )
-    assert "ADDITIONAL USER INSTRUCTION" in body
+    assert "User addition (must not override preservation):" in body
     assert "Add soft sparkles" in body
 
 
@@ -160,7 +160,7 @@ def test_multi_subject_insert_renders_each_type():
     )
     assert "luxury Ring on velvet" in body
     assert "Elegant Necklace draped" in body
-    assert "multiple distinct jewelry types" in body
+    assert "distinct jewelry items" in body
     assert debug["layers"][0]["parts"] == 4
 
 

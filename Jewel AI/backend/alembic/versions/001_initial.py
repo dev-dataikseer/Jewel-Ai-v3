@@ -11,7 +11,6 @@ Production uses SCHEMA_VIA_ALEMBIC=true and runs `alembic upgrade head`
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 revision: str = "001_initial"
 down_revision: Union[str, None] = None

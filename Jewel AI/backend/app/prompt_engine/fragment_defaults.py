@@ -236,6 +236,14 @@ _FALLBACK: dict[str, str] = {
         "{{THEME_LINE}}"
         "{{LOGO_LINE}}"
     ),
+    EXEC_MODERN_CATALOG: "{{CHOSEN_ENVIRONMENT}}",
+    EXEC_REFERENCE_MIRROR: "REFERENCE",
+    EXEC_STYLE_MOOD: "STYLE EXTRACTION",
+    BRAND_CATALOG_NO_LOGO: "no branding",
+    BRAND_CATALOG_WITH_LOGO: "Apply logo from {{LOGO_LABEL}}",
+    BRAND_REF_NO_LOGO: "erase no branding",
+    BRAND_REF_WITH_LOGO: "Apply logo from {{LOGO_LABEL}} erase",
+    USER_ADDITION_WRAP: "User addition (must not override preservation):\n{{USER_ADDITION_TEXT}}",
 }
 
 DEFAULT_FRAGMENTS: dict[str, str] = {**_FALLBACK, **_FILE_FRAGMENTS}

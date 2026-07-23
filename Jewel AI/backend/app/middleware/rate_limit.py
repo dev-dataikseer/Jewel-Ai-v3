@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
+from app.redis_client import get_redis_client, invalidate_redis_client
 
 _buckets: dict[str, list[float]] = defaultdict(list)
 LIMIT = 30
@@ -16,30 +17,7 @@ AUTH_WINDOW = 60
 WEBHOOK_LIMIT = 60
 BULK_LIMIT = 10
 settings = get_settings()
-_redis_client = None
-_redis_checked_at = 0.0
-_REDIS_RETRY_SECONDS = 5.0
 
-
-def _get_redis():
-    """Return Redis client; retry after failures so a blip does not latch forever."""
-    global _redis_client, _redis_checked_at
-    now = time.time()
-    if _redis_client is not None:
-        return _redis_client
-    if _redis_checked_at and (now - _redis_checked_at) < _REDIS_RETRY_SECONDS:
-        return None
-    _redis_checked_at = now
-    try:
-        import redis
-
-        client = redis.from_url(settings.redis_url, socket_connect_timeout=1)
-        client.ping()
-        _redis_client = client
-        return _redis_client
-    except Exception:
-        _redis_client = None
-        return None
 
 
 def _rate_limit_key(request: Request) -> str:
@@ -70,7 +48,7 @@ def _allow(key: str, limit: int, window: int = WINDOW, *, fail_closed: bool = Fa
 
     When fail_closed=True (prod auth), Redis must be reachable — otherwise deny.
     """
-    client = _get_redis()
+    client = get_redis_client()
     if client:
         now = int(time.time())
         bucket = f"rl:{key}:{now // window}"
@@ -81,8 +59,7 @@ def _allow(key: str, limit: int, window: int = WINDOW, *, fail_closed: bool = Fa
             return count <= limit
         except Exception:
             # Drop dead client so the next request can reconnect.
-            global _redis_client
-            _redis_client = None
+            invalidate_redis_client()
             if fail_closed:
                 return False
     elif fail_closed:

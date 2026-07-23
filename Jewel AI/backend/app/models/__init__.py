@@ -46,7 +46,7 @@ class User(Base):
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     credits: Mapped[int] = mapped_column(Integer, default=100)
     role: Mapped[str] = mapped_column(String(32), default="user")
-    team_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("teams.id"), nullable=True)
+    team_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("teams.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     encrypted_totp_secret: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
@@ -65,10 +65,10 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    actor_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(128), nullable=False)
-    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     before: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     after: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -111,7 +111,7 @@ class PromptMasterVersion(Base):
     __tablename__ = "prompt_master_versions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    template_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_master_templates.id"), nullable=False)
+    template_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_master_templates.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     system_role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -162,7 +162,7 @@ class PromptSubjectVersion(Base):
     __tablename__ = "prompt_subject_versions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    subject_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_subjects.id"), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_subjects.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     core_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -202,7 +202,7 @@ class PromptVariantVersion(Base):
     __tablename__ = "prompt_variant_versions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    variant_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_variants.id"), nullable=False)
+    variant_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_variants.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
     negative_addon: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -235,7 +235,7 @@ class PromptFragmentVersion(Base):
     __tablename__ = "prompt_fragment_versions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    fragment_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_fragments.id"), nullable=False)
+    fragment_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_fragments.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
     # For ENVIRONMENT_POOL: JSON list of environment sentences (also mirrored in prompt_text as joined lines)
@@ -275,7 +275,7 @@ class PromptProfileVersion(Base):
     __tablename__ = "prompt_profile_versions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_profiles.id"), nullable=False)
+    profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("prompt_profiles.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     # Ordered section map: {"ROLE": "...", "CAMERA": "...", "NEGATIVE PROMPT": "..."}
     content_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
@@ -314,7 +314,7 @@ class PromptJewelrySectionVersion(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     section_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("prompt_jewelry_sections.id"), nullable=False
+        String(36), ForeignKey("prompt_jewelry_sections.id"), nullable=False, index=True
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     content_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

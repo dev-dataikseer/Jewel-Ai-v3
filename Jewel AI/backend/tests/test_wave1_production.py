@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from app.providers.model_catalog.preprocess import _is_fal_cdn_url
 
@@ -18,7 +17,7 @@ def test_fal_cdn_url_rejects_substring_spoof():
 
 
 def test_process_job_skips_completed(monkeypatch):
-    from app.tasks import generate as gen
+    from app.tasks import job_runner as gen
 
     completed = SimpleNamespace(id="j1", status="COMPLETED", provider_metadata={})
     db = MagicMock()

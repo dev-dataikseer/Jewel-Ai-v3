@@ -226,7 +226,8 @@ export function StudioInspectorPanel(props: Props) {
                 Additional instruction (optional)
               </label>
               <p className="mb-1.5 text-[11px] text-jewel-ink-muted leading-relaxed">
-                Optional add-on only. Master workflow prompts are configured in Admin → Prompts.
+                Optional add-on only. Jewelry-type and workflow prompts come from Admin → Prompts;
+                leave this empty unless you need a one-off note.
               </p>
               <div className="relative">
                 <textarea

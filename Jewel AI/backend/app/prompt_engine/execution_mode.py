@@ -25,7 +25,7 @@ from app.prompt_engine.fragment_defaults import (
     substitute,
 )
 from app.prompt_engine.fragment_store import get_environment_pool, get_fragment_meta, get_fragment_text
-from app.prompt_engine.workflow_resolve import CATALOG_EXEC_WORKFLOWS, CatalogMode
+from app.prompt_engine.workflow_resolve import CatalogMode
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.prompt_engine.attachments import ImageContext, append_attachments, role_index
 from app.prompt_engine.document import FinalPrompt
 from app.prompt_engine.execution_mode import (
@@ -51,22 +50,14 @@ def build_final_prompt(
         try_on_mode=getattr(inp, "try_on_mode", None),
         has_reference=bool(ctx_early.has_style_reference) if ctx_early else False,
     )
-    use_v2 = get_settings().prompt_profile_v2
-    if not use_v2:
-        from app.models import PromptProfile
+    from app.prompt_engine.profile_compose import should_use_profile_v2_compose
 
-        # Require BOTH reference modes (or the needed one) so logo-only cannot flip engines.
-        mode = "with_reference" if has_ref else "without_reference"
-        row = (
-            db.query(PromptProfile)
-            .filter(
-                PromptProfile.workflow == resolved_early.workflow,
-                PromptProfile.reference_mode == mode,
-                PromptProfile.is_active.is_(True),
-            )
-            .first()
-        )
-        use_v2 = bool(row and row.active_version_id)
+    use_v2 = should_use_profile_v2_compose(
+        db,
+        workflow=resolved_early.workflow,
+        jewelry_type=getattr(inp, "jewelry_type", None),
+        has_reference=has_ref,
+    )
 
     if use_v2:
         from app.prompt_engine.profile_compose import build_final_prompt_v2
@@ -205,27 +196,35 @@ def build_final_prompt(
             BACKGROUND_SOURCE_GENERATED,
             BACKGROUND_SOURCE_REF,
         )
-        from app.prompt_engine.fragment_store import get_fragment_text
+        from app.prompt_engine.fragment_store import get_fragment_meta
         from app.prompt_engine.document import PromptPart
 
         if ctx.has_style_reference:
-            src = get_fragment_text(db, BACKGROUND_SOURCE_REF)
+            meta = get_fragment_meta(db, BACKGROUND_SOURCE_REF)
+            src = meta.get("text") or ""
+            if meta.get("version_id"):
+                fragment_versions[BACKGROUND_SOURCE_REF] = meta["version_id"]
         else:
             from app.prompt_engine.environment_rotation import choose_environment
 
             environment_chosen = choose_environment(user_id, job_id, db=db)
-            src = get_fragment_text(
+            meta = get_fragment_meta(
                 db, BACKGROUND_SOURCE_GENERATED, {"CHOSEN_ENVIRONMENT": environment_chosen}
             )
-        doc = doc.clone()
-        doc.parts.append(
-            PromptPart(
-                key="background_source",
-                text=f"INSTRUCTION background source: {src}",
-                priority="important",
-                source="attachment",
+            src = meta.get("text") or ""
+            if meta.get("version_id"):
+                fragment_versions[BACKGROUND_SOURCE_GENERATED] = meta["version_id"]
+
+        if src:
+            doc = doc.clone()
+            doc.parts.append(
+                PromptPart(
+                    key="background_source",
+                    text=f"INSTRUCTION background source: {src}",
+                    priority="important",
+                    source="attachment",
+                )
             )
-        )
 
     doc = append_attachments(doc, workflow, ctx, db=db)
     final = adapt_document(

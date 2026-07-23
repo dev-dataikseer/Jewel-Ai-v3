@@ -46,11 +46,11 @@ export function ResultsTray({
         type="button"
         onClick={onRegenerate}
         disabled={regenerating}
-        aria-label="Regenerate image"
+        aria-label="Generate again with current settings"
         className="ui-btn-secondary h-8 shrink-0 px-2.5 text-[11px]"
       >
         <RefreshCcw className={`size-3.5 ${regenerating ? "animate-spin" : ""}`} />
-        Regen
+        Again
       </button>
       {onDownload ? (
         <a

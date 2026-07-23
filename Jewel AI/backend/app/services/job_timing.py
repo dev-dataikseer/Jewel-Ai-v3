@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.models import GenerationJob
+from app.redis_client import get_redis_client
 
 _MEMORY_AVG: dict[str, list[float]] = {}
 _MAX_SAMPLES = 40
-_redis_client = None
+
 
 
 def _endpoint_key(job: GenerationJob) -> str:
@@ -24,22 +25,9 @@ def _endpoint_key(job: GenerationJob) -> str:
 
 
 def _get_redis():
-    """Reuse a single Redis client for ETA sample reads/writes."""
-    global _redis_client
-    if _redis_client is not None:
-        return _redis_client
-    try:
-        import redis
-        from app.config import get_settings
+    """Use the shared Redis singleton from redis_client module."""
+    return get_redis_client()
 
-        _redis_client = redis.from_url(
-            get_settings().redis_url,
-            decode_responses=True,
-            socket_connect_timeout=1,
-        )
-        return _redis_client
-    except Exception:
-        return None
 
 
 def _parse_iso(value: Any) -> datetime | None:
