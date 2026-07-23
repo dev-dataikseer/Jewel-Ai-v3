@@ -128,21 +128,29 @@ def get_environment_pool(db: Session | None = None) -> list[str]:
     return []
 
 def seed_prompt_fragments(db: Session, *, force: bool = False) -> int:
-    """Upsert fragment shells with seed text. Returns number of fragments ensured."""
+    """Ensure fragment shells exist for Admin. Returns number of fragments ensured.
+
+    By default shells are empty — prompt content is authored in Admin.
+    Pass force=True or set ALLOW_PROMPT_RESEED to fill DEFAULT_FRAGMENTS text.
+    """
+    from app.config import get_settings
     from app.models import PromptFragment, PromptFragmentVersion
     from app.prompt_engine.fragment_defaults import FRAGMENT_KEYS
 
+    fill_defaults = bool(force or get_settings().effective_allow_prompt_reseed)
     count = 0
     for key in FRAGMENT_KEYS:
-        text = DEFAULT_FRAGMENTS.get(key, "")
         content_json = None
-        prompt_text = text
-        if key == ENVIRONMENT_POOL:
-            content_json = list(DEFAULT_ENVIRONMENT_POOL)
-            prompt_text = json.dumps(content_json, indent=2)
-        if not prompt_text and key != ENVIRONMENT_POOL:
-            # Still create empty shell so Admin lists the key
-            prompt_text = ""
+        prompt_text = ""
+        if fill_defaults:
+            text = DEFAULT_FRAGMENTS.get(key, "")
+            prompt_text = text
+            if key == ENVIRONMENT_POOL:
+                content_json = list(DEFAULT_ENVIRONMENT_POOL)
+                prompt_text = json.dumps(content_json, indent=2)
+        elif key == ENVIRONMENT_POOL:
+            content_json = []
+            prompt_text = "[]"
 
         frag = db.query(PromptFragment).filter(PromptFragment.fragment_key == key).first()
         if not frag:
