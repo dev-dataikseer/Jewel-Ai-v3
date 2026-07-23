@@ -1,4 +1,0 @@
-EXECUTION MODE: MODERN CATALOG ENVIRONMENT
-1. Place the jewelry piece from Image 1 into the following environment, generated fresh for this image: {{CHOSEN_ENVIRONMENT}}
-2. Align the surface plane and horizon to match the jewelry piece's current resting orientation from Image 1. Generate a deep, dense contact shadow anchoring the piece to this surface based on its exact geometry.
-3. Do not use a velvet jewelry box, ring box, leather display stand, mannequin, or generic gradient studio backdrop under any circumstances.

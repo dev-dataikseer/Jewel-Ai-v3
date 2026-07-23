@@ -193,14 +193,29 @@ export function ModelSelector({
         >
           {models.map((m) => {
             const badge = m.ui?.badge ? ` · ${m.ui.badge}` : "";
+            const price =
+              m.cost_per_call !== undefined && m.cost_per_call !== null
+                ? ` ($${m.cost_per_call < 0.01 ? Number(m.cost_per_call.toFixed(4)) : Number(m.cost_per_call.toFixed(3))}/img)`
+                : "";
             return (
               <option key={m.endpoint_id} value={m.endpoint_id}>
                 {m.display_name}
                 {badge}
+                {price}
               </option>
             );
           })}
         </select>
+        {current?.cost_per_call !== undefined && current?.cost_per_call !== null ? (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200/80">
+              Est. ${current.cost_per_call < 0.01 ? Number(current.cost_per_call.toFixed(4)) : Number(current.cost_per_call.toFixed(3))} / image
+            </span>
+            {current.ui?.pricing_note ? (
+              <span className="text-[10px] text-slate-500">({current.ui.pricing_note})</span>
+            ) : null}
+          </div>
+        ) : null}
         {missingImage ? (
           <p className="mt-1 text-[10px] text-amber-600">
             Need {minImages}+ image{minImages > 1 ? "s" : ""}

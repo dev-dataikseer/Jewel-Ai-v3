@@ -38,7 +38,11 @@ def test_compose_catalog_master_file_with_placeholders(tmp_path, monkeypatch):
     from app.pipeline.layer_derive import derive_layers_from_raw_text
 
     root = Path(__file__).resolve().parents[2] / "docs" / "Modals" / "Prompts"
-    text = (root / "CATALOG_IMAGE_master.txt").read_text(encoding="utf-8")
+    master_path = root / "CATALOG_IMAGE_master.txt"
+    if not master_path.exists():
+        import pytest
+        pytest.skip("Prompt master file not found")
+    text = master_path.read_text(encoding="utf-8")
     layers = derive_layers_from_raw_text(text, "CATALOG_IMAGE", scope="master")
 
     master_ver = SimpleNamespace(

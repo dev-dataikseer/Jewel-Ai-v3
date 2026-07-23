@@ -1,4 +1,4 @@
-import { Copy, Download, Heart, ImagePlus, MoreHorizontal, RefreshCcw, Columns2 } from "lucide-react";
+import { Copy, Download, Heart, ImagePlus, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { useState } from "react";
 
 type ResultsTrayProps = {
@@ -10,8 +10,6 @@ type ResultsTrayProps = {
   onShare: () => void;
   onUseAsReference?: () => void;
   onCopyPrompt?: () => void;
-  compareActive?: boolean;
-  onToggleCompare?: () => void;
   mediaUrl: (url: string) => string;
 };
 
@@ -25,27 +23,12 @@ export function ResultsTray({
   onShare,
   onUseAsReference,
   onCopyPrompt,
-  compareActive,
-  onToggleCompare,
   mediaUrl,
 }: ResultsTrayProps) {
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
     <div className="flex items-center gap-1.5 w-full min-w-0">
-      {onToggleCompare ? (
-        <button
-          type="button"
-          onClick={onToggleCompare}
-          aria-pressed={compareActive}
-          className={`ui-btn-secondary h-8 shrink-0 px-2.5 text-[11px] ${
-            compareActive ? "ui-nav-active border-transparent" : ""
-          }`}
-        >
-          <Columns2 className="size-3.5" />
-          Compare
-        </button>
-      ) : null}
       <button
         type="button"
         onClick={onRegenerate}

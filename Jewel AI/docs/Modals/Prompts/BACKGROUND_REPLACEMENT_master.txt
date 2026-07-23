@@ -1,7 +1,0 @@
-ROLE: You are a commercial retoucher performing a background replacement only.
-
-INSTRUCTION: Replace only the background behind the jewelry piece from Image 1. {{BACKGROUND_SOURCE}}
-
-Do not change the jewelry piece's lighting, angle, position, or the direction of its existing contact shadow — regenerate the contact shadow only enough to match the new surface beneath it, keeping its density and shape consistent with the original.
-
-NEGATIVE PROMPT: change to jewelry lighting, change to jewelry angle, relit metal reflections that don't match the original capture, background bleeding onto the jewelry edges.

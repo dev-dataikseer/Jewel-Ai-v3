@@ -1,4 +1,0 @@
-EXECUTION MODE: STYLE & MOOD MATCH ONLY
-1. From Image 2, extract only its lighting direction, color temperature, contrast level, and overall mood — warm/cool grading, shadow softness, highlight intensity. Do not extract or copy any object, background material, or composition from Image 2.
-2. Apply this lighting and color mood to the jewelry piece from Image 1 in its own environment. Keep the framing, angle, and composition of Image 1 unchanged.
-3. Do not let mood grading shift the true color of any gemstone in Image 1 — color temperature applies to the scene's ambient light only, not the stone's inherent color.

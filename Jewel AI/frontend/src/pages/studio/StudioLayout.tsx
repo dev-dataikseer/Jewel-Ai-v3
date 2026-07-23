@@ -252,18 +252,6 @@ return (
               </div>
 
               <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0 shrink-0 items-stretch">
-                {compareMode ? (
-                  <button
-                    type="button"
-                    className="hidden md:flex absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 z-10 size-9 items-center justify-center rounded-full bg-white shadow-card border border-[var(--jewel-border)] text-[var(--jewel-accent)]"
-                    onClick={() => setCompareMode(false)}
-                    aria-pressed={true}
-                    aria-label="Exit compare mode"
-                  >
-                    <ChevronLeft className="size-4 -mr-1" />
-                    <ChevronRight className="size-4" />
-                  </button>
-                ) : null}
 
                 {/* Input card */}
                 <div className="flex h-full min-h-0 flex-col bg-white rounded-xl border border-[var(--jewel-border)] w-full overflow-hidden shadow-sm">
@@ -550,31 +538,7 @@ return (
                     ) : (
                       <div className="flex-1 flex flex-col min-h-0 rounded-lg border border-[var(--jewel-border)] bg-white overflow-hidden">
                         <div className="flex-1 relative min-h-0 flex items-center justify-center p-3">
-                          {compareMode ? (
-                            <div className="grid h-full w-full grid-cols-2 gap-2">
-                              <div className="flex items-center justify-center overflow-hidden rounded-md bg-[var(--jewel-surface-muted)]">
-                                {activeJob.input_url || productPreviewSrcs[0] ? (
-                                  <img
-                                    src={mediaUrl(
-                                      activeJob.input_url || productPreviewSrcs[0],
-                                    )}
-                                    alt="Input"
-                                    className="max-h-full max-w-full object-contain"
-                                  />
-                                ) : null}
-                              </div>
-                              <div className="flex items-center justify-center overflow-hidden rounded-md bg-[var(--jewel-surface-muted)]">
-                                {activeOutputUrl ? (
-                                  <img
-                                    src={mediaUrl(activeOutputUrl)}
-                                    alt="Output"
-                                    className="max-h-full max-w-full object-contain"
-                                    style={{ transform: `scale(${outputZoom})` }}
-                                  />
-                                ) : null}
-                              </div>
-                            </div>
-                          ) : activeOutputUrl ? (
+                          {activeOutputUrl ? (
                             <img
                               src={mediaUrl(activeOutputUrl)}
                               alt="Output"

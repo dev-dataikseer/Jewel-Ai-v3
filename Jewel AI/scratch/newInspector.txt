@@ -1,0 +1,323 @@
+          {/* Parameters — desktop inspector */}
+          <aside className="hidden h-full flex-col bg-white lg:flex relative border-l border-jewel-border">
+              {/* Tabs */}
+              <div className="flex items-center border-b border-jewel-border px-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab("settings")}
+                  className={`flex items-center gap-2 pb-3 pt-2 px-2 text-[13px] font-semibold transition-colors relative ${
+                    inspectorTab === "settings"
+                      ? "text-blue-600"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  <Settings2 className="size-4" />
+                  Settings
+                  {inspectorTab === "settings" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab("advanced")}
+                  className={`flex items-center gap-2 pb-3 pt-2 px-4 text-[13px] font-semibold transition-colors relative ${
+                    inspectorTab === "advanced"
+                      ? "text-blue-600"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  <SlidersHorizontal className="size-4" />
+                  Advanced
+                  {inspectorTab === "advanced" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t" />
+                  )}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-8">
+                {inspectorTab === "settings" && (
+                  <>
+                    {/* WORKFLOW block */}
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex items-center justify-between">
+                          Workflow
+                        </label>
+                        <select disabled className="ui-input bg-gray-50 text-gray-700">
+                          <option>{workflowLabel(workflow, options)}</option>
+                        </select>
+                      </div>
+
+                      {workflow === "VIRTUAL_TRY_ON" && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Try-On Mode</label>
+                          <select
+                            value={tryOnPreset}
+                            onChange={(e) =>
+                              setTryOnPreset(e.target.value as "studio" | "customer")
+                            }
+                            className="ui-input"
+                          >
+                            <option value="studio">Studio model look</option>
+                            <option value="customer">Customer photo</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      {isCatalog && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Catalog Mode</label>
+                          <select
+                            value={catalogMode}
+                            onChange={(e) =>
+                              setCatalogMode(
+                                e.target.value as "modern" | "reference_mirror" | "style_mood",
+                              )
+                            }
+                            className="ui-input"
+                          >
+                            <option value="modern">Modern catalog (auto environment)</option>
+                            <option value="reference_mirror">Match reference environment</option>
+                            <option value="style_mood">Match lighting / mood only</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <MultiSelectDropdown
+                          label="Jewelry Type"
+                          options={options?.jewelryTypes ?? ["Ring"]}
+                          selectedValues={jewelryTypes}
+                          onChange={setJewelryTypes}
+                        />
+                        {jewelryTypes.length > 1 && (
+                          <p className="text-[11px] text-gray-500 leading-relaxed">
+                            Applies each selected type ({jewelryTypes.join(", ")}).
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500" htmlFor="studio-prompt">
+                          Instructions
+                        </label>
+                        <textarea
+                          id="studio-prompt"
+                          value={promptText}
+                          onChange={(e) => setPromptText(e.target.value)}
+                          placeholder="Lighting, mood, sparkles…"
+                          rows={2}
+                          className="ui-input h-auto min-h-[3rem] py-2"
+                        />
+                      </div>
+                    </div>
+
+                    {/* BRAND block */}
+                    {isCatalog && (
+                      <div className="space-y-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Brand Kit</label>
+                          {(lockedUrls.reference || lockedUrls.logo || referenceFile || logoFile) && (
+                            <button
+                              type="button"
+                              onClick={clearBrandAssets}
+                              className="text-[10px] font-medium text-blue-600 hover:text-blue-800"
+                            >
+                              Clear saved
+                            </button>
+                          )}
+                        </div>
+
+                        {(lockedUrls.reference || lockedUrls.logo) && !referenceFile && !logoFile && (
+                          <div className="flex gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                            <Info className="size-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-emerald-700 leading-relaxed">
+                              Using saved theme/logo. Change anytime below.
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="space-y-3">
+                          <UploadZone
+                            id="studio-theme-ref"
+                            label={isBulk ? "Theme / style (required for bulk)" : "Theme / style (optional)"}
+                            error={validationErrors.referenceImage}
+                            previews={themePreviewSrc ? [themePreviewSrc] : []}
+                            onFiles={onReferencePick}
+                            single
+                            compact
+                            fileName={referenceFile?.name || "Saved theme"}
+                            hint={isBulk ? "Required for bulk" : "Optional · full size OK"}
+                            onClear={() => {
+                              setReferenceFile(null);
+                              patchBrandKit({ themeAssetId: null, themeUrl: null, themeName: null });
+                              setLockedUrls((u) => ({ ...u, reference: null, themeAssetId: null }));
+                            }}
+                          />
+                          <UploadZone
+                            id="studio-logo-upload"
+                            label="Shop logo (reference)"
+                            previews={logoPreviewSrc ? [logoPreviewSrc] : []}
+                            onFiles={onLogoPick}
+                            single
+                            compact
+                            fileName={logoFile?.name || "Saved logo"}
+                            hint="Sent as a reference image"
+                            onClear={() => {
+                              setLogoFile(null);
+                              patchBrandKit({ logoAssetId: null, logoUrl: null, logoName: null });
+                              setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+                            }}
+                          />
+                        </div>
+
+                        {logoUsesComposeFallback && (
+                          <div className="flex gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                            <Info className="size-3.5 text-amber-700 shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
+                              This model accepts a single image. Logo will be added under the output.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {!isCatalog && (
+                      <div className="space-y-4 pt-4 border-t border-gray-100">
+                        <UploadZone
+                          id="studio-logo-upload-single"
+                          label="Shop logo (reference)"
+                          previews={logoPreviewSrc ? [logoPreviewSrc] : []}
+                          onFiles={onLogoPick}
+                          single
+                          compact
+                          fileName={logoFile?.name || "Saved logo"}
+                          hint="Optional · model places it"
+                          onClear={() => {
+                            setLogoFile(null);
+                            patchBrandKit({ logoAssetId: null, logoUrl: null, logoName: null });
+                            setLockedUrls((u) => ({ ...u, logo: null, logoAssetId: null }));
+                          }}
+                        />
+                        {logoUsesComposeFallback && (
+                          <div className="flex gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                            <Info className="size-3.5 text-amber-700 shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
+                              Logo will be added under the output for this model.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* MODEL block */}
+                    <div className="space-y-4 pt-4 border-t border-gray-100">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Model Configuration</label>
+                      
+                      {showAspectRatio && (
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] text-gray-600">Aspect ratio</label>
+                          <select
+                            value={aspectRatio}
+                            onChange={(e) => setAspectRatio(e.target.value)}
+                            className="ui-input"
+                          >
+                            {(options?.aspectRatios ?? ["1:1"]).map((r) => (
+                              <option key={r} value={r}>Aspect {r}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {showNumberOfImages && (
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] text-gray-600">Number of images</label>
+                          <select
+                            value={numberOfImages}
+                            onChange={(e) => setNumberOfImages(Number(e.target.value))}
+                            className="ui-input"
+                          >
+                            {[1, 2, 3, 4].map((n) => (
+                              <option key={n} value={n}>{n} image{n > 1 ? "s" : ""}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <ModelSelector
+                        workflow={apiWorkflow}
+                        hasInput={inputImageCount > 0}
+                        imageCount={inputImageCount}
+                        selectedEndpointId={modelEndpointId}
+                        modelParams={modelParams}
+                        onModelChange={(endpointId, model) => {
+                          setModelEndpointId(endpointId);
+                          setSelectedModel(model);
+                        }}
+                        onParamsChange={setModelParams}
+                      />
+
+                      {is4kSelected && (
+                        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-jewel-md px-3 py-2 leading-relaxed mt-2">
+                          4K is slower and costs more. Prefer 1K for catalog/bulk.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {inspectorTab === "advanced" && (
+                  <div className="space-y-6">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Advanced Controls</label>
+                    {showPersonGeneration && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] text-gray-600">Person generation</label>
+                        <select
+                          value={personGeneration}
+                          onChange={(e) => setPersonGeneration(e.target.value)}
+                          className="ui-input"
+                        >
+                          <option value="DONT_ALLOW">No people</option>
+                          <option value="ALLOW_ADULT">Allow adults</option>
+                          <option value="ALLOW_ALL">Allow all</option>
+                        </select>
+                      </div>
+                    )}
+                    {(options?.lightingStyles?.length ?? 0) > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] text-gray-600">Lighting style</label>
+                        <select
+                          value={lightingStyle}
+                          onChange={(e) => setLightingStyle(e.target.value)}
+                          className="ui-input"
+                        >
+                          <option value="">Default</option>
+                          {options!.lightingStyles!.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Generate Block */}
+              <div className="border-t border-jewel-border bg-gray-50/50 p-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBatchForceAllow(true)}
+                  className="w-full relative h-[44px] overflow-hidden rounded-[12px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-[0_2px_10px_rgba(37,99,235,0.2)] transition-transform hover:scale-[1.01] hover:shadow-[0_4px_15px_rgba(37,99,235,0.3)] active:scale-[0.98]"
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    <Sparkles className="size-4" />
+                    Generate Image
+                  </span>
+                </button>
+                <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-gray-500">
+                  <span>Est. Cost: $0.15</span>
+                  <span className="size-1 rounded-full bg-gray-300" />
+                  <span>Est. Time: 15 sec</span>
+                </div>
+              </div>
+            </aside>

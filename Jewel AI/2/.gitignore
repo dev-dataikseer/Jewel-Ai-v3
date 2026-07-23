@@ -1,0 +1,32 @@
+# Nested app secrets / build artifacts
+Jewel AI/backend/.venv/
+Jewel AI/backend/**/__pycache__/
+Jewel AI/backend/.pytest_cache/
+Jewel AI/backend/uploads/
+Jewel AI/backend/*.db
+Jewel AI/backend/.env
+Jewel AI/backend/alembic_verify.db
+Jewel AI/deploy/env/.env.production
+Jewel AI/frontend/node_modules/
+Jewel AI/frontend/dist/
+Jewel AI/frontend/.vite/
+Jewel AI/frontend/tsconfig.tsbuildinfo
+Jewel AI/page-screenshots/node_modules/
+Jewel AI/page-screenshots/output/
+Jewel AI/scratch/
+Jewel AI/old_studio.tsx
+Jewel AI/temp_old.tsx
+Jewel AI/.vscode/
+
+# Local duplicates / archives (repo-root only)
+/Versions/
+/EXTRA/
+/Images/
+Jewel AI - Copy/
+archive/artifacts/
+
+.DS_Store
+Thumbs.db
+*.pyc
+.venv/
+node_modules/

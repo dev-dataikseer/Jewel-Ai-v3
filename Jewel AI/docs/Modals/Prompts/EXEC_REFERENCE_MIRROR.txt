@@ -1,4 +1,0 @@
-EXECUTION MODE: REFERENCE ENVIRONMENT MATCH
-1. Extract the background surface, materials, lighting direction, shadow density, and color grading from Image 2. Apply this exact environment style around the jewelry piece from Image 1.
-2. Ignore any jewelry, hands, mannequins, or models shown in Image 2 — use Image 2 only as an environment and lighting reference, never as a subject reference.
-3. Keep the camera angle, framing, and composition of Image 1's jewelry piece unchanged while placing it into the Image 2 environment.
