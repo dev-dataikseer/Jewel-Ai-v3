@@ -75,20 +75,27 @@ def sanitize_user_prompt(text: str | None) -> str | None:
 
 # Deterministic multi-type order for compose / regression stability.
 SUBTYPE_ORDER: list[str] = [
-    "Ring",
-    "Necklace",
-    "Earrings (Studs)",
+    "Anklet",
+    "Bangles",
+    "Body Jewelry",
+    "Bracelet",
+    "Brooch",
+    "Chain",
+    "Choker",
+    "Cufflinks",
     "Earrings (Drops)",
     "Earrings (Hoops)",
-    "Bracelet",
-    "Bangles",
-    "Pendant",
+    "Earrings (Studs)",
     "Kara",
-    "Watch",
-    "Brooch",
-    "Anklet",
-    "Cufflinks",
+    "Mangalsutra",
     "Multiple Items",
+    "Necklace",
+    "Nose Ring",
+    "Pendant",
+    "Ring",
+    "Tiara / Maang Tikka",
+    "Waistband / Kamarband",
+    "Watch",
 ]
 _SUBTYPE_RANK = {name: i for i, name in enumerate(SUBTYPE_ORDER)}
 
