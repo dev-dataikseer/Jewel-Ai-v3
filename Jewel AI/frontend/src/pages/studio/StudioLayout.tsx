@@ -19,6 +19,7 @@ import {
   Sparkles,
   UploadCloud,
   Wand2,
+  X,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { ImageCropModal } from "@/components/studio/ImageCropModal";
