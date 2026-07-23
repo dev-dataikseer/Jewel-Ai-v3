@@ -595,10 +595,6 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           ? "Upload a model or customer portrait"
           : "Upload a style reference image";
       }
-      if (isBulk && isCatalog && !referenceFile && !lockedUrls.reference) {
-        errors.referenceImage =
-          "Upload a theme/style reference for consistent bulk catalog output";
-      }
       if (Object.keys(errors).length > 0) {
         setValidationErrors(errors);
         throw new Error(Object.values(errors)[0]);

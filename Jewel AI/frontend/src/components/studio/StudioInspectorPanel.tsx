@@ -68,7 +68,6 @@ type Props = {
 function ReferencesSection(props: Props) {
   const {
     isCatalog,
-    isBulk,
     themePreviewSrc,
     logoPreviewSrc,
     referenceFile,
@@ -104,7 +103,7 @@ function ReferencesSection(props: Props) {
         <>
           <UploadZone
             id="studio-theme-ref"
-            label={isBulk ? "Theme · required" : "Theme"}
+            label="Theme"
             error={validationErrors.referenceImage}
             previews={themePreviewSrc ? [themePreviewSrc] : []}
             onFiles={onReferencePick}
