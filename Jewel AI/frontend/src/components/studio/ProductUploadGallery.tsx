@@ -143,17 +143,6 @@ export function ProductUploadGallery({
                 className="max-h-full max-w-full object-contain transition-transform"
                 style={{ transform: `scale(${imageZoom})` }}
               />
-              {onCropAt && hasFiles ? (
-                <button
-                  type="button"
-                  onClick={() => onCropAt(0)}
-                  className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-700 shadow-sm border border-slate-200 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)] z-10"
-                  aria-label="Crop image"
-                  title="Crop"
-                >
-                  <Crop className="size-3.5" />
-                </button>
-              ) : null}
               {dragging ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--jewel-accent)]/15">
                   <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[var(--jewel-accent)] shadow-sm">

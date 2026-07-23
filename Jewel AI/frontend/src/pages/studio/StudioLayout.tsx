@@ -387,31 +387,29 @@ return (
                     )}
                   </div>
 
-                  <div className="shrink-0 border-t border-[var(--jewel-hairline)] bg-white">
-                    <div className="relative h-10 px-1">
-                      <ImageStageControls
-                        variant="bar"
-                        zoom={inputZoom}
-                        onZoomChange={setInputZoom}
-                        onFullscreen={
-                          productPreviewSrcs[0]
-                            ? () =>
-                                window.open(
-                                  productPreviewSrcs[0],
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                )
-                            : undefined
+                  <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-t border-[var(--jewel-hairline)] bg-white px-3">
+                    <span className="text-[11px] font-medium text-jewel-ink-muted tabular-nums">
+                      {primaryFiles.length > 1
+                        ? `${primaryFiles.length} images`
+                        : "Product"}
+                    </span>
+                    {productPreviewSrcs[0] ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            productPreviewSrcs[0],
+                            "_blank",
+                            "noopener,noreferrer",
+                          )
                         }
-                      />
-                    </div>
-                    <div className="flex h-10 items-center gap-1.5 border-t border-[var(--jewel-hairline)] px-2.5">
-                      <span className="text-[11px] font-medium text-jewel-ink-muted tabular-nums">
-                        {primaryFiles.length > 1
-                          ? `${primaryFiles.length} images`
-                          : "Product"}
-                      </span>
-                    </div>
+                        className="p-1.5 rounded-lg text-[var(--jewel-ink-muted)] hover:text-[var(--jewel-ink)] hover:bg-slate-100 transition-colors"
+                        title="View full image"
+                        aria-label="View full image"
+                      >
+                        <Expand className="size-4" />
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -575,87 +573,83 @@ return (
                     )}
                   </div>
 
-                  <div className="shrink-0 border-t border-[var(--jewel-hairline)] bg-white">
-                    <div className="relative h-10 px-1">
-                      <ImageStageControls
-                        variant="bar"
-                        zoom={outputZoom}
-                        onZoomChange={setOutputZoom}
-                        onFullscreen={
-                          activeOutputUrl
-                            ? () =>
-                                window.open(
-                                  mediaUrl(activeOutputUrl),
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                )
-                            : undefined
-                        }
-                      />
-                    </div>
-                    <div className="flex h-10 items-center border-t border-[var(--jewel-hairline)] px-2.5 min-w-0">
-                      {activeJob?.status === "COMPLETED" ? (
-                        <>
-                          <ResultsTray
-                            onRegenerate={() =>
-                              regenerateMutation.mutate(activeJob.id)
-                            }
-                            regenerating={regenerateMutation.isPending}
-                            onDownload={activeOutputUrl}
-                            onFavorite={() => void toggleFavorite(activeJob)}
-                            favorited={favoriteIds.has(activeJob.id)}
-                            onUseAsReference={
-                              activeOutputUrl
-                                ? () => {
-                                    setLockedUrls((u: any) => ({
-                                      ...u,
-                                      reference: mediaUrl(activeOutputUrl),
-                                    }));
-                                    toast.success("Output set as reference image");
+                  <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-t border-[var(--jewel-hairline)] bg-white px-3 min-w-0">
+                    {activeJob?.status === "COMPLETED" ? (
+                      <div className="flex items-center justify-between w-full min-w-0 gap-2">
+                        <ResultsTray
+                          onRegenerate={() =>
+                            regenerateMutation.mutate(activeJob.id)
+                          }
+                          regenerating={regenerateMutation.isPending}
+                          onDownload={activeOutputUrl}
+                          onFavorite={() => void toggleFavorite(activeJob)}
+                          favorited={favoriteIds.has(activeJob.id)}
+                          onUseAsReference={
+                            activeOutputUrl
+                              ? () => {
+                                  setLockedUrls((u: any) => ({
+                                    ...u,
+                                    reference: mediaUrl(activeOutputUrl),
+                                  }));
+                                  toast.success("Output set as reference image");
+                                }
+                              : undefined
+                          }
+                          onCopyPrompt={
+                            activeJob.final_prompt || activeJob.prompt_text
+                              ? async () => {
+                                  const text =
+                                    activeJob.final_prompt || activeJob.prompt_text;
+                                  if (text) {
+                                    await navigator.clipboard.writeText(text);
+                                    toast.success("Prompt copied to clipboard");
                                   }
-                                : undefined
+                                }
+                              : undefined
+                          }
+                          onShare={async () => {
+                            try {
+                              const res = await api.post<{ token: string }>(
+                                "/share-links",
+                                { job_id: activeJob.id },
+                              );
+                              const shareUrl = `${window.location.origin}/share/${res.data.token}`;
+                              await navigator.clipboard.writeText(shareUrl);
+                              toast.success("Share link copied");
+                            } catch (err) {
+                              toast.error(
+                                apiErrorMessage(
+                                  err as Error,
+                                  "Could not create share link",
+                                ),
+                              );
                             }
-                            onCopyPrompt={
-                              activeJob.final_prompt || activeJob.prompt_text
-                                ? async () => {
-                                    const text =
-                                      activeJob.final_prompt || activeJob.prompt_text;
-                                    if (text) {
-                                      await navigator.clipboard.writeText(text);
-                                      toast.success("Prompt copied to clipboard");
-                                    }
-                                  }
-                                : undefined
+                          }}
+                          mediaUrl={mediaUrl}
+                        />
+                        {activeOutputUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              window.open(
+                                mediaUrl(activeOutputUrl),
+                                "_blank",
+                                "noopener,noreferrer",
+                              )
                             }
-                            onShare={async () => {
-                              try {
-                                const res = await api.post<{ token: string }>(
-                                  "/share-links",
-                                  { job_id: activeJob.id },
-                                );
-                                const shareUrl = `${window.location.origin}/share/${res.data.token}`;
-                                await navigator.clipboard.writeText(shareUrl);
-                                toast.success("Share link copied");
-                              } catch (err) {
-                                toast.error(
-                                  apiErrorMessage(
-                                    err as Error,
-                                    "Could not create share link",
-                                  ),
-                                );
-                              }
-                            }}
-                            compareActive={compareMode}
-                            onToggleCompare={() => setCompareMode((c: any) => !c)}
-                            mediaUrl={mediaUrl}
-                          />
-                        </>
-                      ) : (
-                        <span className="text-[11px] font-medium text-jewel-ink-muted">
-                          Output
-                        </span>
-                      )}
-                    </div>
+                            className="p-1.5 shrink-0 rounded-lg text-[var(--jewel-ink-muted)] hover:text-[var(--jewel-ink)] hover:bg-slate-100 transition-colors"
+                            title="View full output image"
+                            aria-label="View full output image"
+                          >
+                            <Expand className="size-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] font-medium text-jewel-ink-muted">
+                        Output
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
