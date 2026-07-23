@@ -300,6 +300,17 @@ return (
                         <UploadCloud className="size-3.5" />
                         Upload images
                       </button>
+                      {primaryFiles.length > 0 || productPreviewSrcs.length > 0 ? (
+                        <button
+                          type="button"
+                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 h-8 px-2.5 rounded-lg transition-colors flex items-center gap-1"
+                          onClick={clearPrimaryFiles}
+                          title="Clear all input images"
+                        >
+                          <X className="size-3.5" strokeWidth={2.5} />
+                          Clear
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -331,7 +342,6 @@ return (
                             onRemoveAt={removePrimaryAt}
                             onClearAll={clearPrimaryFiles}
                             imageZoom={inputZoom}
-                            cleanPreview
                             onCropAt={
                               primaryFiles.length > 0 ? openCropForPrimary : undefined
                             }
@@ -383,7 +393,6 @@ return (
                         onRemoveAt={removePrimaryAt}
                         onClearAll={clearPrimaryFiles}
                         imageZoom={inputZoom}
-                        cleanPreview
                         onCropAt={
                           primaryFiles.length > 0 ? openCropForPrimary : undefined
                         }

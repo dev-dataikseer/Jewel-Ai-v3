@@ -16,8 +16,6 @@ type Props = {
   onRemoveAt: (index: number) => void;
   onClearAll: () => void;
   imageZoom?: number;
-  /** When true, hide per-image remove overlays (parent header owns Replace) */
-  cleanPreview?: boolean;
   /** Crop a specific uploaded file (local File only) */
   onCropAt?: (index: number) => void;
 };
@@ -33,7 +31,6 @@ export function ProductUploadGallery({
   onRemoveAt,
   onClearAll,
   imageZoom = 1,
-  cleanPreview = false,
   onCropAt,
 }: Props) {
   const emptyInputId = `${id}-empty-input`;
@@ -203,38 +200,33 @@ export function ProductUploadGallery({
                     <span className="absolute left-1 top-1 rounded bg-white/90 border border-[var(--jewel-border)] px-1 py-px text-[9px] font-semibold tabular-nums text-slate-700">
                       {i + 1}
                     </span>
-                    <div
-                      className={`absolute right-1 top-1 flex flex-col gap-0.5 ${
-                        onCropAt ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      } transition-opacity focus-within:opacity-100`}
-                    >
+                    <div className="absolute right-1 top-1 flex flex-col gap-1 z-10">
                       {onCropAt && files[i] ? (
                         <button
                           type="button"
                           onClick={() => onCropAt(i)}
-                          className="flex size-6 items-center justify-center rounded-md bg-white/95 text-slate-700 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
+                          className="flex size-6 items-center justify-center rounded-md bg-white/95 text-slate-700 shadow-sm border border-slate-200 hover:bg-[var(--jewel-accent-soft)] hover:text-[var(--jewel-accent)]"
                           aria-label={`Crop image ${i + 1}`}
                           title="Crop"
                         >
                           <Crop className="size-3" />
                         </button>
                       ) : null}
-                      {!cleanPreview ? (
-                        <button
-                          type="button"
-                          onClick={() => onRemoveAt(i)}
-                          className="flex size-6 items-center justify-center rounded-md bg-white/90 text-slate-700 hover:bg-rose-100 hover:text-rose-600"
-                          aria-label={`Remove image ${i + 1}`}
-                        >
-                          <X className="size-3.5" strokeWidth={2.5} />
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAt(i)}
+                        className="flex size-6 items-center justify-center rounded-md bg-white/95 text-slate-700 shadow-sm border border-slate-200 hover:bg-rose-100 hover:text-rose-600 hover:border-rose-200"
+                        aria-label={`Remove image ${i + 1}`}
+                        title="Remove image"
+                      >
+                        <X className="size-3.5" strokeWidth={2.5} />
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 border-t border-[var(--jewel-hairline)] bg-white px-2 py-1.5">
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 border-t border-[var(--jewel-hairline)] bg-white px-2 py-1.5 z-10 shadow-sm">
               <span className="text-[10px] font-semibold tabular-nums text-slate-600">
                 {files.length} selected
               </span>
@@ -252,9 +244,11 @@ export function ProductUploadGallery({
                 <button
                   type="button"
                   onClick={onClearAll}
-                  className="rounded-md px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-[var(--jewel-surface-muted)]"
+                  className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+                  title="Clear all images"
                 >
-                  Clear
+                  <X className="size-3" strokeWidth={2.5} />
+                  Clear All
                 </button>
               </div>
             </div>
