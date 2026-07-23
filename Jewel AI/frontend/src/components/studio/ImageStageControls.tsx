@@ -40,9 +40,14 @@ export function ImageStageControls({
         >
           <Minus className="size-3.5" />
         </button>
-        <span className="min-w-[2.5rem] text-center text-[11px] font-semibold tabular-nums text-[var(--jewel-ink)]">
+        <button
+          type="button"
+          onClick={() => onZoomChange(1)}
+          title="Click to reset zoom to 100%"
+          className="min-w-[2.5rem] text-center text-[11px] font-semibold tabular-nums text-[var(--jewel-ink)] hover:text-[var(--jewel-accent)] hover:underline"
+        >
           {pct}%
-        </span>
+        </button>
         <button
           type="button"
           className="p-1.5 text-[var(--jewel-ink-muted)] hover:text-[var(--jewel-ink)] rounded"
