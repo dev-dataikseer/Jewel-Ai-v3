@@ -142,8 +142,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
         if not ok:
             raise HTTPException(status_code=401, detail="MFA required", headers={"X-MFA-Required": "1"})
 
-    # New admins can log in before MFA enroll; Admin UI forces enroll before other admin tools.
-    # Login itself requires OTP only when totp_enabled is already true.
+    # MFA is optional for admins until they enroll; login requires OTP only when totp_enabled.
     return _issue_tokens(response, user)
 
 

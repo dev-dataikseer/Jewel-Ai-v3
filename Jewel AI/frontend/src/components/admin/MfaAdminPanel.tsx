@@ -51,7 +51,7 @@ export function MfaAdminPanel() {
         <h3 className="text-sm font-semibold text-jewel-ink">Admin MFA (TOTP)</h3>
       </div>
       <p className="text-xs text-jewel-ink-muted leading-relaxed">
-        Required for admin accounts once enabled. Save backup codes; break-glass recovery is
+        Optional for admin accounts. Save backup codes if you enable it; break-glass recovery is
         documented in ops docs.
       </p>
       {!enroll && (
