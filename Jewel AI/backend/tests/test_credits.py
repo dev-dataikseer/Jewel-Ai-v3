@@ -56,3 +56,39 @@ def test_debit_enforced_and_insufficient(db, monkeypatch):
     with pytest.raises(HTTPException) as ei:
         debit_credits(db, user.id, 5)
     assert ei.value.status_code == 402
+
+
+def test_refund_and_retry_debit_net_zero(db, monkeypatch):
+    from app import config as cfg
+    from app.services.credits import refund_credits
+
+    monkeypatch.setattr(cfg.get_settings(), "enforce_user_credits", True)
+    user = User(email="c3@test.com", hashed_password=hash_password("x"), credits=3)
+    db.add(user)
+    db.commit()
+    job_id = str(uuid.uuid4())
+    debit_credits(db, user.id, 1, job_id=job_id, description="job_create")
+    db.commit()
+    refund_credits(db, user.id, 1, job_id=job_id, description="job_enqueue_refund")
+    db.commit()
+    debit_credits(db, user.id, 1, job_id=job_id, description="job_retry")
+    db.commit()
+    db.refresh(user)
+    assert user.credits == 2
+
+
+def test_cancel_refund_when_no_fal_request(db, monkeypatch):
+    from app import config as cfg
+    from app.services.credits import refund_credits
+
+    monkeypatch.setattr(cfg.get_settings(), "enforce_user_credits", True)
+    user = User(email="c4@test.com", hashed_password=hash_password("x"), credits=1)
+    db.add(user)
+    db.commit()
+    job_id = str(uuid.uuid4())
+    debit_credits(db, user.id, 1, job_id=job_id, description="job_create")
+    db.commit()
+    refund_credits(db, user.id, 1, job_id=job_id, description="job_cancel_refund")
+    db.commit()
+    db.refresh(user)
+    assert user.credits == 1

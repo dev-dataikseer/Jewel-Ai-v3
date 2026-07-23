@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
@@ -11,6 +11,7 @@ type EnrollResponse = {
 };
 
 export function MfaAdminPanel() {
+  const queryClient = useQueryClient();
   const [enroll, setEnroll] = useState<EnrollResponse | null>(null);
   const [otp, setOtp] = useState("");
   const [confirmedCodes, setConfirmedCodes] = useState<string[] | null>(null);
@@ -36,6 +37,7 @@ export function MfaAdminPanel() {
       ).data,
     onSuccess: (data) => {
       setConfirmedCodes(data.backup_codes || enroll?.backup_codes || []);
+      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       toast.success("MFA enabled — store backup codes offline");
     },
     onError: (err: { friendlyMessage?: string }) =>

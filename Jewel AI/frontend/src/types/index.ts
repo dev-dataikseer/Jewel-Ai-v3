@@ -265,6 +265,7 @@ export type User = {
   name?: string | null;
   role: string;
   credits?: number;
+  totp_enabled?: boolean;
 };
 
 export type AdminMetrics = {

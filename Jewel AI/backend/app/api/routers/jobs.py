@@ -669,6 +669,7 @@ def cancel_batch(batch_id: str, user: RequireUser, db: Session = Depends(get_db)
     )
     for job in active:
         celery_task_id = job.celery_task_id
+        _maybe_refund_cancel(db, job)
         job.status = "CANCELLED"
         job.error_message = "Cancelled by user (batch)"
         job.provider_metadata = _stamp_timing(dict(job.provider_metadata or {}), "cancelled")
@@ -871,11 +872,39 @@ def get_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
     return _job_to_out(job)
 
 
+def _job_has_fal_request(job: GenerationJob) -> bool:
+    meta = job.provider_metadata or {}
+    return bool(meta.get("fal_request_id") or (meta.get("usage") or {}).get("request_id"))
+
+
+def _maybe_refund_cancel(db: Session, job: GenerationJob) -> None:
+    """Refund user credits when cancelling before fal accepted the request."""
+    if _job_has_fal_request(job):
+        return
+    try:
+        from app.services.credits import refund_credits
+
+        refund_credits(
+            db,
+            job.user_id,
+            amount=1,
+            job_id=job.id,
+            description="job_cancel_refund",
+        )
+    except Exception:
+        pass
+
+
 @router.post("/{job_id}/regenerate", response_model=JobOut)
 def regenerate_job(job_id: str, user: RequireUser, request: Request, db: Session = Depends(get_db)):
     original = _get_user_job(db, job_id, user)
     if not original:
         raise HTTPException(status_code=404, detail="Job not found")
+    if original.status in ("PENDING", "PROCESSING"):
+        raise HTTPException(
+            status_code=400,
+            detail="Cancel or wait for the job to finish before regenerating",
+        )
 
     _enforce_daily_job_limit(db, user, 1)
 
@@ -935,6 +964,10 @@ def retry_job(job_id: str, user: RequireUser, request: Request, db: Session = De
     job.celery_task_id = None
     job.retry_count = (job.retry_count or 0) + 1
     job.provider_metadata = _stamp_timing(_scrub_provider_run_state(job.provider_metadata), "queued")
+    from app.services.credits import debit_credits
+
+    # Debit each retry attempt so enqueue-fail refunds cannot unlock free generations.
+    debit_credits(db, user.id, amount=1, job_id=job.id, description="job_retry")
     db.commit()
     db.refresh(job)
     enqueue_image_job(job.id, request_id=_request_id(request))
@@ -950,6 +983,7 @@ def cancel_job(job_id: str, user: RequireUser, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Only pending or processing jobs can be cancelled")
 
     celery_task_id = job.celery_task_id
+    _maybe_refund_cancel(db, job)
     job.status = "CANCELLED"
     job.error_message = "Cancelled by user"
     job.provider_metadata = _stamp_timing(dict(job.provider_metadata or {}), "cancelled")

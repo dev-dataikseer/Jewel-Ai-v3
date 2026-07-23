@@ -1,6 +1,8 @@
-"""Provider run-state scrubbing for retry/regenerate."""
+"""Provider run-state scrubbing and cancel/regenerate guards."""
 
-from app.api.routers.jobs import _scrub_provider_run_state
+from types import SimpleNamespace
+
+from app.api.routers.jobs import _job_has_fal_request, _scrub_provider_run_state
 
 
 def test_scrub_removes_fal_and_webhook_keys():
@@ -36,3 +38,10 @@ def test_scrub_removes_fal_and_webhook_keys():
 def test_scrub_empty_meta():
     assert _scrub_provider_run_state(None) == {}
     assert _scrub_provider_run_state({}) == {}
+
+
+def test_job_has_fal_request_detects_ids():
+    assert _job_has_fal_request(SimpleNamespace(provider_metadata={"fal_request_id": "abc"}))
+    assert _job_has_fal_request(SimpleNamespace(provider_metadata={"usage": {"request_id": "abc"}}))
+    assert not _job_has_fal_request(SimpleNamespace(provider_metadata={}))
+    assert not _job_has_fal_request(SimpleNamespace(provider_metadata=None))

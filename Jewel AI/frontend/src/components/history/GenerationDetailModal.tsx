@@ -243,7 +243,9 @@ export function GenerationDetailModal({
             <ArrowUpRight className="size-3.5" />
             Reuse in Studio
           </Link>
-          {onRegenerate && (
+          {onRegenerate &&
+            job.status !== "PENDING" &&
+            job.status !== "PROCESSING" && (
             <button
               type="button"
               onClick={() => onRegenerate(job)}

@@ -32,6 +32,31 @@ def _client(api_key: str) -> SyncClient:
     return SyncClient(key=api_key, default_timeout=120.0)
 
 
+def _persist_fal_request_id_early(job_id: str | None, request_id: str | None) -> None:
+    """Persist fal request id immediately so crashes cannot trigger a resubmit/double-bill."""
+    if not job_id or not request_id:
+        return
+    try:
+        from datetime import datetime, timezone
+
+        from app.database import SessionLocal
+        from app.models import GenerationJob
+
+        db_early = SessionLocal()
+        try:
+            job_early = db_early.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+            if job_early:
+                meta_early = dict(job_early.provider_metadata or {})
+                meta_early["fal_request_id"] = str(request_id)
+                meta_early["fal_enqueued_at"] = datetime.now(timezone.utc).isoformat()
+                job_early.provider_metadata = meta_early
+                db_early.commit()
+        finally:
+            db_early.close()
+    except Exception:
+        pass
+
+
 def _spec_for(endpoint: str, model_def: ModelDefinition | None):
     spec = get_spec(endpoint)
     if spec:
@@ -173,42 +198,25 @@ class FalAdapter:
 
         def _run() -> Any:
             if webhook_url:
-                return client.submit(
+                handle = client.submit(
                     endpoint,
                     arguments=arguments,
                     webhook_url=webhook_url,
                 )
+                req_id = (
+                    handle.request_id
+                    if hasattr(handle, "request_id")
+                    else (handle.get("request_id") if isinstance(handle, dict) else None)
+                )
+                _persist_fal_request_id_early(request.job_id, str(req_id) if req_id else None)
+                return handle
             # Capture request_id via on_enqueue (subscribe result payload often omits it).
             captured: dict[str, str] = {}
 
             def _on_enqueue(request_id: str) -> None:
                 if request_id:
                     captured["request_id"] = str(request_id)
-                    # Persist immediately so a crash/redeploy cannot resubmit and double-bill.
-                    if request.job_id:
-                        try:
-                            from datetime import datetime, timezone
-
-                            from app.database import SessionLocal
-                            from app.models import GenerationJob
-
-                            db_early = SessionLocal()
-                            try:
-                                job_early = (
-                                    db_early.query(GenerationJob)
-                                    .filter(GenerationJob.id == request.job_id)
-                                    .first()
-                                )
-                                if job_early:
-                                    meta_early = dict(job_early.provider_metadata or {})
-                                    meta_early["fal_request_id"] = str(request_id)
-                                    meta_early["fal_enqueued_at"] = datetime.now(timezone.utc).isoformat()
-                                    job_early.provider_metadata = meta_early
-                                    db_early.commit()
-                            finally:
-                                db_early.close()
-                        except Exception:
-                            pass
+                    _persist_fal_request_id_early(request.job_id, str(request_id))
 
             out = client.subscribe(
                 endpoint,

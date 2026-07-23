@@ -29,6 +29,7 @@ class UserOut(BaseModel):
     role: str
     credits: int
     team_id: Optional[str] = None
+    totp_enabled: bool = False
 
     model_config = {"from_attributes": True}
 

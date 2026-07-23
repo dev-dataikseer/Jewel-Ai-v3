@@ -10,6 +10,7 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FacetMark } from "@/components/ui/FacetMark";
+import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import type { AdminMetrics, ConfigOptions } from "@/types";
 
@@ -44,7 +45,10 @@ function TabFallback() {
 }
 
 export function AdminPage() {
+  const { user } = useAuth();
+  const mfaRequired = user?.role === "admin" && !user?.totp_enabled;
   const [tab, setTab] = useState<TabId>("overview");
+  const activeTab: TabId = mfaRequired ? "users" : tab;
 
   // Metrics only when Overview is open — was slowing every Admin click
   const {
@@ -55,7 +59,7 @@ export function AdminPage() {
   } = useQuery({
     queryKey: ["admin", "metrics"],
     queryFn: async () => (await api.get<AdminMetrics>("/admin/metrics")).data,
-    enabled: tab === "overview",
+    enabled: activeTab === "overview" && !mfaRequired,
     staleTime: 60_000,
   });
 
@@ -63,7 +67,7 @@ export function AdminPage() {
   const { data: options } = useQuery({
     queryKey: ["config", "options"],
     queryFn: async () => (await api.get<ConfigOptions>("/config/options")).data,
-    enabled: tab === "prompts",
+    enabled: activeTab === "prompts" && !mfaRequired,
     staleTime: 5 * 60_000,
   });
 
@@ -74,16 +78,22 @@ export function AdminPage() {
           <aside className="ui-card p-2 space-y-0.5 lg:sticky lg:top-20">
             {TABS.map((item) => {
               const Icon = item.icon;
-              const active = tab === item.id;
+              const active = activeTab === item.id;
+              const locked = mfaRequired && item.id !== "users";
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setTab(item.id)}
+                  disabled={locked}
+                  onClick={() => {
+                    if (!locked) setTab(item.id);
+                  }}
                   className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                     active
                       ? "ui-nav-active-tab"
-                      : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
+                      : locked
+                        ? "cursor-not-allowed text-jewel-ink-muted/50"
+                        : "text-jewel-ink-muted hover:bg-jewel-muted font-medium"
                   }`}
                 >
                   <Icon className="size-4 shrink-0" />
@@ -94,9 +104,16 @@ export function AdminPage() {
           </aside>
 
           <section className="ui-admin-shell min-w-0">
-            <ErrorBoundary key={tab}>
+            <ErrorBoundary key={activeTab}>
               <Suspense fallback={<TabFallback />}>
-                {tab === "overview" && (
+                {mfaRequired && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    Enable admin MFA before using other Admin tools. Enroll below, then confirm with
+                    your authenticator app.
+                  </div>
+                )}
+
+                {activeTab === "overview" && !mfaRequired && (
                   <div className="animate-fadeIn space-y-6">
                     <div className="flex items-center justify-between gap-3">
                       <h1 className="text-lg font-semibold text-jewel-ink">Overview</h1>
@@ -161,21 +178,21 @@ export function AdminPage() {
                   </div>
                 )}
 
-                {tab === "monitoring" && <UsageMonitor />}
+                {activeTab === "monitoring" && !mfaRequired && <UsageMonitor />}
 
-                {tab === "providers" && <ProviderSettings />}
+                {activeTab === "providers" && !mfaRequired && <ProviderSettings />}
 
-                {tab === "prompts" && (
+                {activeTab === "prompts" && !mfaRequired && (
                   <PromptStudio
                     workflows={options?.workflows ?? []}
                     jewelryTypes={options?.jewelryTypes ?? ["Ring"]}
                   />
                 )}
 
-                {tab === "users" && (
+                {activeTab === "users" && (
                   <div className="flex flex-col gap-6">
                     <MfaAdminPanel />
-                    <UserManagement />
+                    {!mfaRequired && <UserManagement />}
                   </div>
                 )}
               </Suspense>
