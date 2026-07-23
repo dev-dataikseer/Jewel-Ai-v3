@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   Crop,
+  Expand,
   Gem,
   Heart,
   ImagePlus,
