@@ -645,6 +645,29 @@ return (
                             onDownload={activeOutputUrl}
                             onFavorite={() => void toggleFavorite(activeJob)}
                             favorited={favoriteIds.has(activeJob.id)}
+                            onUseAsReference={
+                              activeOutputUrl
+                                ? () => {
+                                    setLockedUrls((u: any) => ({
+                                      ...u,
+                                      reference: mediaUrl(activeOutputUrl),
+                                    }));
+                                    toast.success("Output set as reference image");
+                                  }
+                                : undefined
+                            }
+                            onCopyPrompt={
+                              activeJob.final_prompt || activeJob.prompt_text
+                                ? async () => {
+                                    const text =
+                                      activeJob.final_prompt || activeJob.prompt_text;
+                                    if (text) {
+                                      await navigator.clipboard.writeText(text);
+                                      toast.success("Prompt copied to clipboard");
+                                    }
+                                  }
+                                : undefined
+                            }
                             onShare={async () => {
                               try {
                                 const res = await api.post<{ token: string }>(

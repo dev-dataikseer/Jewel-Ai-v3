@@ -1,4 +1,4 @@
-import { Download, Heart, MoreHorizontal, RefreshCcw, Columns2 } from "lucide-react";
+import { Copy, Download, Heart, ImagePlus, MoreHorizontal, RefreshCcw, Columns2 } from "lucide-react";
 import { useState } from "react";
 
 type ResultsTrayProps = {
@@ -8,6 +8,8 @@ type ResultsTrayProps = {
   onFavorite: () => void;
   favorited?: boolean;
   onShare: () => void;
+  onUseAsReference?: () => void;
+  onCopyPrompt?: () => void;
   compareActive?: boolean;
   onToggleCompare?: () => void;
   mediaUrl: (url: string) => string;
@@ -21,6 +23,8 @@ export function ResultsTray({
   onFavorite,
   favorited,
   onShare,
+  onUseAsReference,
+  onCopyPrompt,
   compareActive,
   onToggleCompare,
   mediaUrl,
@@ -76,7 +80,33 @@ export function ResultsTray({
           <MoreHorizontal className="size-4" />
         </button>
         {moreOpen ? (
-          <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[128px] rounded-lg border border-[var(--jewel-border)] bg-white py-1 shadow-card">
+          <div className="absolute right-0 bottom-full z-20 mb-1 min-w-[150px] rounded-lg border border-[var(--jewel-border)] bg-white py-1 shadow-card">
+            {onUseAsReference && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-[var(--jewel-surface-muted)]"
+                onClick={() => {
+                  onUseAsReference();
+                  setMoreOpen(false);
+                }}
+              >
+                <ImagePlus className="size-3.5 text-jewel-accent" />
+                Use as Reference
+              </button>
+            )}
+            {onCopyPrompt && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-[var(--jewel-surface-muted)]"
+                onClick={() => {
+                  onCopyPrompt();
+                  setMoreOpen(false);
+                }}
+              >
+                <Copy className="size-3.5" />
+                Copy Prompt
+              </button>
+            )}
             <button
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-jewel-ink hover:bg-[var(--jewel-surface-muted)]"

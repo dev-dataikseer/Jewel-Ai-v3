@@ -9,6 +9,7 @@ type ActionDockProps = {
   onGenerate: () => void;
   generating?: boolean;
   disabled?: boolean;
+  disabledReason?: string | null;
   bulkCount?: number;
   /** sticky bottom on all breakpoints */
   className?: string;
@@ -23,6 +24,7 @@ export function ActionDock({
   onGenerate,
   generating,
   disabled,
+  disabledReason,
   bulkCount,
   className = "",
 }: ActionDockProps) {
@@ -43,24 +45,26 @@ export function ActionDock({
           </button>
         )}
       </div>
-      <button
-        type="button"
-        onClick={onGenerate}
-        disabled={disabled || generating}
-        aria-busy={generating || undefined}
-        className="ui-btn-primary shrink-0"
-      >
-        {generating ? (
-          <FacetMark variant="spin" size={16} className="text-white" />
-        ) : (
-          <Wand2 className="size-4" />
-        )}
-        {generating
-          ? "Generating…"
-          : bulkCount && bulkCount > 1
-            ? `Generate Bulk (${bulkCount})`
-            : "Generate"}
-      </button>
+      <div title={disabled && disabledReason ? disabledReason : undefined} className="inline-block shrink-0">
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={disabled || generating}
+          aria-busy={generating || undefined}
+          className="ui-btn-primary shrink-0"
+        >
+          {generating ? (
+            <FacetMark variant="spin" size={16} className="text-white" />
+          ) : (
+            <Wand2 className="size-4" />
+          )}
+          {generating
+            ? "Generating…"
+            : bulkCount && bulkCount > 1
+              ? `Generate Bulk (${bulkCount})`
+              : "Generate"}
+        </button>
+      </div>
     </div>
   );
 }
